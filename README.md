@@ -20,6 +20,16 @@ This repository contains the Phase 1 implementation scaffold for ClariFi:
 
 See `docs/runbooks/phase1-setup.md`.
 
+## Additional Runbooks
+
+- `docs/runbooks/staging-deploy.md`
+
+## Phase 1 Acceptance Checks
+
+```bash
+pnpm --filter @clarifi/api acceptance:phase1
+```
+
 ## Package Manager
 
 This workspace uses `pnpm`.

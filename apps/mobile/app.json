@@ -10,10 +10,21 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "ClariFi uses the microphone to record voice expenses.",
+        "NSCameraUsageDescription": "ClariFi uses the camera to capture receipt photos.",
+        "NSPhotoLibraryUsageDescription": "ClariFi uses photo library access to import receipt images."
+      }
     },
     "android": {
-      "package": "com.clarifi.app"
+      "package": "com.clarifi.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro"
