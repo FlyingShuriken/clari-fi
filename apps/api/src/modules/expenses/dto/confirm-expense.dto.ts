@@ -32,6 +32,11 @@ class ConfirmLineItemDto {
   @IsString()
   unitRaw?: string;
 
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  unitPrice?: number;
+
   @IsNumber()
   @Min(0)
   totalPrice!: number;

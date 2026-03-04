@@ -159,6 +159,8 @@ async function main() {
 
     const parseLatencies: number[] = [];
     let correctionCount = 0;
+    let fallbackCount = 0;
+    const parserEngineCounts: Record<string, number> = {};
 
     for (const sample of SAMPLE_EXPENSES) {
       const startedAt = Date.now();
@@ -168,6 +170,11 @@ async function main() {
       });
       const latencyMs = Date.now() - startedAt;
       parseLatencies.push(latencyMs);
+      const parserEngine = parseResult.parseMeta.parserEngine ?? 'unknown';
+      parserEngineCounts[parserEngine] = (parserEngineCounts[parserEngine] ?? 0) + 1;
+      if (parseResult.parseMeta.fallbackUsed) {
+        fallbackCount += 1;
+      }
 
       const amountCorrect =
         Math.abs(parseResult.candidate.totalAmount - sample.amount) <= 0.01;
@@ -193,6 +200,8 @@ async function main() {
             reportCashOut: Number(report.cashOut.toFixed(2)),
             averageParseLatencyMs: Number(avgLatencyMs.toFixed(2)),
             correctionRate: Number((correctionRate * 100).toFixed(2)),
+            parserEngineCounts,
+            llmFallbackCount: fallbackCount,
           },
         },
         null,

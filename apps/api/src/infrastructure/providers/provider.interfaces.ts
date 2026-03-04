@@ -25,12 +25,23 @@ export interface ParsedLineItem {
   descriptionRaw: string;
   quantity?: number;
   unitRaw?: string;
+  unitPrice?: number;
   totalPrice: number;
   confidence?: number;
 }
 
+export type ExpenseParserEngine = 'heuristic' | 'openrouter';
+
+export interface ExpenseParserMeta {
+  engine: ExpenseParserEngine;
+  fallbackUsed?: boolean;
+  shadowCompared?: boolean;
+  shadowMismatchFields?: string[];
+}
+
 export interface ParsedExpenseResult {
   merchantText?: string;
+  note?: string;
   totalAmount: number;
   paymentMethod?:
     | 'CASH'
@@ -44,15 +55,18 @@ export interface ParsedExpenseResult {
     | 'OTHER';
   lineItems: ParsedLineItem[];
   confidenceMap: Record<string, number>;
+  parserMeta?: ExpenseParserMeta;
 }
 
 export interface ParsedReceiptResult {
   merchantText?: string;
+  note?: string;
   receiptDate?: string;
   totalAmount: number;
   currency: 'MYR' | 'SGD' | 'USD';
   lineItems: ParsedLineItem[];
   confidenceMap: Record<string, number>;
+  parserMeta?: ExpenseParserMeta;
 }
 
 export interface SttProvider {

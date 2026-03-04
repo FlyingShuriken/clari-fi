@@ -57,6 +57,10 @@ export class ExpensesService {
                   ? new Prisma.Decimal(item.quantity)
                   : undefined,
               unitRaw: item.unitRaw,
+              unitPrice:
+                typeof item.unitPrice === 'number'
+                  ? new Prisma.Decimal(item.unitPrice)
+                  : undefined,
               totalPrice: new Prisma.Decimal(item.totalPrice),
               currency: dto.currency,
               confidence:

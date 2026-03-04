@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HeuristicExpenseParserProvider } from './expense-parser.provider';
+import { ExpenseParserRouterProvider } from './expense-parser-router.provider';
 import { MockOcrProvider } from './mock-ocr.provider';
 import { MockSttProvider } from './mock-stt.provider';
+import { OpenRouterExpenseParserProvider } from './openrouter-expense-parser.provider';
 import { OpenRouterOcrProvider } from './openrouter-ocr.provider';
 import { OpenRouterSttProvider } from './openrouter-stt.provider';
 import {
@@ -34,6 +36,8 @@ function shouldUseOpenRouterProvider(
     MockSttProvider,
     MockOcrProvider,
     HeuristicExpenseParserProvider,
+    ExpenseParserRouterProvider,
+    OpenRouterExpenseParserProvider,
     OpenRouterSttProvider,
     OpenRouterOcrProvider,
     {
@@ -76,7 +80,7 @@ function shouldUseOpenRouterProvider(
     },
     {
       provide: EXPENSE_PARSER_PROVIDER,
-      useExisting: HeuristicExpenseParserProvider,
+      useExisting: ExpenseParserRouterProvider,
     },
   ],
   exports: [STT_PROVIDER, OCR_PROVIDER, EXPENSE_PARSER_PROVIDER],

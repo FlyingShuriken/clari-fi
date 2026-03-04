@@ -5,12 +5,16 @@ describe('HeuristicExpenseParserProvider', () => {
 
   it('parses a voice transcript into structured expense', async () => {
     const result = await provider.parseVoiceTranscript(
-      'Spent RM 5 at pasar to buy fish, paid with TNG',
+      'Spent RM 10 at pasar to buy watermelon 2 kg, paid with TNG for Jimmy',
     );
 
-    expect(result.totalAmount).toBe(5);
+    expect(result.totalAmount).toBe(10);
     expect(result.paymentMethod).toBe('TNG');
-    expect(result.lineItems[0]?.descriptionRaw.toLowerCase()).toContain('fish');
+    expect(result.note?.toLowerCase()).toContain('jimmy');
+    expect(result.lineItems[0]?.descriptionRaw.toLowerCase()).toContain('watermelon');
+    expect(result.lineItems[0]?.quantity).toBe(2);
+    expect(result.lineItems[0]?.unitRaw).toBe('kg');
+    expect(result.lineItems[0]?.unitPrice).toBe(5);
     expect(result.confidenceMap.totalAmount).toBeGreaterThan(0.8);
   });
 

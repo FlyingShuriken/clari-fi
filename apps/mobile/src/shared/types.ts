@@ -16,6 +16,7 @@ export interface VoiceParseResult {
     transactionAt: string;
     parseLatencyMs?: number;
     merchantText?: string;
+    note?: string;
     totalAmount: number;
     paymentMethod?:
       | 'CASH'
@@ -29,6 +30,9 @@ export interface VoiceParseResult {
       | 'OTHER';
     lineItems: Array<{
       descriptionRaw: string;
+      quantity?: number;
+      unitRaw?: string;
+      unitPrice?: number;
       totalPrice: number;
       confidence?: number;
     }>;
@@ -37,6 +41,10 @@ export interface VoiceParseResult {
   parseMeta: {
     parsePath: string;
     parseLatencyMs: number;
+    parserEngine?: 'heuristic' | 'openrouter';
+    fallbackUsed?: boolean;
+    shadowCompared?: boolean;
+    shadowMismatchFields?: string[];
   };
 }
 
@@ -45,11 +53,15 @@ export interface ReceiptParseResult {
     source: 'RECEIPT';
     provenance: 'RECEIPT_OCR';
     merchantText?: string;
+    note?: string;
     totalAmount: number;
     transactionAt: string;
     currency: 'MYR' | 'SGD' | 'USD';
     lineItems: Array<{
       descriptionRaw: string;
+      quantity?: number;
+      unitRaw?: string;
+      unitPrice?: number;
       totalPrice: number;
       confidence?: number;
     }>;
@@ -59,6 +71,10 @@ export interface ReceiptParseResult {
   parseMeta: {
     parsePath: string;
     parseLatencyMs: number;
+    parserEngine?: 'heuristic' | 'openrouter';
+    fallbackUsed?: boolean;
+    shadowCompared?: boolean;
+    shadowMismatchFields?: string[];
   };
 }
 

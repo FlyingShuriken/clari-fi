@@ -57,7 +57,7 @@ export class ParseService {
     }
 
     const parsed = await this.parserProvider.parseVoiceTranscript(transcript);
-    const { confidenceMap, ...voiceCandidate } = parsed;
+    const { confidenceMap, parserMeta, ...voiceCandidate } = parsed;
 
     const parseLatencyMs = Date.now() - startedAt;
     this.metrics.trackTiming('parse.voice.latency_ms', parseLatencyMs, {
@@ -80,6 +80,10 @@ export class ParseService {
       parseMeta: {
         parsePath: provenance,
         parseLatencyMs,
+        parserEngine: parserMeta?.engine ?? 'heuristic',
+        fallbackUsed: parserMeta?.fallbackUsed ?? false,
+        shadowCompared: parserMeta?.shadowCompared ?? false,
+        shadowMismatchFields: parserMeta?.shadowMismatchFields ?? [],
       },
     };
   }
@@ -102,7 +106,7 @@ export class ParseService {
     });
 
     const parsed = await this.parserProvider.parseReceipt(ocr.rawText);
-    const { confidenceMap, ...receiptCandidate } = parsed;
+    const { confidenceMap, parserMeta, ...receiptCandidate } = parsed;
 
     const parseLatencyMs = Date.now() - startedAt;
     this.metrics.trackTiming('parse.receipt.latency_ms', parseLatencyMs, {
@@ -135,6 +139,10 @@ export class ParseService {
       parseMeta: {
         parsePath: 'RECEIPT_OCR',
         parseLatencyMs,
+        parserEngine: parserMeta?.engine ?? 'heuristic',
+        fallbackUsed: parserMeta?.fallbackUsed ?? false,
+        shadowCompared: parserMeta?.shadowCompared ?? false,
+        shadowMismatchFields: parserMeta?.shadowMismatchFields ?? [],
       },
     };
   }

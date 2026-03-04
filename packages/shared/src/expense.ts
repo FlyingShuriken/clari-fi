@@ -34,6 +34,7 @@ export const ParsedLineItemSchema = z.object({
   descriptionRaw: z.string().min(1),
   quantity: z.number().positive().optional(),
   unitRaw: z.string().optional(),
+  unitPrice: z.number().nonnegative().optional(),
   totalPrice: z.number().nonnegative(),
   confidence: z.number().min(0).max(1).optional(),
 });
@@ -63,6 +64,7 @@ export const ParsedReceiptCandidateSchema = z.object({
   transactionAt: z.string().datetime(),
   totalAmount: z.number().nonnegative(),
   currency: CurrencyCodeSchema.default('MYR'),
+  note: z.string().optional(),
   lineItems: z.array(ParsedLineItemSchema).min(1),
 });
 export type ParsedReceiptCandidate = z.infer<typeof ParsedReceiptCandidateSchema>;
