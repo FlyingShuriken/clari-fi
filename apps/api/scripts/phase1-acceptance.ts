@@ -1,14 +1,14 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
-import { AuthenticatedUser } from '../src/common/decorators/current-user.decorator';
-import { ExpensesService } from '../src/expenses/expenses.service';
-import { ParseService } from '../src/parse/parse.service';
-import { PrismaService } from '../src/prisma/prisma.service';
-import { ReportsService } from '../src/reports/reports.service';
+import { AuthenticatedUser } from '../src/modules/auth/decorators/current-user.decorator';
+import { ExpensesService } from '../src/modules/expenses/expenses.service';
+import { ParseService } from '../src/modules/parse/parse.service';
+import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
+import { ReportsService } from '../src/modules/reports/reports.service';
 
 type SampleExpense = {
-  text: string;
+  transcript: string;
   amount: number;
   paymentMethod:
     | 'CASH'
@@ -24,16 +24,16 @@ type SampleExpense = {
 };
 
 const SAMPLE_EXPENSES: SampleExpense[] = [
-  { text: 'Spent RM 5 at pasar to buy fish, paid with TNG', amount: 5, paymentMethod: 'TNG', item: 'fish' },
-  { text: 'Spent RM 12.50 at morning market for vegetables, paid cash', amount: 12.5, paymentMethod: 'CASH', item: 'vegetables' },
-  { text: 'Spent RM 8 for rice at local grocery, paid with card', amount: 8, paymentMethod: 'CARD', item: 'rice' },
-  { text: 'Spent RM 23.90 at mini market to buy chicken, paid by DuitNow', amount: 23.9, paymentMethod: 'DUITNOW', item: 'chicken' },
-  { text: 'Spent RM 6.20 at pasar for fruits, paid with TNG', amount: 6.2, paymentMethod: 'TNG', item: 'fruits' },
-  { text: 'Spent RM 18 at supermarket for eggs and milk, paid with card', amount: 18, paymentMethod: 'CARD', item: 'eggs and milk' },
-  { text: 'Spent RM 4.80 at roadside stall for bananas, paid cash', amount: 4.8, paymentMethod: 'CASH', item: 'bananas' },
-  { text: 'Spent RM 15.30 at wet market for prawns, paid with GrabPay', amount: 15.3, paymentMethod: 'GRABPAY', item: 'prawns' },
-  { text: 'Spent RM 9.70 at grocery for tofu, paid with ShopeePay', amount: 9.7, paymentMethod: 'SHOPEEPAY', item: 'tofu' },
-  { text: 'Spent RM 11.40 at pasar for onions, paid with TNG', amount: 11.4, paymentMethod: 'TNG', item: 'onions' },
+  { transcript: 'Spent RM 5 at pasar to buy fish, paid with TNG', amount: 5, paymentMethod: 'TNG', item: 'fish' },
+  { transcript: 'Spent RM 12.50 at morning market for vegetables, paid cash', amount: 12.5, paymentMethod: 'CASH', item: 'vegetables' },
+  { transcript: 'Spent RM 8 for rice at local grocery, paid with card', amount: 8, paymentMethod: 'CARD', item: 'rice' },
+  { transcript: 'Spent RM 23.90 at mini market to buy chicken, paid by DuitNow', amount: 23.9, paymentMethod: 'DUITNOW', item: 'chicken' },
+  { transcript: 'Spent RM 6.20 at pasar for fruits, paid with TNG', amount: 6.2, paymentMethod: 'TNG', item: 'fruits' },
+  { transcript: 'Spent RM 18 at supermarket for eggs and milk, paid with card', amount: 18, paymentMethod: 'CARD', item: 'eggs and milk' },
+  { transcript: 'Spent RM 4.80 at roadside stall for bananas, paid cash', amount: 4.8, paymentMethod: 'CASH', item: 'bananas' },
+  { transcript: 'Spent RM 15.30 at wet market for prawns, paid with GrabPay', amount: 15.3, paymentMethod: 'GRABPAY', item: 'prawns' },
+  { transcript: 'Spent RM 9.70 at grocery for tofu, paid with ShopeePay', amount: 9.7, paymentMethod: 'SHOPEEPAY', item: 'tofu' },
+  { transcript: 'Spent RM 11.40 at pasar for onions, paid with TNG', amount: 11.4, paymentMethod: 'TNG', item: 'onions' },
 ];
 
 function toNumber(value: unknown): number {
@@ -82,10 +82,10 @@ async function main() {
       where: { email: 'phase1.acceptance@clarifi.local' },
       create: {
         email: 'phase1.acceptance@clarifi.local',
-        supabaseUserId: 'phase1-acceptance-user',
+        clerkUserId: 'phase1-acceptance-user',
       },
       update: {},
-      select: { id: true, email: true, supabaseUserId: true },
+      select: { id: true, email: true, clerkUserId: true },
     });
 
     await prisma.monthlyReport.deleteMany({ where: { userId: seedUser.id } });
@@ -95,7 +95,7 @@ async function main() {
     const authUser: AuthenticatedUser = {
       id: seedUser.id,
       email: seedUser.email,
-      supabaseUserId: seedUser.supabaseUserId,
+      clerkUserId: seedUser.clerkUserId,
     };
 
     const transactionAt = new Date().toISOString();
@@ -103,6 +103,7 @@ async function main() {
     for (const sample of SAMPLE_EXPENSES) {
       await expensesService.confirmExpense(authUser, {
         source: 'VOICE',
+        provenance: 'VOICE_ON_DEVICE',
         currency: 'MYR',
         transactionAt,
         merchantText: 'Acceptance Test Store',
@@ -116,7 +117,7 @@ async function main() {
         ],
         rawPayload: {
           scenario: 'phase1-acceptance',
-          text: sample.text,
+          transcript: sample.transcript,
         },
       });
     }
@@ -161,8 +162,8 @@ async function main() {
 
     for (const sample of SAMPLE_EXPENSES) {
       const startedAt = Date.now();
-      const parseResult = await parseService.parseVoice({
-        text: sample.text,
+      const parseResult = await parseService.parseVoice(authUser, {
+        transcript: sample.transcript,
         locale: 'en-MY',
       });
       const latencyMs = Date.now() - startedAt;

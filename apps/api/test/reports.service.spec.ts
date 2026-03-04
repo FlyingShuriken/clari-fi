@@ -1,4 +1,4 @@
-import { ReportsService } from '../src/reports/reports.service';
+import { ReportsService } from '../src/modules/reports/reports.service';
 
 describe('ReportsService', () => {
   it('builds monthly report totals and insights', async () => {
@@ -36,7 +36,7 @@ describe('ReportsService', () => {
     const service = new ReportsService(prisma);
 
     const report = await service.getMonthlyReport(
-      { id: 'u1', email: 'x@example.com', supabaseUserId: 'sb1' },
+      { id: 'u1', email: 'x@example.com', clerkUserId: 'clerk_1' },
       { year: 2026, month: 3 },
     );
 

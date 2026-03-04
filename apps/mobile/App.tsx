@@ -1,62 +1,34 @@
+import { ClerkProvider, SignedIn, SignedOut, useAuth, useUser } from '@clerk/clerk-expo';
+import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { StatusBar } from 'expo-status-bar';
+import Constants from 'expo-constants';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
-  Button,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { AuthSection } from './src/features/auth/AuthSection';
+import { ClerkEmailSignInSection } from './src/features/auth/ClerkEmailSignInSection';
+import { ReceiptCaptureSection } from './src/features/capture/ReceiptCaptureSection';
+import { VoiceCaptureSection } from './src/features/capture/VoiceCaptureSection';
+import { InsightsSection } from './src/features/insights/InsightsSection';
 import {
-  apiRequest,
-  requestSupabasePasswordSignIn,
-  type VerifyResponse,
-} from './src/api';
-
-interface VoiceParseResult {
-  transcript: string;
-  sttConfidence: number;
-  candidate: {
-    source: 'VOICE';
-    currency: 'MYR' | 'SGD' | 'USD';
-    transactionAt: string;
-    merchantText?: string;
-    totalAmount: number;
-    paymentMethod?:
-      | 'CASH'
-      | 'CARD'
-      | 'BANK_TRANSFER'
-      | 'E_WALLET'
-      | 'TNG'
-      | 'GRABPAY'
-      | 'SHOPEEPAY'
-      | 'DUITNOW'
-      | 'OTHER';
-    lineItems: Array<{
-      descriptionRaw: string;
-      totalPrice: number;
-    }>;
-  };
-}
-
-interface ReceiptParseResult {
-  candidate: {
-    merchantText?: string;
-    totalAmount: number;
-    currency: 'MYR' | 'SGD' | 'USD';
-    lineItems: Array<{
-      descriptionRaw: string;
-      totalPrice: number;
-    }>;
-  };
-  rawPayload: Record<string, unknown>;
-}
+  confirmExpense,
+  listExpenses,
+  loadMonthlyReport,
+  parseReceipt,
+  parseVoice,
+  uploadArtifact,
+  verifyClerkSessionToken,
+} from './src/shared/api';
+import type { ReceiptParseResult, VoiceParseResult } from './src/shared/types';
 
 function errorToMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -69,101 +41,110 @@ function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
-function masked(value: string): string {
-  if (!value) {
-    return 'Not set';
-  }
+const defaultApiBaseUrl =
+  String(Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? '').trim() ||
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  'http://localhost:3000/v1';
+const publishableKey =
+  String(Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '').trim() ||
+  process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-  if (value.length <= 8) {
-    return '********';
-  }
+function AuthGate() {
+  const [message, setMessage] = useState('');
 
-  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" />
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.title}>ClariFi Phase 0/1 Baseline</Text>
+
+        <SignedOut>
+          <ClerkEmailSignInSection message={message} onMessage={setMessage} />
+        </SignedOut>
+
+        <SignedIn>
+          <AuthenticatedApp message={message} onMessage={setMessage} />
+        </SignedIn>
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
-const defaultApiBaseUrl =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000/v1';
-const defaultSupabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
-const defaultSupabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '';
+interface AuthenticatedAppProps {
+  message: string;
+  onMessage: (message: string) => void;
+}
 
-export default function App() {
+function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultApiBaseUrl);
-  const [supabaseUrl, setSupabaseUrl] = useState(defaultSupabaseUrl);
-  const [supabaseAnonKey, setSupabaseAnonKey] = useState(defaultSupabaseAnonKey);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [appToken, setAppToken] = useState('');
-  const [signedInEmail, setSignedInEmail] = useState('');
+  const [backendUserId, setBackendUserId] = useState('');
 
+  const [transcriptInput, setTranscriptInput] = useState('');
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [recordingUri, setRecordingUri] = useState('');
   const [recordedAudioBase64, setRecordedAudioBase64] = useState('');
+  const [recordedAudioFileRef, setRecordedAudioFileRef] = useState('');
+
   const [selectedReceiptUri, setSelectedReceiptUri] = useState('');
   const [selectedReceiptBase64, setSelectedReceiptBase64] = useState('');
+  const [selectedReceiptMimeType, setSelectedReceiptMimeType] = useState('image/jpeg');
+  const [selectedReceiptFileRef, setSelectedReceiptFileRef] = useState('');
 
   const [voiceParse, setVoiceParse] = useState<VoiceParseResult | null>(null);
   const [receiptParse, setReceiptParse] = useState<ReceiptParseResult | null>(null);
-  const [voiceParseLatencyMs, setVoiceParseLatencyMs] = useState<number | null>(
-    null,
-  );
+  const [voiceParseLatencyMs, setVoiceParseLatencyMs] = useState<number | null>(null);
   const [receiptParseLatencyMs, setReceiptParseLatencyMs] = useState<number | null>(
     null,
   );
   const [ledgerPreview, setLedgerPreview] = useState('');
   const [reportPreview, setReportPreview] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
 
-  const authHeaders = useMemo(
-    () => (appToken ? { Authorization: `Bearer ${appToken}` } : {}),
-    [appToken],
-  );
+  const { getToken, signOut } = useAuth();
+  const { user } = useUser();
 
-  async function signInAndVerify() {
+  async function getBearerTokenOrThrow(): Promise<string> {
+    const token = await getToken();
+    if (!token) {
+      throw new Error('No Clerk session token available. Please sign in again.');
+    }
+
+    return token;
+  }
+
+  async function handleSyncBackendUser() {
     setLoading(true);
-    setMessage('');
+    onMessage('');
 
     try {
-      if (!supabaseUrl || !supabaseAnonKey) {
-        throw new Error('Set Supabase URL and anon key first.');
-      }
-
-      const session = await requestSupabasePasswordSignIn(
-        supabaseUrl,
-        supabaseAnonKey,
-        email,
-        password,
-      );
-
-      const verify = await apiRequest<VerifyResponse>(
-        normalizeBaseUrl(apiBaseUrl),
-        '/auth/supabase/verify',
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            supabaseAccessToken: session.access_token,
-          }),
-        },
-      );
-
-      setAppToken(verify.accessToken);
-      setSignedInEmail(verify.user.email);
-      setMessage(`Authenticated as ${verify.user.email}`);
+      const token = await getBearerTokenOrThrow();
+      const result = await verifyClerkSessionToken(normalizeBaseUrl(apiBaseUrl), token);
+      setBackendUserId(result.user.id);
+      onMessage(`Synced backend user: ${result.user.email}`);
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  function resetSession() {
-    setAppToken('');
-    setSignedInEmail('');
-    setMessage('Session cleared on device.');
+  async function handleSignOut() {
+    setLoading(true);
+    onMessage('');
+
+    try {
+      await signOut();
+      setBackendUserId('');
+      onMessage('Signed out.');
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function startRecording() {
-    setMessage('');
+    onMessage('');
+
     try {
       if (recording) {
         return;
@@ -185,11 +166,11 @@ export default function App() {
 
       setVoiceParse(null);
       setRecordedAudioBase64('');
-      setRecordingUri('');
+      setRecordedAudioFileRef('');
       setRecording(created.recording);
-      setMessage('Recording started. Tap stop when done.');
+      onMessage('Recording started. Tap stop when done.');
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     }
   }
 
@@ -199,7 +180,7 @@ export default function App() {
     }
 
     setLoading(true);
-    setMessage('');
+    onMessage('');
 
     try {
       await recording.stopAndUnloadAsync();
@@ -218,85 +199,85 @@ export default function App() {
         encoding: FileSystem.EncodingType.Base64,
       });
 
-      setRecordingUri(uri);
       setRecordedAudioBase64(base64);
-      setMessage('Recording ready for parsing.');
+
+      const token = await getBearerTokenOrThrow();
+      const uploaded = await uploadArtifact(normalizeBaseUrl(apiBaseUrl), token, {
+        kind: 'audio',
+        mimeType: 'audio/m4a',
+        fileBase64: base64,
+      });
+      setRecordedAudioFileRef(uploaded.fileRef);
+
+      onMessage('Audio fallback ready for parsing.');
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function parseVoice() {
+  async function handleParseVoice() {
     setLoading(true);
-    setMessage('');
+    onMessage('');
 
     try {
-      if (!appToken) {
-        throw new Error('Sign in first.');
-      }
-      if (!recordedAudioBase64) {
-        throw new Error('Record voice input first.');
+      if (!transcriptInput.trim() && !recordedAudioBase64) {
+        throw new Error('Provide transcript or record audio first.');
       }
 
+      const token = await getBearerTokenOrThrow();
       const startedAt = Date.now();
-      const result = await apiRequest<VoiceParseResult>(
-        normalizeBaseUrl(apiBaseUrl),
-        '/expenses/voice/parse',
-        {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify({
-            audioBase64: recordedAudioBase64,
-            locale: 'ms-MY',
-          }),
-        },
-      );
+      const result = await parseVoice(normalizeBaseUrl(apiBaseUrl), token, {
+        transcript: transcriptInput.trim() || undefined,
+        audioBase64: transcriptInput.trim() ? undefined : recordedAudioBase64,
+        locale: 'ms-MY',
+        deviceConfidence: transcriptInput.trim() ? 0.96 : undefined,
+      });
 
       setVoiceParse(result);
       setVoiceParseLatencyMs(Date.now() - startedAt);
-      setMessage('Voice parsed. Review and confirm.');
+      onMessage(`Voice parsed via ${result.parseMeta.parsePath}. Review and confirm.`);
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function confirmVoice() {
+  async function handleConfirmVoice() {
     if (!voiceParse) {
       return;
     }
 
     setLoading(true);
-    setMessage('');
+    onMessage('');
 
     try {
-      await apiRequest(normalizeBaseUrl(apiBaseUrl), '/expenses/confirm', {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({
-          ...voiceParse.candidate,
-          transactionAt: new Date().toISOString(),
-          confidence: 0.82,
-          rawPayload: {
-            transcript: voiceParse.transcript,
-            sttConfidence: voiceParse.sttConfidence,
-            parseLatencyMs: voiceParseLatencyMs,
-          },
-        }),
+      const token = await getBearerTokenOrThrow();
+      await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
+        ...voiceParse.candidate,
+        transactionAt: new Date().toISOString(),
+        confidence: 0.82,
+        rawPayload: {
+          transcript: voiceParse.transcript,
+          sttConfidence: voiceParse.sttConfidence,
+          parsePath: voiceParse.parseMeta.parsePath,
+          parseLatencyMs: voiceParse.parseMeta.parseLatencyMs,
+          audioFileRef: recordedAudioFileRef || null,
+        },
       });
-      setMessage('Voice expense saved.');
+      onMessage('Voice expense saved.');
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
   async function chooseReceipt(fromCamera: boolean) {
-    setMessage('');
+    onMessage('');
+
     try {
       if (fromCamera) {
         const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
@@ -332,258 +313,181 @@ export default function App() {
         throw new Error('Could not read image as base64.');
       }
 
+      const mimeType = picked.mimeType ?? 'image/jpeg';
       setSelectedReceiptUri(picked.uri);
       setSelectedReceiptBase64(picked.base64);
+      setSelectedReceiptMimeType(mimeType);
+      setSelectedReceiptFileRef('');
       setReceiptParse(null);
-      setMessage('Receipt image selected.');
+
+      const token = await getBearerTokenOrThrow();
+      const uploaded = await uploadArtifact(normalizeBaseUrl(apiBaseUrl), token, {
+        kind: 'receipt',
+        mimeType,
+        fileBase64: picked.base64,
+      });
+      setSelectedReceiptFileRef(uploaded.fileRef);
+
+      onMessage('Receipt image selected and uploaded.');
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     }
   }
 
-  async function parseReceipt() {
+  async function handleParseReceipt() {
     setLoading(true);
-    setMessage('');
+    onMessage('');
 
     try {
-      if (!appToken) {
-        throw new Error('Sign in first.');
-      }
-      if (!selectedReceiptBase64) {
-        throw new Error('Select or capture a receipt first.');
+      if (!selectedReceiptBase64 && !selectedReceiptFileRef) {
+        throw new Error('Select a receipt first.');
       }
 
+      const token = await getBearerTokenOrThrow();
       const startedAt = Date.now();
-      const result = await apiRequest<ReceiptParseResult>(
-        normalizeBaseUrl(apiBaseUrl),
-        '/receipts/parse',
-        {
-          method: 'POST',
-          headers: authHeaders,
-          body: JSON.stringify({
-            imageBase64: selectedReceiptBase64,
-          }),
-        },
-      );
+      const result = await parseReceipt(normalizeBaseUrl(apiBaseUrl), token, {
+        fileRef: selectedReceiptFileRef || undefined,
+        mimeType: selectedReceiptMimeType,
+        imageBase64: selectedReceiptBase64 || undefined,
+      });
       setReceiptParse(result);
       setReceiptParseLatencyMs(Date.now() - startedAt);
-      setMessage('Receipt parsed. Review and confirm.');
+      onMessage('Receipt parsed. Review and confirm.');
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function confirmReceipt() {
+  async function handleConfirmReceipt() {
     if (!receiptParse) {
       return;
     }
 
     setLoading(true);
-    setMessage('');
+    onMessage('');
 
     try {
-      await apiRequest(normalizeBaseUrl(apiBaseUrl), '/expenses/confirm', {
-        method: 'POST',
-        headers: authHeaders,
-        body: JSON.stringify({
-          source: 'RECEIPT',
-          currency: receiptParse.candidate.currency,
-          transactionAt: new Date().toISOString(),
-          merchantText: receiptParse.candidate.merchantText,
-          totalAmount: receiptParse.candidate.totalAmount,
-          lineItems: receiptParse.candidate.lineItems,
-          rawPayload: {
-            parseLatencyMs: receiptParseLatencyMs,
-          },
-          receipt: {
-            sourceFileUrl: 'https://clarifi.local/receipt-upload.jpg',
-            mimeType: 'image/jpeg',
-            parsedPayload: receiptParse.candidate,
-            ocrRaw: {
-              ...receiptParse.rawPayload,
-              localReceiptUri: selectedReceiptUri || null,
-            },
-            confidence: 0.8,
-          },
-        }),
+      const token = await getBearerTokenOrThrow();
+      await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
+        ...receiptParse.candidate,
+        currency: receiptParse.candidate.currency,
+        confidence: 0.8,
+        rawPayload: {
+          parsePath: receiptParse.parseMeta.parsePath,
+          parseLatencyMs: receiptParse.parseMeta.parseLatencyMs,
+          localReceiptUri: selectedReceiptUri || null,
+        },
+        receipt: {
+          fileRef:
+            selectedReceiptFileRef || receiptParse.fileRef || 'local://receipt-not-uploaded',
+          mimeType: selectedReceiptMimeType,
+          parsedPayload: receiptParse.candidate,
+          ocrRaw: receiptParse.rawPayload,
+          confidence: 0.8,
+        },
       });
-      setMessage('Receipt expense saved.');
+      onMessage('Receipt expense saved.');
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function loadLedger() {
+  async function handleLoadLedger() {
     setLoading(true);
-    setMessage('');
+    onMessage('');
 
     try {
-      const result = await apiRequest<{ total: number; items: unknown[] }>(
-        normalizeBaseUrl(apiBaseUrl),
-        '/expenses',
-        {
-          method: 'GET',
-          headers: authHeaders,
-        },
-      );
+      const token = await getBearerTokenOrThrow();
+      const result = await listExpenses(normalizeBaseUrl(apiBaseUrl), token);
       setLedgerPreview(JSON.stringify(result, null, 2));
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
-  async function loadReport() {
+  async function handleLoadReport() {
     setLoading(true);
-    setMessage('');
+    onMessage('');
 
     try {
-      const now = new Date();
-      const result = await apiRequest(
-        normalizeBaseUrl(apiBaseUrl),
-        `/reports/monthly?year=${now.getUTCFullYear()}&month=${now.getUTCMonth() + 1}`,
-        {
-          method: 'GET',
-          headers: authHeaders,
-        },
-      );
+      const token = await getBearerTokenOrThrow();
+      const result = await loadMonthlyReport(normalizeBaseUrl(apiBaseUrl), token);
       setReportPreview(JSON.stringify(result, null, 2));
     } catch (error) {
-      setMessage(errorToMessage(error));
+      onMessage(errorToMessage(error));
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>ClariFi Phase 1 Demo</Text>
+    <View style={styles.appSection}>
+      <AuthSection
+        apiBaseUrl={apiBaseUrl}
+        onApiBaseUrlChange={setApiBaseUrl}
+        signedInEmail={user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? '-'}
+        backendUserId={backendUserId}
+        onSyncBackendUser={handleSyncBackendUser}
+        onSignOut={handleSignOut}
+      />
 
-        <Text style={styles.label}>API Base URL</Text>
-        <TextInput
-          style={styles.input}
-          value={apiBaseUrl}
-          onChangeText={setApiBaseUrl}
-          autoCapitalize="none"
-        />
+      <VoiceCaptureSection
+        transcript={transcriptInput}
+        onTranscriptChange={setTranscriptInput}
+        recordingReady={Boolean(recordedAudioBase64)}
+        parseLatencyMs={voiceParseLatencyMs}
+        parseResult={voiceParse}
+        onStartRecording={startRecording}
+        onStopRecording={stopRecording}
+        onParseVoice={handleParseVoice}
+        onConfirmVoice={handleConfirmVoice}
+      />
 
-        <Text style={styles.sectionTitle}>1) Supabase Sign-In + App Verify</Text>
-        <TextInput
-          style={styles.input}
-          value={supabaseUrl}
-          onChangeText={setSupabaseUrl}
-          autoCapitalize="none"
-          placeholder="Supabase URL"
-        />
-        <TextInput
-          style={styles.input}
-          value={supabaseAnonKey}
-          onChangeText={setSupabaseAnonKey}
-          autoCapitalize="none"
-          placeholder="Supabase anon key"
-        />
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="Email"
-        />
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          autoCapitalize="none"
-          secureTextEntry
-          placeholder="Password"
-        />
-        <View style={styles.row}>
-          <Button title="Sign In + Verify" onPress={signInAndVerify} />
-          <Button title="Clear Session" onPress={resetSession} />
-        </View>
-        <Text style={styles.meta}>
-          Signed in: {signedInEmail || 'No'} | App token: {masked(appToken)}
+      <ReceiptCaptureSection
+        receiptReady={Boolean(selectedReceiptBase64 || selectedReceiptUri)}
+        receiptFileRef={selectedReceiptFileRef}
+        parseLatencyMs={receiptParseLatencyMs}
+        parseResult={receiptParse}
+        onPickCamera={() => chooseReceipt(true)}
+        onPickGallery={() => chooseReceipt(false)}
+        onParseReceipt={handleParseReceipt}
+        onConfirmReceipt={handleConfirmReceipt}
+      />
+
+      <InsightsSection
+        ledgerPreview={ledgerPreview}
+        reportPreview={reportPreview}
+        onLoadLedger={handleLoadLedger}
+        onLoadReport={handleLoadReport}
+      />
+
+      {loading ? <ActivityIndicator style={styles.loader} /> : null}
+      {message ? <Text style={styles.message}>{message}</Text> : null}
+    </View>
+  );
+}
+
+export default function App() {
+  if (!publishableKey) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Text style={styles.message}>
+          Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. Set it in your mobile env.
         </Text>
+      </SafeAreaView>
+    );
+  }
 
-        <Text style={styles.sectionTitle}>2) Voice Parse + Confirm</Text>
-        <View style={styles.row}>
-          <Button title="Start Recording" onPress={startRecording} />
-          <Button title="Stop Recording" onPress={stopRecording} />
-        </View>
-        <Text style={styles.meta}>
-          Recording file: {recordingUri ? 'Ready' : 'Not recorded'}
-        </Text>
-        <View style={styles.row}>
-          <Button title="Parse Voice" onPress={parseVoice} />
-          <Button title="Confirm Voice" onPress={confirmVoice} />
-        </View>
-        <Text style={styles.meta}>
-          Parse latency: {voiceParseLatencyMs == null ? '-' : `${voiceParseLatencyMs} ms`}
-        </Text>
-        {voiceParse ? (
-          <View style={styles.previewContainer}>
-            <Text style={styles.previewTitle}>Voice Parse</Text>
-            <Text style={styles.preview}>{JSON.stringify(voiceParse, null, 2)}</Text>
-          </View>
-        ) : null}
-
-        <Text style={styles.sectionTitle}>3) Receipt Parse + Confirm</Text>
-        <View style={styles.row}>
-          <Button title="Camera" onPress={() => chooseReceipt(true)} />
-          <Button title="Gallery" onPress={() => chooseReceipt(false)} />
-        </View>
-        <Text style={styles.meta}>
-          Receipt image: {selectedReceiptUri ? 'Ready' : 'Not selected'}
-        </Text>
-        <View style={styles.row}>
-          <Button title="Parse Receipt" onPress={parseReceipt} />
-          <Button title="Confirm Receipt" onPress={confirmReceipt} />
-        </View>
-        <Text style={styles.meta}>
-          Parse latency:{' '}
-          {receiptParseLatencyMs == null ? '-' : `${receiptParseLatencyMs} ms`}
-        </Text>
-        {receiptParse ? (
-          <View style={styles.previewContainer}>
-            <Text style={styles.previewTitle}>Receipt Parse</Text>
-            <Text style={styles.preview}>
-              {JSON.stringify(receiptParse, null, 2)}
-            </Text>
-          </View>
-        ) : null}
-
-        <Text style={styles.sectionTitle}>4) Ledger & Report</Text>
-        <View style={styles.row}>
-          <Button title="Load Ledger" onPress={loadLedger} />
-          <Button title="Load Monthly Report" onPress={loadReport} />
-        </View>
-
-        {loading ? <ActivityIndicator style={styles.loader} /> : null}
-        {message ? <Text style={styles.message}>{message}</Text> : null}
-
-        {ledgerPreview ? (
-          <View style={styles.previewContainer}>
-            <Text style={styles.previewTitle}>Ledger Response</Text>
-            <Text style={styles.preview}>{ledgerPreview}</Text>
-          </View>
-        ) : null}
-
-        {reportPreview ? (
-          <View style={styles.previewContainer}>
-            <Text style={styles.previewTitle}>Report Response</Text>
-            <Text style={styles.preview}>{reportPreview}</Text>
-          </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+  return (
+    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+      <AuthGate />
+    </ClerkProvider>
   );
 }
 
@@ -596,34 +500,12 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  appSection: {
+    gap: 12,
+  },
   title: {
     fontSize: 24,
     fontWeight: '700',
-  },
-  sectionTitle: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    padding: 10,
-    backgroundColor: 'white',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  meta: {
-    fontSize: 12,
-    color: '#334155',
   },
   loader: {
     marginTop: 12,
@@ -631,22 +513,5 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 14,
     color: '#0f172a',
-  },
-  previewContainer: {
-    marginTop: 8,
-    borderRadius: 8,
-    borderColor: '#e2e8f0',
-    borderWidth: 1,
-    padding: 10,
-    backgroundColor: '#f1f5f9',
-  },
-  previewTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  preview: {
-    fontFamily: 'Courier',
-    fontSize: 12,
   },
 });
