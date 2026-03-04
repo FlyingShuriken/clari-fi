@@ -70,6 +70,24 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
     }
   }
 
+  const pushEnabled = asString(config.PUSH_NOTIFICATIONS_ENABLED).trim().toLowerCase();
+  if (pushEnabled && pushEnabled !== 'true' && pushEnabled !== 'false') {
+    errors.push('PUSH_NOTIFICATIONS_ENABLED must be true or false');
+  }
+
+  const pushProvider = asString(config.PUSH_PROVIDER).trim().toLowerCase();
+  if (pushProvider && pushProvider !== 'expo' && pushProvider !== 'mock') {
+    errors.push('PUSH_PROVIDER must be one of: expo, mock');
+  }
+
+  const alertCheckBatchRaw = asString(config.ALERT_CHECK_BATCH_SIZE).trim();
+  if (alertCheckBatchRaw) {
+    const alertCheckBatchSize = Number(alertCheckBatchRaw);
+    if (!Number.isFinite(alertCheckBatchSize) || alertCheckBatchSize <= 0) {
+      errors.push('ALERT_CHECK_BATCH_SIZE must be a positive number');
+    }
+  }
+
   if (errors.length > 0) {
     throw new Error(`Invalid environment:\n- ${errors.join('\n- ')}`);
   }

@@ -175,6 +175,21 @@ export interface AlertEvent {
   areaText?: string;
   triggeredAt: string;
   readAt: string | null;
+  deliveryStatus?: 'SENT' | 'PARTIAL' | 'FAILED' | 'SKIPPED' | 'DISABLED';
+  notificationSentAt?: string | null;
+  pushAttempted?: number;
+}
+
+export interface PushDevice {
+  id: string;
+  expoPushToken: string;
+  platform?: 'ios' | 'android' | 'web';
+  appVersion?: string;
+  lastSeenAt: string;
+  revokedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  active: boolean;
 }
 
 export type PromoReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';

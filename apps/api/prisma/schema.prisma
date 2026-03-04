@@ -78,6 +78,7 @@ model User {
   alertEvents       AlertEvent[]
   promoIngestions   PromoIngestion[]
   promoObservations PromoObservation[]
+  pushDevices       PushDevice[]
 }
 
 model Expense {
@@ -352,4 +353,20 @@ model PromoObservation {
   @@index([reviewStatus, validFrom, validTo])
   @@index([storeId, canonicalItemId, observedAt])
   @@index([areaText, canonicalItemId, observedAt])
+}
+
+model PushDevice {
+  id            String   @id @default(cuid())
+  userId        String
+  expoPushToken String   @unique
+  platform      String?
+  appVersion    String?
+  lastSeenAt    DateTime @default(now())
+  revokedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
 }

@@ -108,6 +108,11 @@ export class PricesController {
     return this.pricesService.markAlertEventRead(user, eventId);
   }
 
+  @Post('alerts/events/read-all')
+  async markAllAlertEventsRead(@CurrentUser() user: AuthenticatedUser) {
+    return this.pricesService.markAllAlertEventsRead(user);
+  }
+
   @Post('promos/ingest')
   async ingestPromo(
     @CurrentUser() user: AuthenticatedUser,

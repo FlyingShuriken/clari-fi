@@ -19,6 +19,7 @@
     "expo-file-system": "~19.0.21",
     "expo-image-picker": "~17.0.8",
     "expo-linking": "~8.0.11",
+    "expo-notifications": "~0.32.14",
     "expo-secure-store": "^15.0.8",
     "expo-speech-recognition": "^3.1.1",
     "expo-status-bar": "~3.0.9",

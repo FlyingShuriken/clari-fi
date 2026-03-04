@@ -200,8 +200,24 @@ export const AlertEventSchema = z.object({
   areaText: z.string().optional(),
   triggeredAt: z.string().datetime(),
   readAt: z.string().datetime().nullable(),
+  deliveryStatus: z.enum(['SENT', 'PARTIAL', 'FAILED', 'SKIPPED', 'DISABLED']).optional(),
+  notificationSentAt: z.string().datetime().nullable().optional(),
+  pushAttempted: z.number().int().nonnegative().optional(),
 });
 export type AlertEvent = z.infer<typeof AlertEventSchema>;
+
+export const PushDeviceSchema = z.object({
+  id: z.string(),
+  expoPushToken: z.string(),
+  platform: z.enum(['ios', 'android', 'web']).optional(),
+  appVersion: z.string().optional(),
+  lastSeenAt: z.string().datetime(),
+  revokedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  active: z.boolean(),
+});
+export type PushDevice = z.infer<typeof PushDeviceSchema>;
 
 export const PromoReviewStatusSchema = z.enum(['PENDING', 'APPROVED', 'REJECTED']);
 export type PromoReviewStatus = z.infer<typeof PromoReviewStatusSchema>;

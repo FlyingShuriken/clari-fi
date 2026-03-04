@@ -5,6 +5,7 @@ import type {
   PriceBackfillResponse,
   PriceCompareResponse,
   PriceHistoryResponse,
+  PushDevice,
   PromoIngestionItem,
   PromoReviewStatus,
   ReceiptParseResult,
@@ -45,6 +46,48 @@ export async function verifyClerkSessionToken(
     method: 'POST',
     body: JSON.stringify({ clerkSessionToken }),
   });
+}
+
+export async function registerPushDevice(
+  baseUrl: string,
+  bearerToken: string,
+  input: {
+    expoPushToken: string;
+    platform?: 'ios' | 'android' | 'web';
+    appVersion?: string;
+  },
+): Promise<PushDevice> {
+  return apiRequest<PushDevice>(baseUrl, '/notifications/devices', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listPushDevices(
+  baseUrl: string,
+  bearerToken: string,
+): Promise<{ total: number; items: PushDevice[] }> {
+  return apiRequest<{ total: number; items: PushDevice[] }>(baseUrl, '/notifications/devices', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function revokePushDevice(
+  baseUrl: string,
+  bearerToken: string,
+  expoPushToken: string,
+): Promise<{ token: string; revoked: boolean; updatedAt: string; userId: string }> {
+  const encoded = encodeURIComponent(expoPushToken);
+  return apiRequest<{ token: string; revoked: boolean; updatedAt: string; userId: string }>(
+    baseUrl,
+    `/notifications/devices/${encoded}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    },
+  );
 }
 
 export async function uploadArtifact(
@@ -348,6 +391,21 @@ export async function markAlertEventRead(
     `/prices/alerts/events/${eventId}/read`,
     {
       method: 'PATCH',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+      body: JSON.stringify({}),
+    },
+  );
+}
+
+export async function markAllAlertEventsRead(
+  baseUrl: string,
+  bearerToken: string,
+): Promise<{ updated: number; readAt: string; userId: string }> {
+  return apiRequest<{ updated: number; readAt: string; userId: string }>(
+    baseUrl,
+    '/prices/alerts/events/read-all',
+    {
+      method: 'POST',
       headers: { Authorization: `Bearer ${bearerToken}` },
       body: JSON.stringify({}),
     },

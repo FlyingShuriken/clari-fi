@@ -8,10 +8,12 @@ import {
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -42,8 +44,11 @@ import {
   loadMonthlyReport,
   loadPriceCompare,
   loadPriceHistory,
+  markAllAlertEventsRead,
   parseReceipt,
   parseVoice,
+  registerPushDevice,
+  revokePushDevice,
   runPriceBackfill,
   uploadArtifact,
   verifyClerkSessionToken,
@@ -70,6 +75,37 @@ function parseNumberInput(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function normalizePushRegistrationError(error: unknown): string {
+  const message = errorToMessage(error);
+  const normalized = message.trim();
+  const lower = normalized.toLowerCase();
+
+  if (lower.includes("aps-environment")) {
+    return "Unavailable: iOS build missing APNs entitlement (aps-environment). Rebuild iOS dev client with push capability.";
+  }
+
+  if (lower.includes("projectid")) {
+    return "Unavailable: missing Expo projectId for push token. Link EAS project and rebuild dev client.";
+  }
+
+  return `Registration failed: ${normalized}`;
+}
+
+function getExpoProjectId(): string | undefined {
+  const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
+  const eas = (extra.eas ?? {}) as Record<string, unknown>;
+  if (typeof eas.projectId === "string" && eas.projectId.trim()) {
+    return eas.projectId.trim();
+  }
+
+  const easConfig = (Constants as unknown as { easConfig?: { projectId?: string } }).easConfig;
+  if (typeof easConfig?.projectId === "string" && easConfig.projectId.trim()) {
+    return easConfig.projectId.trim();
+  }
+
+  return undefined;
+}
+
 const defaultApiBaseUrl =
   String(Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? "").trim() ||
   process.env.EXPO_PUBLIC_API_BASE_URL ||
@@ -88,6 +124,16 @@ const onDeviceSttEnabled =
     .toLowerCase() !== "false";
 const defaultSttLocale = "en-SG";
 
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
 function AuthGate() {
   const [message, setMessage] = useState("");
 
@@ -95,7 +141,7 @@ function AuthGate() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>ClariFi Phase 2B</Text>
+        <Text style={styles.title}>ClariFi Phase 2C</Text>
 
         <SignedOut>
           <ClerkEmailSignInSection message={message} onMessage={setMessage} />
@@ -203,9 +249,12 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
   const [alertsPreview, setAlertsPreview] = useState("");
   const [alertEventsPreview, setAlertEventsPreview] = useState("");
   const [alertCheckPreview, setAlertCheckPreview] = useState("");
+  const [alertUnreadCount, setAlertUnreadCount] = useState(0);
 
   const [promoIngestPreview, setPromoIngestPreview] = useState("");
   const [promoListPreview, setPromoListPreview] = useState("");
+  const [pushStatus, setPushStatus] = useState("Not registered");
+  const [pushToken, setPushToken] = useState("");
 
   const [ledgerPreview, setLedgerPreview] = useState("");
   const [reportPreview, setReportPreview] = useState("");
@@ -280,6 +329,49 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
     return token;
   }
 
+  async function ensurePushDeviceRegistration() {
+    try {
+      const existingPermission = await Notifications.getPermissionsAsync();
+      const finalPermission =
+        existingPermission.granted || existingPermission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL
+          ? existingPermission
+          : await Notifications.requestPermissionsAsync();
+
+      if (!finalPermission.granted) {
+        setPushStatus("Permission denied");
+        return;
+      }
+
+      const projectId = getExpoProjectId();
+      const expoTokenResult = await Notifications.getExpoPushTokenAsync(
+        projectId ? { projectId } : undefined,
+      );
+      const expoPushToken = expoTokenResult.data;
+
+      const bearerToken = await getBearerTokenOrThrow();
+      await registerPushDevice(normalizeBaseUrl(apiBaseUrl), bearerToken, {
+        expoPushToken,
+        platform: Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : "web",
+        appVersion: String(Constants.expoConfig?.version ?? "0.1.0"),
+      });
+
+      setPushToken(expoPushToken);
+      setPushStatus("Registered");
+    } catch (error) {
+      setPushStatus(normalizePushRegistrationError(error));
+    }
+  }
+
+  useEffect(() => {
+    if (!user?.id) {
+      setPushStatus("Not registered");
+      setPushToken("");
+      return;
+    }
+
+    void ensurePushDeviceRegistration();
+  }, [apiBaseUrl, user?.id]);
+
   async function handleSyncBackendUser() {
     setLoading(true);
     onMessage("");
@@ -304,8 +396,18 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
     onMessage("");
 
     try {
+      if (pushToken) {
+        try {
+          const token = await getBearerTokenOrThrow();
+          await revokePushDevice(normalizeBaseUrl(apiBaseUrl), token, pushToken);
+        } catch {
+          // Best effort cleanup; continue sign-out even if revoke fails.
+        }
+      }
       await signOut();
       setBackendUserId("");
+      setPushToken("");
+      setPushStatus("Not registered");
       onMessage("Signed out.");
     } catch (error) {
       onMessage(errorToMessage(error));
@@ -739,7 +841,29 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
         unreadOnly: false,
       });
       setAlertEventsPreview(JSON.stringify(result, null, 2));
+      setAlertUnreadCount(result.items.filter((item) => item.readAt === null).length);
       onMessage("Loaded alert events.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleMarkAllAlertEventsRead() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      const token = await getBearerTokenOrThrow();
+      await markAllAlertEventsRead(normalizeBaseUrl(apiBaseUrl), token);
+      const refreshed = await listAlertEvents(normalizeBaseUrl(apiBaseUrl), token, {
+        limit: 20,
+        unreadOnly: false,
+      });
+      setAlertEventsPreview(JSON.stringify(refreshed, null, 2));
+      setAlertUnreadCount(refreshed.items.filter((item) => item.readAt === null).length);
+      onMessage("Marked all alert events as read.");
     } catch (error) {
       onMessage(errorToMessage(error));
     } finally {
@@ -802,6 +926,10 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
           "-"
         }
         backendUserId={backendUserId}
+        pushStatus={pushStatus}
+        pushTokenPreview={
+          pushToken ? `${pushToken.slice(0, 18)}...${pushToken.slice(-6)}` : "-"
+        }
         onSyncBackendUser={handleSyncBackendUser}
         onSignOut={handleSignOut}
       />
@@ -876,10 +1004,12 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
         alertsPreview={alertsPreview}
         eventsPreview={alertEventsPreview}
         checkPreview={alertCheckPreview}
+        unreadCount={alertUnreadCount}
         onCreateAlert={handleCreateAlert}
         onLoadAlerts={handleLoadAlerts}
         onCheckAlerts={handleCheckAlerts}
         onLoadEvents={handleLoadAlertEvents}
+        onMarkAllRead={handleMarkAllAlertEventsRead}
       />
 
       <PromoIngestionSection

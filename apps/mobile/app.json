@@ -11,17 +11,22 @@
     },
     "ios": {
       "supportsTablet": true,
+      "entitlements": {
+        "aps-environment": "development"
+      },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "ClariFi uses the microphone to record voice expenses.",
         "NSSpeechRecognitionUsageDescription": "ClariFi uses speech recognition to turn your spoken expense into text.",
         "NSCameraUsageDescription": "ClariFi uses the camera to capture receipt photos.",
-        "NSPhotoLibraryUsageDescription": "ClariFi uses photo library access to import receipt images."
+        "NSPhotoLibraryUsageDescription": "ClariFi uses photo library access to import receipt images.",
+        "NSUserNotificationsUsageDescription": "ClariFi sends price alert notifications when items hit your target price."
       },
       "bundleIdentifier": "com.clarifi.app"
     },
     "android": {
       "package": "com.clarifi.app",
       "permissions": [
+        "POST_NOTIFICATIONS",
         "CAMERA",
         "READ_MEDIA_IMAGES",
         "READ_EXTERNAL_STORAGE"
@@ -31,6 +36,7 @@
       "bundler": "metro"
     },
     "plugins": [
+      "expo-notifications",
       [
         "expo-speech-recognition",
         {

@@ -5,6 +5,8 @@ interface AuthSectionProps {
   onApiBaseUrlChange: (value: string) => void;
   signedInEmail: string;
   backendUserId: string;
+  pushStatus: string;
+  pushTokenPreview: string;
   onSyncBackendUser: () => void;
   onSignOut: () => void;
 }
@@ -29,6 +31,8 @@ export function AuthSection(props: AuthSectionProps) {
 
       <Text style={styles.meta}>Clerk user: {props.signedInEmail || '-'}</Text>
       <Text style={styles.meta}>API user id: {props.backendUserId || '-'}</Text>
+      <Text style={styles.meta}>Push status: {props.pushStatus || '-'}</Text>
+      <Text style={styles.meta}>Push token: {props.pushTokenPreview || '-'}</Text>
     </View>
   );
 }

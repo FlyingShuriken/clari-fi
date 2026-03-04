@@ -17,6 +17,10 @@ import {
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { SupabaseStorageService } from '../../infrastructure/storage/storage.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import {
+  NotificationsService,
+  type AlertPushDispatchResult,
+} from '../notifications/notifications.service';
 import { BackfillPricesDto } from './dto/backfill-prices.dto';
 import { CheckAlertsDto } from './dto/check-alerts.dto';
 import { CreatePriceAlertDto } from './dto/create-price-alert.dto';
@@ -51,6 +55,13 @@ function decimalToNumber(value: Prisma.Decimal | number | null | undefined): num
   return 0;
 }
 
+function asRecord(value: Prisma.JsonValue | null | undefined): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
 interface PriceCandidate {
   source: ObservationSource;
   canonicalItemId: string;
@@ -73,6 +84,7 @@ export class PricesService {
     private readonly metrics: MetricsService,
     private readonly itemNormalizer: ItemNormalizerService,
     private readonly storeResolver: StoreResolverService,
+    private readonly notificationsService: NotificationsService,
     private readonly storage: SupabaseStorageService,
     @Inject(OCR_PROVIDER) private readonly ocrProvider: OcrProvider,
     @Inject(EXPENSE_PARSER_PROVIDER) private readonly parserProvider: ExpenseParserProvider,
@@ -687,6 +699,9 @@ export class PricesService {
     });
 
     const triggered: Array<Record<string, unknown>> = [];
+    let pushAttempted = 0;
+    let pushSent = 0;
+    let pushFailed = 0;
 
     for (const alert of alerts) {
       const targetUnitPrice = decimalToNumber(alert.targetUnitPrice);
@@ -705,6 +720,12 @@ export class PricesService {
         continue;
       }
 
+      const basePayload = {
+        observedAt: best.observedAt.toISOString(),
+        trustScore: best.trustScore,
+        storeName: best.storeName,
+      } satisfies Prisma.InputJsonValue;
+
       const event = await this.createAlertEventWithCooldown({
         alertId: alert.id,
         userId: user.id,
@@ -715,16 +736,28 @@ export class PricesService {
         triggerUnitPrice: best.unitPrice,
         targetUnitPrice,
         distanceKm: best.distanceKm,
-        payload: {
-          observedAt: best.observedAt.toISOString(),
-          trustScore: best.trustScore,
-          storeName: best.storeName,
-        },
+        payload: basePayload,
       });
 
       if (!event) {
         continue;
       }
+
+      const delivery = await this.notificationsService.sendPriceAlertEvent({
+        userId: user.id,
+        eventId: event.id,
+        itemName: alert.canonicalItem.canonicalName,
+        triggerUnitPrice: roundTo(best.unitPrice, 2),
+        targetUnitPrice: roundTo(targetUnitPrice, 2),
+        source: best.source,
+        storeName: best.storeName,
+        areaText: best.areaText,
+      });
+      pushAttempted += delivery.attempted;
+      pushSent += delivery.sent;
+      pushFailed += delivery.failed;
+
+      await this.updateAlertEventDeliveryMetadata(event.id, basePayload, delivery);
 
       triggered.push({
         eventId: event.id,
@@ -738,15 +771,143 @@ export class PricesService {
         storeName: best.storeName,
         areaText: best.areaText,
         triggeredAt: event.triggeredAt.toISOString(),
+        delivery,
       });
     }
 
     return {
       checked: alerts.length,
       triggeredCount: triggered.length,
+      pushAttempted,
+      pushSent,
+      pushFailed,
       triggered,
       generatedAt: new Date().toISOString(),
       userId: user.id,
+    };
+  }
+
+  async runScheduledAlertChecks() {
+    if (!this.isAlertsEnabled()) {
+      return {
+        checked: 0,
+        triggeredCount: 0,
+        pushAttempted: 0,
+        pushSent: 0,
+        pushFailed: 0,
+        generatedAt: new Date().toISOString(),
+        alertsEnabled: false,
+      };
+    }
+
+    const includePromo = this.isPromoEnabled();
+    const batchSize = this.getAlertCheckBatchSize();
+    let checked = 0;
+    let triggeredCount = 0;
+    let pushAttempted = 0;
+    let pushSent = 0;
+    let pushFailed = 0;
+    let cursorId: string | undefined;
+
+    while (true) {
+      const alerts = await this.prisma.priceAlert.findMany({
+        where: {
+          active: true,
+        },
+        include: {
+          canonicalItem: true,
+        },
+        orderBy: {
+          id: 'asc',
+        },
+        take: batchSize,
+        ...(cursorId
+          ? {
+              cursor: { id: cursorId },
+              skip: 1,
+            }
+          : {}),
+      });
+
+      if (alerts.length === 0) {
+        break;
+      }
+
+      for (const alert of alerts) {
+        checked += 1;
+
+        const targetUnitPrice = decimalToNumber(alert.targetUnitPrice);
+        const radiusKm = decimalToNumber(alert.radiusKm);
+        const best = await this.findBestPriceCandidate({
+          canonicalItemId: alert.canonicalItemId,
+          storeId: alert.storeId ?? undefined,
+          areaText: alert.areaText ?? undefined,
+          radiusKm,
+          includePromo,
+        });
+
+        if (!best || best.unitPrice > targetUnitPrice) {
+          continue;
+        }
+
+        const basePayload = {
+          observedAt: best.observedAt.toISOString(),
+          trustScore: best.trustScore,
+          storeName: best.storeName,
+          scheduler: true,
+        } satisfies Prisma.InputJsonValue;
+
+        const event = await this.createAlertEventWithCooldown({
+          alertId: alert.id,
+          userId: alert.userId,
+          canonicalItemId: alert.canonicalItemId,
+          storeId: best.storeId,
+          areaText: best.areaText,
+          source: best.source,
+          triggerUnitPrice: best.unitPrice,
+          targetUnitPrice,
+          distanceKm: best.distanceKm,
+          payload: basePayload,
+        });
+
+        if (!event) {
+          continue;
+        }
+
+        const delivery = await this.notificationsService.sendPriceAlertEvent({
+          userId: alert.userId,
+          eventId: event.id,
+          itemName: alert.canonicalItem.canonicalName,
+          triggerUnitPrice: roundTo(best.unitPrice, 2),
+          targetUnitPrice: roundTo(targetUnitPrice, 2),
+          source: best.source,
+          storeName: best.storeName,
+          areaText: best.areaText,
+        });
+
+        pushAttempted += delivery.attempted;
+        pushSent += delivery.sent;
+        pushFailed += delivery.failed;
+        triggeredCount += 1;
+
+        await this.updateAlertEventDeliveryMetadata(event.id, basePayload, delivery);
+      }
+
+      cursorId = alerts[alerts.length - 1]?.id;
+      if (!cursorId || alerts.length < batchSize) {
+        break;
+      }
+    }
+
+    return {
+      checked,
+      triggeredCount,
+      pushAttempted,
+      pushSent,
+      pushFailed,
+      generatedAt: new Date().toISOString(),
+      alertsEnabled: true,
+      includePromo,
     };
   }
 
@@ -771,20 +932,31 @@ export class PricesService {
 
     return {
       total: events.length,
-      items: events.map((event) => ({
-        id: event.id,
-        alertId: event.alertId,
-        item: event.canonicalItem.canonicalName,
-        source: event.source,
-        triggerUnitPrice: decimalToNumber(event.triggerUnitPrice),
-        targetUnitPrice: decimalToNumber(event.targetUnitPrice),
-        distanceKm: event.distanceKm ? decimalToNumber(event.distanceKm) : undefined,
-        storeId: event.storeId ?? undefined,
-        storeName: event.store?.displayName ?? undefined,
-        areaText: event.areaText ?? undefined,
-        triggeredAt: event.triggeredAt.toISOString(),
-        readAt: event.readAt?.toISOString() ?? null,
-      })),
+      items: events.map((event) => {
+        const payload = asRecord(event.payload);
+        const delivery = asRecord(payload.delivery as Prisma.JsonValue | undefined);
+        const attempted = Number(delivery.attempted ?? 0);
+        return {
+          id: event.id,
+          alertId: event.alertId,
+          item: event.canonicalItem.canonicalName,
+          source: event.source,
+          triggerUnitPrice: decimalToNumber(event.triggerUnitPrice),
+          targetUnitPrice: decimalToNumber(event.targetUnitPrice),
+          distanceKm: event.distanceKm ? decimalToNumber(event.distanceKm) : undefined,
+          storeId: event.storeId ?? undefined,
+          storeName: event.store?.displayName ?? undefined,
+          areaText: event.areaText ?? undefined,
+          triggeredAt: event.triggeredAt.toISOString(),
+          readAt: event.readAt?.toISOString() ?? null,
+          deliveryStatus:
+            (typeof delivery.status === 'string' ? delivery.status : undefined) ?? undefined,
+          notificationSentAt:
+            typeof delivery.sentAt === 'string' ? delivery.sentAt : undefined,
+          pushAttempted:
+            Number.isFinite(attempted) && attempted > 0 ? Math.floor(attempted) : undefined,
+        };
+      }),
       generatedAt: new Date().toISOString(),
       userId: user.id,
     };
@@ -816,6 +988,28 @@ export class PricesService {
     return {
       id: updated.id,
       readAt: updated.readAt?.toISOString() ?? null,
+    };
+  }
+
+  async markAllAlertEventsRead(user: AuthenticatedUser) {
+    if (!this.isAlertsEnabled()) {
+      throw new ForbiddenException('Price alerts are disabled');
+    }
+    const now = new Date();
+    const updated = await this.prisma.alertEvent.updateMany({
+      where: {
+        userId: user.id,
+        readAt: null,
+      },
+      data: {
+        readAt: now,
+      },
+    });
+
+    return {
+      updated: updated.count,
+      readAt: now.toISOString(),
+      userId: user.id,
     };
   }
 
@@ -1279,6 +1473,53 @@ export class PricesService {
             ? new Prisma.Decimal(input.distanceKm)
             : undefined,
         payload: input.payload,
+      },
+    });
+  }
+
+  private getAlertCheckBatchSize(): number {
+    const raw = this.config.get<string>('ALERT_CHECK_BATCH_SIZE')?.trim();
+    const parsed = Number(raw ?? '200');
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 200;
+    }
+    return Math.floor(parsed);
+  }
+
+  private async updateAlertEventDeliveryMetadata(
+    eventId: string,
+    basePayload: Prisma.InputJsonValue,
+    delivery: AlertPushDispatchResult,
+  ) {
+    const status = !delivery.enabled
+      ? 'DISABLED'
+      : delivery.attempted <= 0
+        ? 'SKIPPED'
+        : delivery.failed === 0
+          ? 'SENT'
+          : delivery.sent > 0
+            ? 'PARTIAL'
+            : 'FAILED';
+
+    const payload = {
+      ...asRecord(basePayload as Prisma.JsonValue),
+      delivery: {
+        status,
+        enabled: delivery.enabled,
+        provider: delivery.provider,
+        attempted: delivery.attempted,
+        sent: delivery.sent,
+        failed: delivery.failed,
+        revoked: delivery.revoked,
+        failures: delivery.failures,
+        sentAt: delivery.sentAt,
+      },
+    } satisfies Prisma.InputJsonValue;
+
+    await this.prisma.alertEvent.update({
+      where: { id: eventId },
+      data: {
+        payload,
       },
     });
   }

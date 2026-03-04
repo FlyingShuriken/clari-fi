@@ -16,10 +16,12 @@ interface PriceAlertsSectionProps {
   alertsPreview: string;
   eventsPreview: string;
   checkPreview: string;
+  unreadCount: number;
   onCreateAlert: () => void;
   onLoadAlerts: () => void;
   onCheckAlerts: () => void;
   onLoadEvents: () => void;
+  onMarkAllRead: () => void;
 }
 
 export function PriceAlertsSection(props: PriceAlertsSectionProps) {
@@ -98,6 +100,11 @@ export function PriceAlertsSection(props: PriceAlertsSectionProps) {
       <View style={styles.row}>
         <Button title="Check Nearby Alerts" onPress={props.onCheckAlerts} />
         <Button title="Load Events" onPress={props.onLoadEvents} />
+      </View>
+
+      <View style={styles.row}>
+        <Button title={`Unread: ${props.unreadCount}`} onPress={props.onLoadEvents} />
+        <Button title="Mark All Read" onPress={props.onMarkAllRead} />
       </View>
 
       {props.alertsPreview ? (
