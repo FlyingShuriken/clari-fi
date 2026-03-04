@@ -12,8 +12,4 @@ export class ParseReceiptDto {
   @IsOptional()
   @IsBase64()
   imageBase64?: string;
-
-  @IsOptional()
-  @IsString()
-  mockText?: string;
 }

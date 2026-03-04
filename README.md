@@ -16,10 +16,10 @@ This repository contains the cleaned Phase 0/1 baseline for ClariFi:
 - `GET /v1/expenses`
 - `GET /v1/reports/monthly?year=YYYY&month=MM`
 
-## Acceptance Check
+## Test
 
 ```bash
-pnpm --filter @clarifi/api acceptance:phase1
+pnpm test
 ```
 
 ## Package Manager

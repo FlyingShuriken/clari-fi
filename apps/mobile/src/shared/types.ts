@@ -131,18 +131,6 @@ export interface PriceCompareResponse {
   includePromo?: boolean;
 }
 
-export interface PriceBackfillResponse {
-  scope: 'user' | 'all';
-  dryRun: boolean;
-  expensesProcessed: number;
-  created: number;
-  updated: number;
-  skipped: number;
-  errors: number;
-  requestedByUserId: string;
-  generatedAt: string;
-}
-
 export type ObservationSource = 'EXPENSE' | 'PROMO';
 
 export interface PriceAlert {

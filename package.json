@@ -7,10 +7,6 @@
     "build": "pnpm -r --if-present build",
     "dev:api": "pnpm --filter @clarifi/api start:dev",
     "dev:mobile": "pnpm --filter @clarifi/mobile start",
-    "test": "pnpm --filter @clarifi/api test",
-    "acceptance:phase1": "pnpm --filter @clarifi/api acceptance:phase1",
-    "acceptance:phase2": "pnpm --filter @clarifi/api acceptance:phase2",
-    "acceptance:phase2b": "pnpm --filter @clarifi/api acceptance:phase2b",
-    "acceptance:phase2c": "pnpm --filter @clarifi/api acceptance:phase2c"
+    "test": "pnpm --filter @clarifi/api test"
   }
 }

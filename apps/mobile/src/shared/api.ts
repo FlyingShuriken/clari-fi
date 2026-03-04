@@ -2,12 +2,11 @@ import type {
   AlertEvent,
   AuthVerifyResponse,
   PriceAlert,
-  PriceBackfillResponse,
   PriceCompareResponse,
   PriceHistoryResponse,
-  PushDevice,
   PromoIngestionItem,
   PromoReviewStatus,
+  PushDevice,
   ReceiptParseResult,
   UploadArtifactResponse,
   VoiceParseResult,
@@ -260,23 +259,6 @@ export async function loadPriceHistory(
   });
 }
 
-export async function runPriceBackfill(
-  baseUrl: string,
-  bearerToken: string,
-  input?: {
-    from?: string;
-    to?: string;
-    dryRun?: boolean;
-    scope?: 'user' | 'all';
-  },
-): Promise<PriceBackfillResponse> {
-  return apiRequest<PriceBackfillResponse>(baseUrl, '/prices/backfill', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${bearerToken}` },
-    body: JSON.stringify(input ?? {}),
-  });
-}
-
 export async function createPriceAlert(
   baseUrl: string,
   bearerToken: string,
@@ -337,28 +319,6 @@ export async function disablePriceAlert(
   });
 }
 
-export async function checkPriceAlerts(
-  baseUrl: string,
-  bearerToken: string,
-  input: {
-    lat?: number;
-    lng?: number;
-    areaText?: string;
-    includePromo?: boolean;
-    limit?: number;
-  },
-): Promise<{ checked: number; triggeredCount: number; triggered: Array<Record<string, unknown>> }> {
-  return apiRequest<{
-    checked: number;
-    triggeredCount: number;
-    triggered: Array<Record<string, unknown>>;
-  }>(baseUrl, '/prices/alerts/check', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${bearerToken}` },
-    body: JSON.stringify(input),
-  });
-}
-
 export async function listAlertEvents(
   baseUrl: string,
   bearerToken: string,
@@ -375,10 +335,14 @@ export async function listAlertEvents(
     params.set('unreadOnly', String(query.unreadOnly));
   }
   const suffix = params.toString() ? `?${params.toString()}` : '';
-  return apiRequest<{ total: number; items: AlertEvent[] }>(baseUrl, `/prices/alerts/events${suffix}`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${bearerToken}` },
-  });
+  return apiRequest<{ total: number; items: AlertEvent[] }>(
+    baseUrl,
+    `/prices/alerts/events${suffix}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    },
+  );
 }
 
 export async function markAlertEventRead(
@@ -464,10 +428,14 @@ export async function listPromos(
     params.set('limit', String(query.limit));
   }
   const suffix = params.toString() ? `?${params.toString()}` : '';
-  return apiRequest<{ total: number; items: PromoIngestionItem[] }>(baseUrl, `/prices/promos${suffix}`, {
-    method: 'GET',
-    headers: { Authorization: `Bearer ${bearerToken}` },
-  });
+  return apiRequest<{ total: number; items: PromoIngestionItem[] }>(
+    baseUrl,
+    `/prices/promos${suffix}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    },
+  );
 }
 
 export async function reviewPromoObservations(

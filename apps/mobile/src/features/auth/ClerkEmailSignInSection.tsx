@@ -1,6 +1,8 @@
 import { useSignIn } from '@clerk/clerk-expo';
 import { useState } from 'react';
-import { Button, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Button, Card, Text, TextInput } from 'react-native-paper';
+import { TEST_IDS } from '../../core/testing/test-ids';
 
 interface ClerkEmailSignInSectionProps {
   message: string;
@@ -154,12 +156,16 @@ export function ClerkEmailSignInSection({
 
     if (!factor) {
       const available = listStrategies(attempt, phase).join(', ') || 'none';
-      onMessage(`Sign-in needs ${phase.replace('_', ' ')}, but no usable factor was returned. Available: ${available}.`);
+      onMessage(
+        `Sign-in needs ${phase.replace('_', ' ')}, but no usable factor was returned. Available: ${available}.`,
+      );
       return;
     }
 
     if (factor.strategy === 'password') {
-      onMessage('Password first-factor is required. Verify this user has password sign-in enabled in Clerk.');
+      onMessage(
+        'Password first-factor is required. Verify this user has password sign-in enabled in Clerk.',
+      );
       return;
     }
 
@@ -284,122 +290,116 @@ export function ClerkEmailSignInSection({
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Clerk Sign-In</Text>
-      <Text style={styles.subtitle}>Use your Clerk email and password.</Text>
+    <Card mode="contained" style={styles.card}>
+      <Card.Title title="Sign in to ClariFi" subtitle="Use your Clerk credentials" />
+      <Card.Content style={styles.content}>
+        {!pendingFactor ? (
+          <>
+            <TextInput
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              mode="outlined"
+            />
+            <TextInput
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              autoCapitalize="none"
+              secureTextEntry
+              mode="outlined"
+            />
 
-      {!pendingFactor ? (
-        <>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="Email"
-          />
+            <Button
+              mode="contained"
+              onPress={handleSignIn}
+              loading={loading}
+              disabled={loading || !isLoaded || !email.trim() || !password}
+              testID={TEST_IDS.auth.signInButton}
+            >
+              Sign in
+            </Button>
+          </>
+        ) : (
+          <>
+            <Text variant="bodyMedium" style={styles.helpText}>
+              Verification required: {pendingFactor.phase.replace('_', ' ')} via {pendingFactor.label}
+            </Text>
+            <TextInput
+              label="Verification code"
+              value={verificationCode}
+              onChangeText={setVerificationCode}
+              autoCapitalize="none"
+              keyboardType="number-pad"
+              mode="outlined"
+            />
 
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            autoCapitalize="none"
-            secureTextEntry
-            placeholder="Password"
-          />
+            <View style={styles.row}>
+              <Button
+                mode="contained"
+                onPress={handleVerifyFactor}
+                loading={loading}
+                disabled={loading || !isLoaded}
+                testID={TEST_IDS.auth.verifyCodeButton}
+              >
+                Verify
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={handleResendCode}
+                disabled={
+                  loading ||
+                  !isLoaded ||
+                  (pendingFactor.strategy !== 'email_code' &&
+                    pendingFactor.strategy !== 'phone_code')
+                }
+                testID={TEST_IDS.auth.resendCodeButton}
+              >
+                Resend
+              </Button>
+            </View>
 
-          <Button
-            title={loading ? 'Signing in...' : 'Sign In'}
-            onPress={handleSignIn}
-            disabled={loading || !isLoaded}
-          />
-        </>
-      ) : (
-        <>
-          <Text style={styles.helpText}>
-            Verification required: {pendingFactor.phase.replace('_', ' ')} via{' '}
-            {pendingFactor.label}
+            <Button
+              mode="text"
+              onPress={() => {
+                setPendingFactor(null);
+                setVerificationCode('');
+                onMessage('');
+              }}
+              disabled={loading}
+            >
+              Back to email/password
+            </Button>
+          </>
+        )}
+
+        {message ? (
+          <Text variant="bodySmall" style={styles.message}>
+            {message}
           </Text>
-
-          <TextInput
-            style={styles.input}
-            value={verificationCode}
-            onChangeText={setVerificationCode}
-            autoCapitalize="none"
-            keyboardType="number-pad"
-            placeholder="Verification code"
-          />
-
-          <View style={styles.row}>
-            <Button
-              title={loading ? 'Verifying...' : 'Verify'}
-              onPress={handleVerifyFactor}
-              disabled={loading || !isLoaded}
-            />
-            <Button
-              title={loading ? 'Resending...' : 'Resend'}
-              onPress={handleResendCode}
-              disabled={
-                loading ||
-                !isLoaded ||
-                (pendingFactor.strategy !== 'email_code' &&
-                  pendingFactor.strategy !== 'phone_code')
-              }
-            />
-          </View>
-
-          <Button
-            title="Back to email/password"
-            onPress={() => {
-              setPendingFactor(null);
-              setVerificationCode('');
-              onMessage('');
-            }}
-            disabled={loading}
-          />
-        </>
-      )}
-
-      {message ? <Text style={styles.message}>{message}</Text> : null}
-    </View>
+        ) : null}
+      </Card.Content>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    gap: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    padding: 14,
-    backgroundColor: 'white',
+  card: {
+    borderRadius: 16,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  subtitle: {
-    fontSize: 13,
-    color: '#475569',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 8,
-    padding: 10,
-    backgroundColor: 'white',
-  },
-  helpText: {
-    fontSize: 12,
-    color: '#334155',
+  content: {
+    gap: 12,
   },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
+    gap: 12,
+  },
+  helpText: {
+    color: '#334155',
   },
   message: {
-    fontSize: 12,
     color: '#0f172a',
   },
 });

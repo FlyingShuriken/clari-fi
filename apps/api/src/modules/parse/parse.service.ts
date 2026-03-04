@@ -96,14 +96,11 @@ export class ParseService {
       imageBase64 = (await this.storage.downloadAsBase64(dto.fileRef)) ?? undefined;
     }
 
-    if (!imageBase64 && !dto.mockText) {
-      throw new BadRequestException('Provide imageBase64, fileRef, or mockText for parsing');
+    if (!imageBase64) {
+      throw new BadRequestException('Provide imageBase64 or fileRef for parsing');
     }
 
-    const ocr = await this.ocrProvider.extract({
-      imageBase64,
-      mockText: dto.mockText,
-    });
+    const ocr = await this.ocrProvider.extract({ imageBase64 });
 
     const parsed = await this.parserProvider.parseReceipt(ocr.rawText);
     const { confidenceMap, parserMeta, ...receiptCandidate } = parsed;

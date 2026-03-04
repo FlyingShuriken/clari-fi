@@ -12,7 +12,6 @@ export interface SttTranscribeResult {
 export interface OcrExtractInput {
   imageBase64?: string;
   imageUrl?: string;
-  mockText?: string;
 }
 
 export interface OcrExtractResult {

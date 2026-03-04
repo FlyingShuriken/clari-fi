@@ -25,17 +25,6 @@ export class OpenRouterOcrProvider implements OcrProvider {
   constructor(private readonly config: ConfigService) {}
 
   async extract(input: OcrExtractInput): Promise<OcrExtractResult> {
-    if (input.mockText?.trim()) {
-      return {
-        rawText: input.mockText.trim(),
-        confidence: 0.9,
-        rawPayload: {
-          provider: 'openrouter',
-          mode: 'mockText',
-        },
-      };
-    }
-
     if (!input.imageBase64 && !input.imageUrl) {
       return {
         rawText: '',
