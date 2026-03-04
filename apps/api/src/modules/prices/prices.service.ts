@@ -1,12 +1,32 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, type ExpenseProvenance } from '@prisma/client';
+import {
+  ObservationSource,
+  Prisma,
+  ProcessingStatus,
+  PromoReviewStatus,
+  type ExpenseProvenance,
+} from '@prisma/client';
 import { MetricsService } from '../../infrastructure/metrics/metrics.service';
+import {
+  EXPENSE_PARSER_PROVIDER,
+  OCR_PROVIDER,
+  ExpenseParserProvider,
+  OcrProvider,
+} from '../../infrastructure/providers/provider.interfaces';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { SupabaseStorageService } from '../../infrastructure/storage/storage.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { BackfillPricesDto } from './dto/backfill-prices.dto';
+import { CheckAlertsDto } from './dto/check-alerts.dto';
+import { CreatePriceAlertDto } from './dto/create-price-alert.dto';
+import { IngestPromoDto } from './dto/ingest-promo.dto';
+import { ListAlertEventsDto } from './dto/list-alert-events.dto';
+import { ListPromosDto } from './dto/list-promos.dto';
 import { PriceCompareQueryDto } from './dto/price-compare-query.dto';
 import { PriceHistoryQueryDto } from './dto/price-history-query.dto';
+import { ReviewPromoObservationsDto } from './dto/review-promo-observations.dto';
+import { UpdatePriceAlertDto } from './dto/update-price-alert.dto';
 import { ItemNormalizerService } from './item-normalizer.service';
 import {
   clamp01,
@@ -31,6 +51,20 @@ function decimalToNumber(value: Prisma.Decimal | number | null | undefined): num
   return 0;
 }
 
+interface PriceCandidate {
+  source: ObservationSource;
+  canonicalItemId: string;
+  storeId?: string;
+  storeName?: string;
+  storeLat?: number;
+  storeLng?: number;
+  areaText?: string;
+  unitPrice: number;
+  trustScore: number;
+  observedAt: Date;
+  distanceKm?: number;
+}
+
 @Injectable()
 export class PricesService {
   constructor(
@@ -39,12 +73,26 @@ export class PricesService {
     private readonly metrics: MetricsService,
     private readonly itemNormalizer: ItemNormalizerService,
     private readonly storeResolver: StoreResolverService,
+    private readonly storage: SupabaseStorageService,
+    @Inject(OCR_PROVIDER) private readonly ocrProvider: OcrProvider,
+    @Inject(EXPENSE_PARSER_PROVIDER) private readonly parserProvider: ExpenseParserProvider,
   ) {}
 
   isEnabled(): boolean {
     const value =
       this.config.get<string>('PRICE_INTELLIGENCE_ENABLED')?.trim().toLowerCase() ??
       'true';
+    return value !== 'false';
+  }
+
+  private isAlertsEnabled(): boolean {
+    const value = this.config.get<string>('PRICE_ALERTS_ENABLED')?.trim().toLowerCase() ?? 'true';
+    return value !== 'false';
+  }
+
+  private isPromoEnabled(): boolean {
+    const value =
+      this.config.get<string>('PROMO_INGESTION_ENABLED')?.trim().toLowerCase() ?? 'true';
     return value !== 'false';
   }
 
@@ -226,6 +274,7 @@ export class PricesService {
   }
 
   async getHistory(user: AuthenticatedUser, query: PriceHistoryQueryDto) {
+    const includePromo = query.includePromo === true && this.isPromoEnabled();
     const canonicalItem = await this.itemNormalizer.findCanonicalItemByQuery(query.item);
     if (!canonicalItem) {
       return {
@@ -235,40 +284,17 @@ export class PricesService {
         totalObservations: 0,
         generatedAt: new Date().toISOString(),
         userId: user.id,
+        includePromo,
       };
     }
 
-    const where: Prisma.PriceObservationWhereInput = {
+    const observations = await this.loadPriceCandidates({
       canonicalItemId: canonicalItem.id,
-    };
-
-    if (query.storeId) {
-      where.storeId = query.storeId;
-    }
-
-    if (query.area) {
-      where.areaText = {
-        contains: query.area.trim(),
-        mode: 'insensitive',
-      };
-    }
-
-    if (query.from || query.to) {
-      where.observedAt = {
-        gte: query.from ? new Date(query.from) : undefined,
-        lte: query.to ? new Date(query.to) : undefined,
-      };
-    }
-
-    const observations = await this.prisma.priceObservation.findMany({
-      where,
-      orderBy: {
-        observedAt: 'asc',
-      },
-      select: {
-        observedAt: true,
-        unitPrice: true,
-      },
+      areaText: query.area,
+      storeId: query.storeId,
+      from: query.from,
+      to: query.to,
+      includePromo,
     });
 
     const interval = (query.interval ?? 'day') as HistoryInterval;
@@ -284,22 +310,21 @@ export class PricesService {
 
     for (const row of observations) {
       const key = toBucketKey(row.observedAt, interval);
-      const unitPrice = decimalToNumber(row.unitPrice);
       const current = buckets.get(key);
 
       if (!current) {
         buckets.set(key, {
-          min: unitPrice,
-          max: unitPrice,
-          sum: unitPrice,
+          min: row.unitPrice,
+          max: row.unitPrice,
+          sum: row.unitPrice,
           count: 1,
         });
         continue;
       }
 
-      current.min = Math.min(current.min, unitPrice);
-      current.max = Math.max(current.max, unitPrice);
-      current.sum += unitPrice;
+      current.min = Math.min(current.min, row.unitPrice);
+      current.max = Math.max(current.max, row.unitPrice);
+      current.sum += row.unitPrice;
       current.count += 1;
     }
 
@@ -320,10 +345,12 @@ export class PricesService {
       })),
       generatedAt: new Date().toISOString(),
       userId: user.id,
+      includePromo,
     };
   }
 
   async compare(user: AuthenticatedUser, query: PriceCompareQueryDto) {
+    const includePromo = query.includePromo === true && this.isPromoEnabled();
     const canonicalItem = await this.itemNormalizer.findCanonicalItemByQuery(query.item);
     if (!canonicalItem) {
       return {
@@ -331,30 +358,9 @@ export class PricesService {
         rows: [],
         generatedAt: new Date().toISOString(),
         userId: user.id,
+        includePromo,
       };
     }
-
-    const where: Prisma.PriceObservationWhereInput = {
-      canonicalItemId: canonicalItem.id,
-    };
-
-    if (query.area) {
-      where.areaText = {
-        contains: query.area.trim(),
-        mode: 'insensitive',
-      };
-    }
-
-    const observations = await this.prisma.priceObservation.findMany({
-      where,
-      orderBy: {
-        observedAt: 'desc',
-      },
-      include: {
-        store: true,
-      },
-      take: 2000,
-    });
 
     const includeDistance =
       typeof query.lat === 'number' &&
@@ -362,7 +368,15 @@ export class PricesService {
       Number.isFinite(query.lat) &&
       Number.isFinite(query.lng);
 
-    const radiusKm = query.radiusKm ?? 15;
+    const observations = await this.loadPriceCandidates({
+      canonicalItemId: canonicalItem.id,
+      areaText: query.area,
+      lat: query.lat,
+      lng: query.lng,
+      radiusKm: query.radiusKm ?? 15,
+      includePromo,
+    });
+
     const grouped = new Map<
       string,
       {
@@ -379,55 +393,33 @@ export class PricesService {
     >();
 
     for (const observation of observations) {
-      let distanceKm: number | undefined;
-
-      if (includeDistance && observation.store?.lat && observation.store?.lng) {
-        distanceKm = haversineDistanceKm(
-          {
-            lat: query.lat as number,
-            lng: query.lng as number,
-          },
-          {
-            lat: decimalToNumber(observation.store.lat),
-            lng: decimalToNumber(observation.store.lng),
-          },
-        );
-
-        if (distanceKm > radiusKm) {
-          continue;
-        }
-      }
-
       const key = observation.storeId
         ? `store:${observation.storeId}`
         : `area:${(observation.areaText ?? 'unknown').toLowerCase()}`;
 
-      const unitPrice = decimalToNumber(observation.unitPrice);
-      const trustScore = decimalToNumber(observation.trustScore);
       const current = grouped.get(key);
-
       if (!current) {
         grouped.set(key, {
-          storeId: observation.storeId ?? undefined,
-          storeName: observation.store?.displayName ?? undefined,
-          areaText: observation.areaText ?? undefined,
-          latestUnitPrice: unitPrice,
+          storeId: observation.storeId,
+          storeName: observation.storeName,
+          areaText: observation.areaText,
+          latestUnitPrice: observation.unitPrice,
           latestAt: observation.observedAt,
-          unitPriceSum: unitPrice,
-          trustScoreSum: trustScore,
+          unitPriceSum: observation.unitPrice,
+          trustScoreSum: observation.trustScore,
           sampleSize: 1,
-          distanceKm: distanceKm !== undefined ? roundTo(distanceKm, 2) : undefined,
+          distanceKm: observation.distanceKm,
         });
         continue;
       }
 
       current.sampleSize += 1;
-      current.unitPriceSum += unitPrice;
-      current.trustScoreSum += trustScore;
+      current.unitPriceSum += observation.unitPrice;
+      current.trustScoreSum += observation.trustScore;
       if (observation.observedAt > current.latestAt) {
         current.latestAt = observation.observedAt;
-        current.latestUnitPrice = unitPrice;
-        current.distanceKm = distanceKm !== undefined ? roundTo(distanceKm, 2) : undefined;
+        current.latestUnitPrice = observation.unitPrice;
+        current.distanceKm = observation.distanceKm;
       }
     }
 
@@ -458,10 +450,11 @@ export class PricesService {
         canonicalName: canonicalItem.canonicalName,
         canonicalUnit: canonicalItem.canonicalUnit,
       },
-      radiusKm: includeDistance ? radiusKm : undefined,
+      radiusKm: includeDistance ? query.radiusKm ?? 15 : undefined,
       rows,
       generatedAt: new Date().toISOString(),
       userId: user.id,
+      includePromo,
     };
   }
 
@@ -522,6 +515,834 @@ export class PricesService {
       errors,
       requestedByUserId: user.id,
       generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async createAlert(user: AuthenticatedUser, dto: CreatePriceAlertDto) {
+    if (!this.isAlertsEnabled()) {
+      throw new ForbiddenException('Price alerts are disabled');
+    }
+    const canonicalItem = await this.resolveCanonicalItemForUser(user.id, dto.item);
+
+    const alert = await this.prisma.priceAlert.create({
+      data: {
+        userId: user.id,
+        canonicalItemId: canonicalItem.id,
+        storeId: dto.storeId?.trim() || undefined,
+        areaText: dto.areaText?.trim() || undefined,
+        targetUnitPrice: new Prisma.Decimal(dto.targetUnitPrice),
+        radiusKm:
+          typeof dto.radiusKm === 'number'
+            ? new Prisma.Decimal(dto.radiusKm)
+            : new Prisma.Decimal(10),
+        active: dto.active ?? true,
+      },
+      include: {
+        canonicalItem: true,
+        store: true,
+      },
+    });
+
+    return this.serializeAlert(alert);
+  }
+
+  async listAlerts(user: AuthenticatedUser) {
+    if (!this.isAlertsEnabled()) {
+      throw new ForbiddenException('Price alerts are disabled');
+    }
+    const alerts = await this.prisma.priceAlert.findMany({
+      where: {
+        userId: user.id,
+      },
+      include: {
+        canonicalItem: true,
+        store: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return {
+      total: alerts.length,
+      items: alerts.map((alert) => this.serializeAlert(alert)),
+      generatedAt: new Date().toISOString(),
+      userId: user.id,
+    };
+  }
+
+  async updateAlert(user: AuthenticatedUser, alertId: string, dto: UpdatePriceAlertDto) {
+    if (!this.isAlertsEnabled()) {
+      throw new ForbiddenException('Price alerts are disabled');
+    }
+    const existing = await this.prisma.priceAlert.findFirst({
+      where: {
+        id: alertId,
+        userId: user.id,
+      },
+      include: {
+        canonicalItem: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Alert not found');
+    }
+
+    let canonicalItemId: string | undefined;
+    if (dto.item?.trim()) {
+      const canonicalItem = await this.resolveCanonicalItemForUser(user.id, dto.item);
+      canonicalItemId = canonicalItem.id;
+    }
+
+    const updated = await this.prisma.priceAlert.update({
+      where: {
+        id: existing.id,
+      },
+      data: {
+        canonicalItemId,
+        targetUnitPrice:
+          typeof dto.targetUnitPrice === 'number'
+            ? new Prisma.Decimal(dto.targetUnitPrice)
+            : undefined,
+        radiusKm:
+          typeof dto.radiusKm === 'number'
+            ? new Prisma.Decimal(dto.radiusKm)
+            : undefined,
+        areaText:
+          typeof dto.areaText === 'string' ? dto.areaText.trim() || null : undefined,
+        storeId:
+          typeof dto.storeId === 'string' ? dto.storeId.trim() || null : undefined,
+        active: typeof dto.active === 'boolean' ? dto.active : undefined,
+      },
+      include: {
+        canonicalItem: true,
+        store: true,
+      },
+    });
+
+    return this.serializeAlert(updated);
+  }
+
+  async disableAlert(user: AuthenticatedUser, alertId: string) {
+    if (!this.isAlertsEnabled()) {
+      throw new ForbiddenException('Price alerts are disabled');
+    }
+    const existing = await this.prisma.priceAlert.findFirst({
+      where: {
+        id: alertId,
+        userId: user.id,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Alert not found');
+    }
+
+    await this.prisma.priceAlert.update({
+      where: {
+        id: existing.id,
+      },
+      data: {
+        active: false,
+      },
+    });
+
+    return {
+      alertId: existing.id,
+      active: false,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  async checkAlerts(user: AuthenticatedUser, dto: CheckAlertsDto) {
+    if (!this.isAlertsEnabled()) {
+      throw new ForbiddenException('Price alerts are disabled');
+    }
+    const hasCoordinates =
+      typeof dto.lat === 'number' &&
+      typeof dto.lng === 'number' &&
+      Number.isFinite(dto.lat) &&
+      Number.isFinite(dto.lng);
+
+    if (!hasCoordinates && !dto.areaText?.trim()) {
+      throw new BadRequestException('Provide lat/lng or areaText for alert check');
+    }
+
+    const alerts = await this.prisma.priceAlert.findMany({
+      where: {
+        userId: user.id,
+        active: true,
+      },
+      include: {
+        canonicalItem: true,
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      take: dto.limit ?? 50,
+    });
+
+    const triggered: Array<Record<string, unknown>> = [];
+
+    for (const alert of alerts) {
+      const targetUnitPrice = decimalToNumber(alert.targetUnitPrice);
+      const radiusKm = decimalToNumber(alert.radiusKm);
+      const best = await this.findBestPriceCandidate({
+        canonicalItemId: alert.canonicalItemId,
+        storeId: alert.storeId ?? undefined,
+        areaText: alert.areaText ?? dto.areaText ?? undefined,
+        lat: dto.lat,
+        lng: dto.lng,
+        radiusKm,
+        includePromo: dto.includePromo !== false && this.isPromoEnabled(),
+      });
+
+      if (!best || best.unitPrice > targetUnitPrice) {
+        continue;
+      }
+
+      const event = await this.createAlertEventWithCooldown({
+        alertId: alert.id,
+        userId: user.id,
+        canonicalItemId: alert.canonicalItemId,
+        storeId: best.storeId,
+        areaText: best.areaText,
+        source: best.source,
+        triggerUnitPrice: best.unitPrice,
+        targetUnitPrice,
+        distanceKm: best.distanceKm,
+        payload: {
+          observedAt: best.observedAt.toISOString(),
+          trustScore: best.trustScore,
+          storeName: best.storeName,
+        },
+      });
+
+      if (!event) {
+        continue;
+      }
+
+      triggered.push({
+        eventId: event.id,
+        alertId: alert.id,
+        item: alert.canonicalItem.canonicalName,
+        source: best.source,
+        triggerUnitPrice: roundTo(best.unitPrice, 2),
+        targetUnitPrice: roundTo(targetUnitPrice, 2),
+        distanceKm: best.distanceKm,
+        storeId: best.storeId,
+        storeName: best.storeName,
+        areaText: best.areaText,
+        triggeredAt: event.triggeredAt.toISOString(),
+      });
+    }
+
+    return {
+      checked: alerts.length,
+      triggeredCount: triggered.length,
+      triggered,
+      generatedAt: new Date().toISOString(),
+      userId: user.id,
+    };
+  }
+
+  async listAlertEvents(user: AuthenticatedUser, query: ListAlertEventsDto) {
+    if (!this.isAlertsEnabled()) {
+      throw new ForbiddenException('Price alerts are disabled');
+    }
+    const events = await this.prisma.alertEvent.findMany({
+      where: {
+        userId: user.id,
+        readAt: query.unreadOnly ? null : undefined,
+      },
+      include: {
+        canonicalItem: true,
+        store: true,
+      },
+      orderBy: {
+        triggeredAt: 'desc',
+      },
+      take: query.limit ?? 20,
+    });
+
+    return {
+      total: events.length,
+      items: events.map((event) => ({
+        id: event.id,
+        alertId: event.alertId,
+        item: event.canonicalItem.canonicalName,
+        source: event.source,
+        triggerUnitPrice: decimalToNumber(event.triggerUnitPrice),
+        targetUnitPrice: decimalToNumber(event.targetUnitPrice),
+        distanceKm: event.distanceKm ? decimalToNumber(event.distanceKm) : undefined,
+        storeId: event.storeId ?? undefined,
+        storeName: event.store?.displayName ?? undefined,
+        areaText: event.areaText ?? undefined,
+        triggeredAt: event.triggeredAt.toISOString(),
+        readAt: event.readAt?.toISOString() ?? null,
+      })),
+      generatedAt: new Date().toISOString(),
+      userId: user.id,
+    };
+  }
+
+  async markAlertEventRead(user: AuthenticatedUser, eventId: string) {
+    if (!this.isAlertsEnabled()) {
+      throw new ForbiddenException('Price alerts are disabled');
+    }
+    const event = await this.prisma.alertEvent.findFirst({
+      where: {
+        id: eventId,
+        userId: user.id,
+      },
+      select: { id: true },
+    });
+
+    if (!event) {
+      throw new NotFoundException('Alert event not found');
+    }
+
+    const updated = await this.prisma.alertEvent.update({
+      where: { id: event.id },
+      data: {
+        readAt: new Date(),
+      },
+    });
+
+    return {
+      id: updated.id,
+      readAt: updated.readAt?.toISOString() ?? null,
+    };
+  }
+
+  async ingestPromo(user: AuthenticatedUser, dto: IngestPromoDto) {
+    if (!this.isPromoEnabled()) {
+      throw new ForbiddenException('Promo ingestion is disabled');
+    }
+    const ingestion = await this.prisma.promoIngestion.create({
+      data: {
+        userId: user.id,
+        fileRef: dto.fileRef,
+        mimeType: dto.mimeType,
+        merchantText: dto.merchantText?.trim() || undefined,
+        areaText: dto.areaText?.trim() || undefined,
+        status: ProcessingStatus.PROCESSING,
+      },
+    });
+
+    try {
+      const imageBase64 = await this.storage.downloadAsBase64(dto.fileRef);
+      if (!imageBase64) {
+        throw new BadRequestException('Unable to download promo artifact from storage');
+      }
+
+      const ocr = await this.ocrProvider.extract({
+        imageUrl: `data:${dto.mimeType};base64,${imageBase64}`,
+      });
+      const parsed = await this.parserProvider.parseReceipt(ocr.rawText);
+
+      const storeContext = await this.storeResolver.resolveStore({
+        merchantText: dto.merchantText ?? parsed.merchantText,
+        areaText: dto.areaText,
+        locationLat: null,
+        locationLng: null,
+      });
+
+      let created = 0;
+      let skipped = 0;
+
+      for (const lineItem of parsed.lineItems) {
+        const unitPrice = deriveUnitPrice({
+          totalPrice: lineItem.totalPrice,
+          quantity: lineItem.quantity,
+          unitPrice: lineItem.unitPrice,
+        });
+
+        if (!unitPrice || !lineItem.descriptionRaw?.trim()) {
+          skipped += 1;
+          continue;
+        }
+
+        const normalizedItem = await this.itemNormalizer.resolveCanonicalItem({
+          descriptionRaw: lineItem.descriptionRaw,
+          unitRaw: lineItem.unitRaw,
+          locale: 'en-MY',
+        });
+
+        const outlierEvaluation = await this.evaluateOutlier({
+          canonicalItemId: normalizedItem.canonicalItem.id,
+          storeId: storeContext.storeId,
+          areaText: storeContext.areaText,
+          unitPrice,
+        });
+
+        const trustScore = computeTrustScore({
+          sourceWeight: 0.7,
+          fieldConfidence: clamp01(lineItem.confidence ?? 0.7),
+          locationConfidence: storeContext.locationConfidence,
+          outlierComponent: outlierEvaluation.outlierComponent,
+        });
+
+        await this.prisma.promoObservation.create({
+          data: {
+            ingestionId: ingestion.id,
+            userId: user.id,
+            canonicalItemId: normalizedItem.canonicalItem.id,
+            storeId: storeContext.storeId,
+            areaText: storeContext.areaText,
+            currency: parsed.currency,
+            quantity:
+              typeof lineItem.quantity === 'number' && lineItem.quantity > 0
+                ? new Prisma.Decimal(lineItem.quantity)
+                : undefined,
+            unitRaw: lineItem.unitRaw,
+            unitPrice: new Prisma.Decimal(unitPrice),
+            totalPrice:
+              typeof lineItem.totalPrice === 'number'
+                ? new Prisma.Decimal(lineItem.totalPrice)
+                : undefined,
+            trustScore: new Prisma.Decimal(trustScore),
+            reviewStatus: dto.autoApprove ? PromoReviewStatus.APPROVED : PromoReviewStatus.PENDING,
+            validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
+            validTo: dto.validTo ? new Date(dto.validTo) : undefined,
+            metadata: {
+              source: 'promo_ocr',
+              confidence: lineItem.confidence ?? null,
+              canonicalization: {
+                aliasText: normalizedItem.aliasText,
+                confidence: normalizedItem.confidence,
+              },
+            } satisfies Prisma.InputJsonValue,
+          },
+        });
+        created += 1;
+      }
+
+      await this.prisma.promoIngestion.update({
+        where: {
+          id: ingestion.id,
+        },
+        data: {
+          status: ProcessingStatus.COMPLETED,
+          rawText: ocr.rawText,
+          ocrRaw: ocr.rawPayload as Prisma.InputJsonValue,
+          parsedPayload: parsed as unknown as Prisma.InputJsonValue,
+        },
+      });
+
+      return {
+        ingestionId: ingestion.id,
+        status: ProcessingStatus.COMPLETED,
+        created,
+        skipped,
+        reviewStatus: dto.autoApprove ? PromoReviewStatus.APPROVED : PromoReviewStatus.PENDING,
+      };
+    } catch (error) {
+      await this.prisma.promoIngestion.update({
+        where: {
+          id: ingestion.id,
+        },
+        data: {
+          status: ProcessingStatus.FAILED,
+          errorText: String(error),
+        },
+      });
+      throw error;
+    }
+  }
+
+  async listPromos(user: AuthenticatedUser, query: ListPromosDto) {
+    if (!this.isPromoEnabled()) {
+      throw new ForbiddenException('Promo ingestion is disabled');
+    }
+    const ingestions = await this.prisma.promoIngestion.findMany({
+      where: {
+        userId: user.id,
+        status: query.status,
+      },
+      include: {
+        observations: {
+          where: {
+            reviewStatus: query.reviewStatus,
+          },
+          include: {
+            canonicalItem: true,
+            store: true,
+          },
+          orderBy: {
+            createdAt: 'desc',
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: query.limit ?? 10,
+    });
+
+    return {
+      total: ingestions.length,
+      items: ingestions.map((ingestion) => ({
+        id: ingestion.id,
+        fileRef: ingestion.fileRef,
+        mimeType: ingestion.mimeType,
+        merchantText: ingestion.merchantText,
+        areaText: ingestion.areaText,
+        status: ingestion.status,
+        errorText: ingestion.errorText,
+        createdAt: ingestion.createdAt.toISOString(),
+        observations: ingestion.observations.map((observation) => ({
+          id: observation.id,
+          item: observation.canonicalItem.canonicalName,
+          reviewStatus: observation.reviewStatus,
+          unitPrice: decimalToNumber(observation.unitPrice),
+          trustScore: decimalToNumber(observation.trustScore),
+          storeId: observation.storeId ?? undefined,
+          storeName: observation.store?.displayName ?? undefined,
+          areaText: observation.areaText ?? undefined,
+          validFrom: observation.validFrom?.toISOString() ?? null,
+          validTo: observation.validTo?.toISOString() ?? null,
+        })),
+      })),
+      generatedAt: new Date().toISOString(),
+      userId: user.id,
+    };
+  }
+
+  async reviewPromoObservations(user: AuthenticatedUser, dto: ReviewPromoObservationsDto) {
+    if (!this.isPromoEnabled()) {
+      throw new ForbiddenException('Promo ingestion is disabled');
+    }
+    const ids = dto.observations.map((item) => item.id);
+    const result = await this.prisma.promoObservation.updateMany({
+      where: {
+        id: {
+          in: ids,
+        },
+        userId: user.id,
+      },
+      data: {
+        reviewStatus: dto.reviewStatus,
+      },
+    });
+
+    return {
+      updated: result.count,
+      reviewStatus: dto.reviewStatus,
+      updatedAt: new Date().toISOString(),
+      userId: user.id,
+    };
+  }
+
+  private async loadPriceCandidates(input: {
+    canonicalItemId: string;
+    storeId?: string;
+    areaText?: string;
+    from?: string;
+    to?: string;
+    includePromo: boolean;
+    lat?: number;
+    lng?: number;
+    radiusKm?: number;
+  }): Promise<PriceCandidate[]> {
+    const expenseWhere: Prisma.PriceObservationWhereInput = {
+      canonicalItemId: input.canonicalItemId,
+    };
+
+    if (input.storeId) {
+      expenseWhere.storeId = input.storeId;
+    }
+    if (input.areaText) {
+      expenseWhere.areaText = {
+        contains: input.areaText.trim(),
+        mode: 'insensitive',
+      };
+    }
+    if (input.from || input.to) {
+      expenseWhere.observedAt = {
+        gte: input.from ? new Date(input.from) : undefined,
+        lte: input.to ? new Date(input.to) : undefined,
+      };
+    }
+
+    const now = new Date();
+    const promoWhere: Prisma.PromoObservationWhereInput = {
+      canonicalItemId: input.canonicalItemId,
+      reviewStatus: PromoReviewStatus.APPROVED,
+      AND: [
+        {
+          OR: [{ validFrom: null }, { validFrom: { lte: now } }],
+        },
+        {
+          OR: [{ validTo: null }, { validTo: { gte: now } }],
+        },
+      ],
+    };
+
+    if (input.storeId) {
+      promoWhere.storeId = input.storeId;
+    }
+    if (input.areaText) {
+      promoWhere.areaText = {
+        contains: input.areaText.trim(),
+        mode: 'insensitive',
+      };
+    }
+    if (input.from || input.to) {
+      promoWhere.observedAt = {
+        gte: input.from ? new Date(input.from) : undefined,
+        lte: input.to ? new Date(input.to) : undefined,
+      };
+    }
+
+    const [expenseRows, promoRows] = await Promise.all([
+      this.prisma.priceObservation.findMany({
+        where: expenseWhere,
+        include: {
+          store: true,
+        },
+        orderBy: {
+          observedAt: 'desc',
+        },
+        take: 3000,
+      }),
+      input.includePromo
+        ? this.prisma.promoObservation.findMany({
+            where: promoWhere,
+            include: {
+              store: true,
+            },
+            orderBy: {
+              observedAt: 'desc',
+            },
+            take: 1000,
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const hasCoordinates =
+      typeof input.lat === 'number' &&
+      typeof input.lng === 'number' &&
+      Number.isFinite(input.lat) &&
+      Number.isFinite(input.lng);
+    const radiusKm = input.radiusKm ?? 15;
+
+    const rawCandidates: PriceCandidate[] = [
+      ...expenseRows.map((row) => ({
+        source: ObservationSource.EXPENSE,
+        canonicalItemId: row.canonicalItemId,
+        storeId: row.storeId ?? undefined,
+        storeName: row.store?.displayName ?? undefined,
+        storeLat: row.store?.lat ? decimalToNumber(row.store.lat) : undefined,
+        storeLng: row.store?.lng ? decimalToNumber(row.store.lng) : undefined,
+        areaText: row.areaText ?? undefined,
+        unitPrice: decimalToNumber(row.unitPrice),
+        trustScore: decimalToNumber(row.trustScore),
+        observedAt: row.observedAt,
+      })),
+      ...promoRows.map((row) => ({
+        source: ObservationSource.PROMO,
+        canonicalItemId: row.canonicalItemId,
+        storeId: row.storeId ?? undefined,
+        storeName: row.store?.displayName ?? undefined,
+        storeLat: row.store?.lat ? decimalToNumber(row.store.lat) : undefined,
+        storeLng: row.store?.lng ? decimalToNumber(row.store.lng) : undefined,
+        areaText: row.areaText ?? undefined,
+        unitPrice: decimalToNumber(row.unitPrice),
+        trustScore: decimalToNumber(row.trustScore),
+        observedAt: row.observedAt,
+      })),
+    ];
+
+    const candidates: PriceCandidate[] = [];
+    for (const row of rawCandidates) {
+      let distanceKm: number | undefined;
+
+      if (hasCoordinates) {
+        if (typeof row.storeLat === 'number' && typeof row.storeLng === 'number') {
+          distanceKm = haversineDistanceKm(
+            {
+              lat: input.lat as number,
+              lng: input.lng as number,
+            },
+            {
+              lat: row.storeLat,
+              lng: row.storeLng,
+            },
+          );
+
+          if (distanceKm > radiusKm) {
+            continue;
+          }
+        } else {
+          const areaFilter = input.areaText?.trim().toLowerCase();
+          if (!areaFilter || !row.areaText?.toLowerCase().includes(areaFilter)) {
+            continue;
+          }
+        }
+      }
+
+      candidates.push({
+        ...row,
+        distanceKm: distanceKm !== undefined ? roundTo(distanceKm, 2) : undefined,
+      });
+    }
+
+    return candidates;
+  }
+
+  private async findBestPriceCandidate(input: {
+    canonicalItemId: string;
+    storeId?: string;
+    areaText?: string;
+    lat?: number;
+    lng?: number;
+    radiusKm: number;
+    includePromo: boolean;
+  }): Promise<PriceCandidate | null> {
+    const rows = await this.loadPriceCandidates({
+      canonicalItemId: input.canonicalItemId,
+      storeId: input.storeId,
+      areaText: input.areaText,
+      lat: input.lat,
+      lng: input.lng,
+      radiusKm: input.radiusKm,
+      includePromo: input.includePromo,
+    });
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    rows.sort((a, b) => {
+      if (a.unitPrice !== b.unitPrice) {
+        return a.unitPrice - b.unitPrice;
+      }
+      if (a.trustScore !== b.trustScore) {
+        return b.trustScore - a.trustScore;
+      }
+      return b.observedAt.getTime() - a.observedAt.getTime();
+    });
+
+    return rows[0];
+  }
+
+  private async createAlertEventWithCooldown(input: {
+    alertId: string;
+    userId: string;
+    canonicalItemId: string;
+    storeId?: string;
+    areaText?: string;
+    source: ObservationSource;
+    triggerUnitPrice: number;
+    targetUnitPrice: number;
+    distanceKm?: number;
+    payload: Prisma.InputJsonValue;
+  }) {
+    const latest = await this.prisma.alertEvent.findFirst({
+      where: {
+        alertId: input.alertId,
+      },
+      orderBy: {
+        triggeredAt: 'desc',
+      },
+    });
+
+    if (latest) {
+      const cooldownMinutes = this.getAlertCooldownMinutes();
+      const elapsedMs = Date.now() - latest.triggeredAt.getTime();
+      const sameStore = (latest.storeId ?? '') === (input.storeId ?? '');
+      const samePrice =
+        Math.abs(decimalToNumber(latest.triggerUnitPrice) - input.triggerUnitPrice) < 0.01;
+
+      if (sameStore && samePrice && elapsedMs < cooldownMinutes * 60 * 1000) {
+        return null;
+      }
+    }
+
+    return this.prisma.alertEvent.create({
+      data: {
+        alertId: input.alertId,
+        userId: input.userId,
+        canonicalItemId: input.canonicalItemId,
+        storeId: input.storeId,
+        areaText: input.areaText,
+        source: input.source,
+        triggerUnitPrice: new Prisma.Decimal(input.triggerUnitPrice),
+        targetUnitPrice: new Prisma.Decimal(input.targetUnitPrice),
+        distanceKm:
+          typeof input.distanceKm === 'number'
+            ? new Prisma.Decimal(input.distanceKm)
+            : undefined,
+        payload: input.payload,
+      },
+    });
+  }
+
+  private getAlertCooldownMinutes(): number {
+    const raw = this.config.get<string>('ALERT_EVENT_COOLDOWN_MINUTES')?.trim();
+    const parsed = Number(raw ?? '180');
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 180;
+    }
+    return parsed;
+  }
+
+  private async resolveCanonicalItemForUser(userId: string, itemText: string) {
+    const text = itemText.trim();
+    if (!text) {
+      throw new BadRequestException('item is required');
+    }
+
+    const existing = await this.itemNormalizer.findCanonicalItemByQuery(text);
+    if (existing) {
+      return existing;
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        locale: true,
+      },
+    });
+
+    const result = await this.itemNormalizer.resolveCanonicalItem({
+      descriptionRaw: text,
+      locale: user?.locale ?? 'en-MY',
+    });
+
+    return result.canonicalItem;
+  }
+
+  private serializeAlert(
+    alert: Prisma.PriceAlertGetPayload<{
+      include: {
+        canonicalItem: true;
+        store: true;
+      };
+    }>,
+  ) {
+    return {
+      id: alert.id,
+      item: {
+        id: alert.canonicalItem.id,
+        canonicalName: alert.canonicalItem.canonicalName,
+        canonicalUnit: alert.canonicalItem.canonicalUnit,
+      },
+      targetUnitPrice: decimalToNumber(alert.targetUnitPrice),
+      radiusKm: decimalToNumber(alert.radiusKm),
+      active: alert.active,
+      areaText: alert.areaText ?? undefined,
+      storeId: alert.storeId ?? undefined,
+      storeName: alert.store?.displayName ?? undefined,
+      createdAt: alert.createdAt.toISOString(),
+      updatedAt: alert.updatedAt.toISOString(),
     };
   }
 

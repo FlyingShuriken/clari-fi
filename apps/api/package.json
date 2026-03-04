@@ -9,6 +9,7 @@
     "test": "jest --config ./jest.config.ts",
     "acceptance:phase1": "ts-node --project tsconfig.json scripts/phase1-acceptance.ts",
     "acceptance:phase2": "ts-node --project tsconfig.json scripts/phase2-acceptance.ts",
+    "acceptance:phase2b": "ts-node --project tsconfig.json scripts/phase2b-acceptance.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma"
   },

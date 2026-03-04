@@ -120,6 +120,7 @@ export const PriceHistoryResponseSchema = z.object({
   points: z.array(PriceHistoryPointSchema),
   generatedAt: z.string().datetime(),
   userId: z.string(),
+  includePromo: z.boolean().optional(),
 });
 export type PriceHistoryResponse = z.infer<typeof PriceHistoryResponseSchema>;
 
@@ -148,6 +149,7 @@ export const PriceCompareResponseSchema = z.object({
   rows: z.array(PriceCompareRowSchema),
   generatedAt: z.string().datetime(),
   userId: z.string(),
+  includePromo: z.boolean().optional(),
 });
 export type PriceCompareResponse = z.infer<typeof PriceCompareResponseSchema>;
 
@@ -163,6 +165,60 @@ export const PriceBackfillResponseSchema = z.object({
   generatedAt: z.string().datetime(),
 });
 export type PriceBackfillResponse = z.infer<typeof PriceBackfillResponseSchema>;
+
+export const ObservationSourceSchema = z.enum(['EXPENSE', 'PROMO']);
+export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
+
+export const PriceAlertSchema = z.object({
+  id: z.string(),
+  item: z.object({
+    id: z.string(),
+    canonicalName: z.string(),
+    canonicalUnit: z.string().nullable().optional(),
+  }),
+  targetUnitPrice: z.number().nonnegative(),
+  radiusKm: z.number().positive(),
+  active: z.boolean(),
+  areaText: z.string().optional(),
+  storeId: z.string().optional(),
+  storeName: z.string().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type PriceAlert = z.infer<typeof PriceAlertSchema>;
+
+export const AlertEventSchema = z.object({
+  id: z.string(),
+  alertId: z.string(),
+  item: z.string(),
+  source: ObservationSourceSchema,
+  triggerUnitPrice: z.number().nonnegative(),
+  targetUnitPrice: z.number().nonnegative(),
+  distanceKm: z.number().nonnegative().optional(),
+  storeId: z.string().optional(),
+  storeName: z.string().optional(),
+  areaText: z.string().optional(),
+  triggeredAt: z.string().datetime(),
+  readAt: z.string().datetime().nullable(),
+});
+export type AlertEvent = z.infer<typeof AlertEventSchema>;
+
+export const PromoReviewStatusSchema = z.enum(['PENDING', 'APPROVED', 'REJECTED']);
+export type PromoReviewStatus = z.infer<typeof PromoReviewStatusSchema>;
+
+export const PromoObservationSchema = z.object({
+  id: z.string(),
+  item: z.string(),
+  reviewStatus: PromoReviewStatusSchema,
+  unitPrice: z.number().nonnegative(),
+  trustScore: z.number().min(0).max(1),
+  storeId: z.string().optional(),
+  storeName: z.string().optional(),
+  areaText: z.string().optional(),
+  validFrom: z.string().datetime().nullable(),
+  validTo: z.string().datetime().nullable(),
+});
+export type PromoObservation = z.infer<typeof PromoObservationSchema>;
 
 export const MonthlyReportDtoSchema = z.object({
   year: z.number().int().min(2000),

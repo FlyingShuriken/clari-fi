@@ -52,6 +52,24 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
     errors.push('PRICE_INTELLIGENCE_ENABLED must be true or false');
   }
 
+  const alertsEnabled = asString(config.PRICE_ALERTS_ENABLED).trim().toLowerCase();
+  if (alertsEnabled && alertsEnabled !== 'true' && alertsEnabled !== 'false') {
+    errors.push('PRICE_ALERTS_ENABLED must be true or false');
+  }
+
+  const promoEnabled = asString(config.PROMO_INGESTION_ENABLED).trim().toLowerCase();
+  if (promoEnabled && promoEnabled !== 'true' && promoEnabled !== 'false') {
+    errors.push('PROMO_INGESTION_ENABLED must be true or false');
+  }
+
+  const alertCooldownRaw = asString(config.ALERT_EVENT_COOLDOWN_MINUTES).trim();
+  if (alertCooldownRaw) {
+    const alertCooldown = Number(alertCooldownRaw);
+    if (!Number.isFinite(alertCooldown) || alertCooldown <= 0) {
+      errors.push('ALERT_EVENT_COOLDOWN_MINUTES must be a positive number');
+    }
+  }
+
   if (errors.length > 0) {
     throw new Error(`Invalid environment:\n- ${errors.join('\n- ')}`);
   }

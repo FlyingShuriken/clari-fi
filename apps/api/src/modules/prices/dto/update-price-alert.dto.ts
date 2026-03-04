@@ -1,27 +1,16 @@
 import { Type } from 'class-transformer';
 import { IsBoolean, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class PriceCompareQueryDto {
-  @IsString()
-  item!: string;
-
+export class UpdatePriceAlertDto {
   @IsOptional()
   @IsString()
-  area?: string;
+  item?: string;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
-  @Min(-90)
-  @Max(90)
-  lat?: number;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(-180)
-  @Max(180)
-  lng?: number;
+  @Min(0.01)
+  targetUnitPrice?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -31,14 +20,15 @@ export class PriceCompareQueryDto {
   radiusKm?: number;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  @Max(100)
-  limit?: number;
+  @IsString()
+  areaText?: string;
+
+  @IsOptional()
+  @IsString()
+  storeId?: string;
 
   @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  includePromo?: boolean;
+  active?: boolean;
 }

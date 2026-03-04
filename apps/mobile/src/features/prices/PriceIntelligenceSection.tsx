@@ -13,6 +13,8 @@ interface PriceIntelligenceSectionProps {
   onRadiusKmInputChange: (value: string) => void;
   interval: 'day' | 'week';
   onIntervalChange: (value: 'day' | 'week') => void;
+  includePromo: boolean;
+  onToggleIncludePromo: () => void;
   comparePreview: string;
   historyPreview: string;
   backfillPreview: string;
@@ -86,6 +88,13 @@ export function PriceIntelligenceSection(props: PriceIntelligenceSectionProps) {
           title={`Interval: ${props.interval}`}
           onPress={() => props.onIntervalChange(props.interval === 'day' ? 'week' : 'day')}
         />
+        <Button
+          title={props.includePromo ? 'Promo: On' : 'Promo: Off'}
+          onPress={props.onToggleIncludePromo}
+        />
+      </View>
+
+      <View style={styles.row}>
         <Button title="Backfill Mine" onPress={props.onRunBackfill} />
       </View>
 

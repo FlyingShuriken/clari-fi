@@ -1,4 +1,5 @@
-import { IsIn, IsISO8601, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsIn, IsISO8601, IsOptional, IsString } from 'class-validator';
 
 export class PriceHistoryQueryDto {
   @IsString()
@@ -23,4 +24,9 @@ export class PriceHistoryQueryDto {
   @IsOptional()
   @IsIn(['day', 'week'])
   interval?: 'day' | 'week';
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  includePromo?: boolean;
 }

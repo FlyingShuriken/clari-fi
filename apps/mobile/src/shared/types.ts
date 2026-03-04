@@ -103,6 +103,7 @@ export interface PriceHistoryResponse {
   points: PriceHistoryPoint[];
   generatedAt: string;
   userId: string;
+  includePromo?: boolean;
 }
 
 export interface PriceCompareRow {
@@ -127,6 +128,7 @@ export interface PriceCompareResponse {
   rows: PriceCompareRow[];
   generatedAt: string;
   userId: string;
+  includePromo?: boolean;
 }
 
 export interface PriceBackfillResponse {
@@ -139,4 +141,65 @@ export interface PriceBackfillResponse {
   errors: number;
   requestedByUserId: string;
   generatedAt: string;
+}
+
+export type ObservationSource = 'EXPENSE' | 'PROMO';
+
+export interface PriceAlert {
+  id: string;
+  item: {
+    id: string;
+    canonicalName: string;
+    canonicalUnit?: string | null;
+  };
+  targetUnitPrice: number;
+  radiusKm: number;
+  active: boolean;
+  areaText?: string;
+  storeId?: string;
+  storeName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AlertEvent {
+  id: string;
+  alertId: string;
+  item: string;
+  source: ObservationSource;
+  triggerUnitPrice: number;
+  targetUnitPrice: number;
+  distanceKm?: number;
+  storeId?: string;
+  storeName?: string;
+  areaText?: string;
+  triggeredAt: string;
+  readAt: string | null;
+}
+
+export type PromoReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface PromoObservation {
+  id: string;
+  item: string;
+  reviewStatus: PromoReviewStatus;
+  unitPrice: number;
+  trustScore: number;
+  storeId?: string;
+  storeName?: string;
+  areaText?: string;
+  validFrom: string | null;
+  validTo: string | null;
+}
+
+export interface PromoIngestionItem {
+  id: string;
+  fileRef: string;
+  mimeType: string;
+  merchantText?: string;
+  areaText?: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  errorText?: string | null;
+  createdAt: string;
+  observations: PromoObservation[];
 }

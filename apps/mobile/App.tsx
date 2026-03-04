@@ -6,9 +6,9 @@ import {
   useUser,
 } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
-import { StatusBar } from "expo-status-bar";
 import Constants from "expo-constants";
 import * as ImagePicker from "expo-image-picker";
+import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -27,13 +27,21 @@ import {
 } from "./src/features/capture/speech-recognition.service";
 import { VoiceCaptureSection } from "./src/features/capture/VoiceCaptureSection";
 import { InsightsSection } from "./src/features/insights/InsightsSection";
+import { PriceAlertsSection } from "./src/features/prices/PriceAlertsSection";
 import { PriceIntelligenceSection } from "./src/features/prices/PriceIntelligenceSection";
+import { PromoIngestionSection } from "./src/features/prices/PromoIngestionSection";
 import {
+  checkPriceAlerts,
   confirmExpense,
+  createPriceAlert,
+  ingestPromo,
+  listAlertEvents,
   listExpenses,
+  listPriceAlerts,
+  listPromos,
+  loadMonthlyReport,
   loadPriceCompare,
   loadPriceHistory,
-  loadMonthlyReport,
   parseReceipt,
   parseVoice,
   runPriceBackfill,
@@ -87,7 +95,7 @@ function AuthGate() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>ClariFi Phase 0/1 Baseline</Text>
+        <Text style={styles.title}>ClariFi Phase 2B</Text>
 
         <SignedOut>
           <ClerkEmailSignInSection message={message} onMessage={setMessage} />
@@ -104,6 +112,38 @@ function AuthGate() {
 interface AuthenticatedAppProps {
   message: string;
   onMessage: (message: string) => void;
+}
+
+async function pickImageAsset(fromCamera: boolean): Promise<ImagePicker.ImagePickerAsset | null> {
+  if (fromCamera) {
+    const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!cameraPermission.granted) {
+      throw new Error("Camera permission denied.");
+    }
+  } else {
+    const mediaPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!mediaPermission.granted) {
+      throw new Error("Photo library permission denied.");
+    }
+  }
+
+  const result = fromCamera
+    ? await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        base64: true,
+      })
+    : await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        base64: true,
+      });
+
+  if (result.canceled || !result.assets[0]) {
+    return null;
+  }
+
+  return result.assets[0];
 }
 
 function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
@@ -123,6 +163,13 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
     useState("image/jpeg");
   const [selectedReceiptFileRef, setSelectedReceiptFileRef] = useState("");
 
+  const [promoUri, setPromoUri] = useState("");
+  const [promoBase64, setPromoBase64] = useState("");
+  const [promoMimeType, setPromoMimeType] = useState("image/jpeg");
+  const [promoFileRef, setPromoFileRef] = useState("");
+  const [promoMerchantHint, setPromoMerchantHint] = useState("");
+  const [promoAreaHint, setPromoAreaHint] = useState("");
+
   const [voiceParse, setVoiceParse] = useState<VoiceParseResult | null>(null);
   const [receiptParse, setReceiptParse] = useState<ReceiptParseResult | null>(
     null,
@@ -133,6 +180,7 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
   const [receiptParseLatencyMs, setReceiptParseLatencyMs] = useState<
     number | null
   >(null);
+
   const [priceQueryItem, setPriceQueryItem] = useState("watermelon");
   const [priceQueryArea, setPriceQueryArea] = useState("");
   const [priceQueryLat, setPriceQueryLat] = useState("5.9804");
@@ -141,9 +189,24 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
   const [priceHistoryInterval, setPriceHistoryInterval] = useState<"day" | "week">(
     "day",
   );
+  const [includePromo, setIncludePromo] = useState(true);
   const [priceComparePreview, setPriceComparePreview] = useState("");
   const [priceHistoryPreview, setPriceHistoryPreview] = useState("");
   const [priceBackfillPreview, setPriceBackfillPreview] = useState("");
+
+  const [alertItem, setAlertItem] = useState("watermelon");
+  const [alertTargetUnitPrice, setAlertTargetUnitPrice] = useState("5");
+  const [alertRadiusKm, setAlertRadiusKm] = useState("10");
+  const [alertAreaText, setAlertAreaText] = useState("Kota Kinabalu");
+  const [alertLat, setAlertLat] = useState("5.9804");
+  const [alertLng, setAlertLng] = useState("116.0735");
+  const [alertsPreview, setAlertsPreview] = useState("");
+  const [alertEventsPreview, setAlertEventsPreview] = useState("");
+  const [alertCheckPreview, setAlertCheckPreview] = useState("");
+
+  const [promoIngestPreview, setPromoIngestPreview] = useState("");
+  const [promoListPreview, setPromoListPreview] = useState("");
+
   const [ledgerPreview, setLedgerPreview] = useState("");
   const [reportPreview, setReportPreview] = useState("");
   const [loading, setLoading] = useState(false);
@@ -211,9 +274,7 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
   async function getBearerTokenOrThrow(): Promise<string> {
     const token = await getToken();
     if (!token) {
-      throw new Error(
-        "No Clerk session token available. Please sign in again.",
-      );
+      throw new Error("No Clerk session token available. Please sign in again.");
     }
 
     return token;
@@ -334,9 +395,7 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
       setVoiceParse(result);
       setRecognitionState("ready");
       setVoiceParseLatencyMs(Date.now() - startedAt);
-      onMessage(
-        `Voice parsed via ${result.parseMeta.parsePath}. Review and confirm.`,
-      );
+      onMessage(`Voice parsed via ${result.parseMeta.parsePath}. Review and confirm.`);
     } catch (error) {
       onMessage(errorToMessage(error));
     } finally {
@@ -377,37 +436,10 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
     onMessage("");
 
     try {
-      if (fromCamera) {
-        const cameraPermission =
-          await ImagePicker.requestCameraPermissionsAsync();
-        if (!cameraPermission.granted) {
-          throw new Error("Camera permission denied.");
-        }
-      } else {
-        const mediaPermission =
-          await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!mediaPermission.granted) {
-          throw new Error("Photo library permission denied.");
-        }
-      }
-
-      const result = fromCamera
-        ? await ImagePicker.launchCameraAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
-            base64: true,
-          })
-        : await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
-            base64: true,
-          });
-
-      if (result.canceled || !result.assets[0]) {
+      const picked = await pickImageAsset(fromCamera);
+      if (!picked) {
         return;
       }
-
-      const picked = result.assets[0];
       if (!picked.base64) {
         throw new Error("Could not read image as base64.");
       }
@@ -420,18 +452,46 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
       setReceiptParse(null);
 
       const token = await getBearerTokenOrThrow();
-      const uploaded = await uploadArtifact(
-        normalizeBaseUrl(apiBaseUrl),
-        token,
-        {
-          kind: "receipt",
-          mimeType,
-          fileBase64: picked.base64,
-        },
-      );
+      const uploaded = await uploadArtifact(normalizeBaseUrl(apiBaseUrl), token, {
+        kind: "receipt",
+        mimeType,
+        fileBase64: picked.base64,
+      });
       setSelectedReceiptFileRef(uploaded.fileRef);
 
       onMessage("Receipt image selected and uploaded.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    }
+  }
+
+  async function choosePromo(fromCamera: boolean) {
+    onMessage("");
+
+    try {
+      const picked = await pickImageAsset(fromCamera);
+      if (!picked) {
+        return;
+      }
+      if (!picked.base64) {
+        throw new Error("Could not read promo image as base64.");
+      }
+
+      const mimeType = picked.mimeType ?? "image/jpeg";
+      setPromoUri(picked.uri);
+      setPromoBase64(picked.base64);
+      setPromoMimeType(mimeType);
+      setPromoFileRef("");
+
+      const token = await getBearerTokenOrThrow();
+      const uploaded = await uploadArtifact(normalizeBaseUrl(apiBaseUrl), token, {
+        kind: "receipt",
+        mimeType,
+        fileBase64: picked.base64,
+      });
+      setPromoFileRef(uploaded.fileRef);
+
+      onMessage("Promo image selected and uploaded.");
     } catch (error) {
       onMessage(errorToMessage(error));
     }
@@ -522,10 +582,7 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
 
     try {
       const token = await getBearerTokenOrThrow();
-      const result = await loadMonthlyReport(
-        normalizeBaseUrl(apiBaseUrl),
-        token,
-      );
+      const result = await loadMonthlyReport(normalizeBaseUrl(apiBaseUrl), token);
       setReportPreview(JSON.stringify(result, null, 2));
     } catch (error) {
       onMessage(errorToMessage(error));
@@ -544,16 +601,14 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
       }
 
       const token = await getBearerTokenOrThrow();
-      const lat = parseNumberInput(priceQueryLat);
-      const lng = parseNumberInput(priceQueryLng);
-      const radiusKm = parseNumberInput(priceQueryRadiusKm);
       const result = await loadPriceCompare(normalizeBaseUrl(apiBaseUrl), token, {
         item: priceQueryItem.trim(),
         area: priceQueryArea.trim() || undefined,
-        lat,
-        lng,
-        radiusKm,
+        lat: parseNumberInput(priceQueryLat),
+        lng: parseNumberInput(priceQueryLng),
+        radiusKm: parseNumberInput(priceQueryRadiusKm),
         limit: 10,
+        includePromo,
       });
 
       setPriceComparePreview(JSON.stringify(result, null, 2));
@@ -579,6 +634,7 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
         item: priceQueryItem.trim(),
         area: priceQueryArea.trim() || undefined,
         interval: priceHistoryInterval,
+        includePromo,
       });
       setPriceHistoryPreview(JSON.stringify(result, null, 2));
       onMessage("Loaded price history.");
@@ -601,6 +657,133 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
       });
       setPriceBackfillPreview(JSON.stringify(result, null, 2));
       onMessage("Backfill completed for current user scope.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCreateAlert() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      const targetUnitPrice = parseNumberInput(alertTargetUnitPrice);
+      if (!alertItem.trim() || typeof targetUnitPrice !== "number") {
+        throw new Error("Provide alert item and valid target unit price.");
+      }
+
+      const token = await getBearerTokenOrThrow();
+      const result = await createPriceAlert(normalizeBaseUrl(apiBaseUrl), token, {
+        item: alertItem.trim(),
+        targetUnitPrice,
+        radiusKm: parseNumberInput(alertRadiusKm),
+        areaText: alertAreaText.trim() || undefined,
+      });
+      setAlertsPreview(JSON.stringify(result, null, 2));
+      onMessage("Price alert created.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoadAlerts() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      const token = await getBearerTokenOrThrow();
+      const result = await listPriceAlerts(normalizeBaseUrl(apiBaseUrl), token);
+      setAlertsPreview(JSON.stringify(result, null, 2));
+      onMessage("Loaded alerts.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCheckAlerts() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      const token = await getBearerTokenOrThrow();
+      const result = await checkPriceAlerts(normalizeBaseUrl(apiBaseUrl), token, {
+        lat: parseNumberInput(alertLat),
+        lng: parseNumberInput(alertLng),
+        areaText: alertAreaText.trim() || undefined,
+        includePromo,
+        limit: 50,
+      });
+      setAlertCheckPreview(JSON.stringify(result, null, 2));
+      onMessage("Checked nearby alert triggers.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoadAlertEvents() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      const token = await getBearerTokenOrThrow();
+      const result = await listAlertEvents(normalizeBaseUrl(apiBaseUrl), token, {
+        limit: 20,
+        unreadOnly: false,
+      });
+      setAlertEventsPreview(JSON.stringify(result, null, 2));
+      onMessage("Loaded alert events.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleIngestPromo() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      if (!promoFileRef) {
+        throw new Error("Upload a promo image first.");
+      }
+
+      const token = await getBearerTokenOrThrow();
+      const result = await ingestPromo(normalizeBaseUrl(apiBaseUrl), token, {
+        fileRef: promoFileRef,
+        mimeType: promoMimeType,
+        merchantText: promoMerchantHint.trim() || undefined,
+        areaText: promoAreaHint.trim() || undefined,
+        autoApprove: false,
+      });
+      setPromoIngestPreview(JSON.stringify(result, null, 2));
+      onMessage("Promo ingestion completed.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoadPromos() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      const token = await getBearerTokenOrThrow();
+      const result = await listPromos(normalizeBaseUrl(apiBaseUrl), token, {
+        limit: 10,
+      });
+      setPromoListPreview(JSON.stringify(result, null, 2));
+      onMessage("Loaded promo ingestions.");
     } catch (error) {
       onMessage(errorToMessage(error));
     } finally {
@@ -667,12 +850,51 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
         onRadiusKmInputChange={setPriceQueryRadiusKm}
         interval={priceHistoryInterval}
         onIntervalChange={setPriceHistoryInterval}
+        includePromo={includePromo}
+        onToggleIncludePromo={() => setIncludePromo((previous) => !previous)}
         comparePreview={priceComparePreview}
         historyPreview={priceHistoryPreview}
         backfillPreview={priceBackfillPreview}
         onLoadCompare={handleLoadPriceCompare}
         onLoadHistory={handleLoadPriceHistory}
         onRunBackfill={handleBackfillPrices}
+      />
+
+      <PriceAlertsSection
+        item={alertItem}
+        onItemChange={setAlertItem}
+        targetUnitPrice={alertTargetUnitPrice}
+        onTargetUnitPriceChange={setAlertTargetUnitPrice}
+        radiusKm={alertRadiusKm}
+        onRadiusKmChange={setAlertRadiusKm}
+        areaText={alertAreaText}
+        onAreaTextChange={setAlertAreaText}
+        lat={alertLat}
+        onLatChange={setAlertLat}
+        lng={alertLng}
+        onLngChange={setAlertLng}
+        alertsPreview={alertsPreview}
+        eventsPreview={alertEventsPreview}
+        checkPreview={alertCheckPreview}
+        onCreateAlert={handleCreateAlert}
+        onLoadAlerts={handleLoadAlerts}
+        onCheckAlerts={handleCheckAlerts}
+        onLoadEvents={handleLoadAlertEvents}
+      />
+
+      <PromoIngestionSection
+        promoReady={Boolean(promoBase64 || promoUri)}
+        promoFileRef={promoFileRef}
+        merchantText={promoMerchantHint}
+        onMerchantTextChange={setPromoMerchantHint}
+        areaText={promoAreaHint}
+        onAreaTextChange={setPromoAreaHint}
+        promoIngestPreview={promoIngestPreview}
+        promoListPreview={promoListPreview}
+        onPickPromoCamera={() => choosePromo(true)}
+        onPickPromoGallery={() => choosePromo(false)}
+        onIngestPromo={handleIngestPromo}
+        onLoadPromos={handleLoadPromos}
       />
 
       {loading ? <ActivityIndicator style={styles.loader} /> : null}
