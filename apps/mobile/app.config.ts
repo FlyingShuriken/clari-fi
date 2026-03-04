@@ -60,6 +60,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ??
     env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ??
     '';
+  const sttOnDeviceEnabled =
+    process.env.EXPO_PUBLIC_STT_ON_DEVICE_ENABLED ??
+    env.EXPO_PUBLIC_STT_ON_DEVICE_ENABLED ??
+    'true';
 
   return {
     ...config,
@@ -67,6 +71,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ...(config.extra ?? {}),
       EXPO_PUBLIC_API_BASE_URL: apiBaseUrl,
       EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: clerkPublishableKey,
+      EXPO_PUBLIC_STT_ON_DEVICE_ENABLED: sttOnDeviceEnabled,
     },
   };
 };

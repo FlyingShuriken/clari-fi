@@ -1,14 +1,16 @@
 import { Button, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { RecognitionState } from './speech-recognition.service';
 import type { VoiceParseResult } from '../../shared/types';
 
 interface VoiceCaptureSectionProps {
   transcript: string;
   onTranscriptChange: (value: string) => void;
-  recordingReady: boolean;
+  recognitionState: RecognitionState;
+  recognizerAvailable: boolean | null;
   parseLatencyMs: number | null;
   parseResult: VoiceParseResult | null;
-  onStartRecording: () => void;
-  onStopRecording: () => void;
+  onStartListening: () => void;
+  onStopListening: () => void;
   onParseVoice: () => void;
   onConfirmVoice: () => void;
 }
@@ -22,21 +24,47 @@ export function VoiceCaptureSection(props: VoiceCaptureSectionProps) {
         style={styles.input}
         value={props.transcript}
         onChangeText={props.onTranscriptChange}
-        placeholder="Use keyboard dictation, then edit transcript here"
+        placeholder="Tap Start Listening, speak, then edit transcript if needed"
         multiline
       />
-      <Text style={styles.meta}>On-device path uses transcript directly.</Text>
+      <Text style={styles.meta}>On-device STT (primary) with transcript-first parsing.</Text>
 
       <View style={styles.row}>
-        <Button title="Start Recording" onPress={props.onStartRecording} />
-        <Button title="Stop Recording" onPress={props.onStopRecording} />
+        <Button
+          title="Start Listening"
+          onPress={props.onStartListening}
+          disabled={props.recognitionState === 'listening'}
+        />
+        <Button
+          title="Stop Listening"
+          onPress={props.onStopListening}
+          disabled={
+            props.recognitionState !== 'listening' &&
+            props.recognitionState !== 'processing'
+          }
+        />
       </View>
       <Text style={styles.meta}>
-        Audio fallback: {props.recordingReady ? 'Ready' : 'Not recorded'}
+        Recognizer available:{' '}
+        {props.recognizerAvailable == null
+          ? 'Checking...'
+          : props.recognizerAvailable
+            ? 'Yes'
+            : 'No'}
+      </Text>
+      <Text style={styles.meta}>
+        Recognition state: {props.recognitionState}
       </Text>
 
       <View style={styles.row}>
-        <Button title="Parse Voice" onPress={props.onParseVoice} />
+        <Button
+          title="Parse Voice"
+          onPress={props.onParseVoice}
+          disabled={
+            props.recognitionState === 'listening' ||
+            props.recognitionState === 'processing'
+          }
+        />
         <Button title="Confirm Expense" onPress={props.onConfirmVoice} />
       </View>
       <Text style={styles.meta}>

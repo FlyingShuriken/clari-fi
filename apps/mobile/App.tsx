@@ -2,10 +2,8 @@ import { ClerkProvider, SignedIn, SignedOut, useAuth, useUser } from '@clerk/cle
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   SafeAreaView,
@@ -17,6 +15,10 @@ import {
 import { AuthSection } from './src/features/auth/AuthSection';
 import { ClerkEmailSignInSection } from './src/features/auth/ClerkEmailSignInSection';
 import { ReceiptCaptureSection } from './src/features/capture/ReceiptCaptureSection';
+import {
+  speechRecognitionService,
+  type RecognitionState,
+} from './src/features/capture/speech-recognition.service';
 import { VoiceCaptureSection } from './src/features/capture/VoiceCaptureSection';
 import { InsightsSection } from './src/features/insights/InsightsSection';
 import {
@@ -48,6 +50,15 @@ const defaultApiBaseUrl =
 const publishableKey =
   String(Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '').trim() ||
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const onDeviceSttEnabled =
+  String(
+    Constants.expoConfig?.extra?.EXPO_PUBLIC_STT_ON_DEVICE_ENABLED ??
+      process.env.EXPO_PUBLIC_STT_ON_DEVICE_ENABLED ??
+      'true',
+  )
+    .trim()
+    .toLowerCase() !== 'false';
+const defaultSttLocale = 'ms-MY';
 
 function AuthGate() {
   const [message, setMessage] = useState('');
@@ -80,9 +91,8 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
   const [backendUserId, setBackendUserId] = useState('');
 
   const [transcriptInput, setTranscriptInput] = useState('');
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [recordedAudioBase64, setRecordedAudioBase64] = useState('');
-  const [recordedAudioFileRef, setRecordedAudioFileRef] = useState('');
+  const [recognitionState, setRecognitionState] = useState<RecognitionState>('idle');
+  const [recognizerAvailable, setRecognizerAvailable] = useState<boolean | null>(null);
 
   const [selectedReceiptUri, setSelectedReceiptUri] = useState('');
   const [selectedReceiptBase64, setSelectedReceiptBase64] = useState('');
@@ -101,6 +111,63 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
 
   const { getToken, signOut } = useAuth();
   const { user } = useUser();
+
+  useEffect(() => {
+    let mounted = true;
+
+    speechRecognitionService.configure({
+      onStart: () => {
+        setRecognitionState('listening');
+      },
+      onEnd: () => {
+        setRecognitionState((previousState) =>
+          previousState === 'listening' ? 'processing' : previousState,
+        );
+      },
+      onPartialResults: (transcript) => {
+        if (transcript) {
+          setTranscriptInput(transcript);
+        }
+      },
+      onFinalResults: (transcript) => {
+        if (!transcript.trim()) {
+          setRecognitionState('error');
+          onMessage(
+            'No speech recognized. Please try again or use keyboard dictation.',
+          );
+          return;
+        }
+
+        setTranscriptInput(transcript);
+        setRecognitionState('ready');
+        onMessage('Speech recognized on device. You can parse now.');
+      },
+      onError: (errorMessage) => {
+        setRecognitionState('error');
+        onMessage(errorMessage);
+      },
+    });
+
+    void speechRecognitionService
+      .isAvailable()
+      .then((available) => {
+        if (!mounted) {
+          return;
+        }
+        setRecognizerAvailable(available);
+      })
+      .catch(() => {
+        if (!mounted) {
+          return;
+        }
+        setRecognizerAvailable(false);
+      });
+
+    return () => {
+      mounted = false;
+      void speechRecognitionService.destroy();
+    };
+  }, [onMessage]);
 
   async function getBearerTokenOrThrow(): Promise<string> {
     const token = await getToken();
@@ -142,78 +209,55 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
     }
   }
 
-  async function startRecording() {
+  async function startListening() {
     onMessage('');
 
     try {
-      if (recording) {
+      if (!onDeviceSttEnabled) {
+        throw new Error(
+          'On-device STT is disabled. Enable EXPO_PUBLIC_STT_ON_DEVICE_ENABLED to use microphone STT.',
+        );
+      }
+
+      if (recognitionState === 'listening') {
         return;
       }
 
-      const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
-        throw new Error('Microphone permission denied.');
+      const available = await speechRecognitionService.isAvailable();
+      setRecognizerAvailable(available);
+      if (!available) {
+        throw new Error(
+          'Speech recognition is unavailable on this device. Use keyboard dictation as fallback.',
+        );
       }
 
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const created = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY,
-      );
-
       setVoiceParse(null);
-      setRecordedAudioBase64('');
-      setRecordedAudioFileRef('');
-      setRecording(created.recording);
-      onMessage('Recording started. Tap stop when done.');
+      setVoiceParseLatencyMs(null);
+      setTranscriptInput('');
+      setRecognitionState('processing');
+
+      await speechRecognitionService.start(defaultSttLocale);
+      onMessage('Listening... speak now, then tap stop.');
     } catch (error) {
+      setRecognitionState('error');
       onMessage(errorToMessage(error));
     }
   }
 
-  async function stopRecording() {
-    if (!recording) {
+  async function stopListening() {
+    if (recognitionState !== 'listening' && recognitionState !== 'processing') {
       return;
     }
 
-    setLoading(true);
     onMessage('');
 
     try {
-      await recording.stopAndUnloadAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-      });
-
-      const uri = recording.getURI();
-      setRecording(null);
-
-      if (!uri) {
-        throw new Error('Recording file URI is unavailable.');
-      }
-
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-
-      setRecordedAudioBase64(base64);
-
-      const token = await getBearerTokenOrThrow();
-      const uploaded = await uploadArtifact(normalizeBaseUrl(apiBaseUrl), token, {
-        kind: 'audio',
-        mimeType: 'audio/m4a',
-        fileBase64: base64,
-      });
-      setRecordedAudioFileRef(uploaded.fileRef);
-
-      onMessage('Audio fallback ready for parsing.');
+      setRecognitionState('processing');
+      await speechRecognitionService.stop();
+      onMessage('Processing speech...');
     } catch (error) {
+      setRecognitionState('error');
       onMessage(errorToMessage(error));
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -222,20 +266,24 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
     onMessage('');
 
     try {
-      if (!transcriptInput.trim() && !recordedAudioBase64) {
-        throw new Error('Provide transcript or record audio first.');
+      if (recognitionState === 'listening' || recognitionState === 'processing') {
+        throw new Error('Stop listening first before parsing.');
+      }
+
+      if (!transcriptInput.trim()) {
+        throw new Error('Provide transcript first (on-device STT or keyboard dictation).');
       }
 
       const token = await getBearerTokenOrThrow();
       const startedAt = Date.now();
       const result = await parseVoice(normalizeBaseUrl(apiBaseUrl), token, {
-        transcript: transcriptInput.trim() || undefined,
-        audioBase64: transcriptInput.trim() ? undefined : recordedAudioBase64,
-        locale: 'ms-MY',
-        deviceConfidence: transcriptInput.trim() ? 0.96 : undefined,
+        transcript: transcriptInput.trim(),
+        locale: defaultSttLocale,
+        deviceConfidence: 0.96,
       });
 
       setVoiceParse(result);
+      setRecognitionState('ready');
       setVoiceParseLatencyMs(Date.now() - startedAt);
       onMessage(`Voice parsed via ${result.parseMeta.parsePath}. Review and confirm.`);
     } catch (error) {
@@ -264,7 +312,6 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
           sttConfidence: voiceParse.sttConfidence,
           parsePath: voiceParse.parseMeta.parsePath,
           parseLatencyMs: voiceParse.parseMeta.parseLatencyMs,
-          audioFileRef: recordedAudioFileRef || null,
         },
       });
       onMessage('Voice expense saved.');
@@ -440,11 +487,12 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
       <VoiceCaptureSection
         transcript={transcriptInput}
         onTranscriptChange={setTranscriptInput}
-        recordingReady={Boolean(recordedAudioBase64)}
+        recognitionState={recognitionState}
+        recognizerAvailable={recognizerAvailable}
         parseLatencyMs={voiceParseLatencyMs}
         parseResult={voiceParse}
-        onStartRecording={startRecording}
-        onStopRecording={stopRecording}
+        onStartListening={startListening}
+        onStopListening={stopListening}
         onParseVoice={handleParseVoice}
         onConfirmVoice={handleConfirmVoice}
       />
