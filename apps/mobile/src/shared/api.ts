@@ -1,5 +1,8 @@
 import type {
   AuthVerifyResponse,
+  PriceBackfillResponse,
+  PriceCompareResponse,
+  PriceHistoryResponse,
   ReceiptParseResult,
   UploadArtifactResponse,
   VoiceParseResult,
@@ -124,4 +127,97 @@ export async function loadMonthlyReport(
       headers: { Authorization: `Bearer ${bearerToken}` },
     },
   );
+}
+
+export async function loadPriceCompare(
+  baseUrl: string,
+  bearerToken: string,
+  query: {
+    item: string;
+    area?: string;
+    lat?: number;
+    lng?: number;
+    radiusKm?: number;
+    limit?: number;
+  },
+): Promise<PriceCompareResponse> {
+  const params = new URLSearchParams({
+    item: query.item,
+  });
+
+  if (query.area) {
+    params.set('area', query.area);
+  }
+  if (typeof query.lat === 'number' && Number.isFinite(query.lat)) {
+    params.set('lat', String(query.lat));
+  }
+  if (typeof query.lng === 'number' && Number.isFinite(query.lng)) {
+    params.set('lng', String(query.lng));
+  }
+  if (typeof query.radiusKm === 'number' && Number.isFinite(query.radiusKm)) {
+    params.set('radiusKm', String(query.radiusKm));
+  }
+  if (typeof query.limit === 'number' && Number.isFinite(query.limit)) {
+    params.set('limit', String(query.limit));
+  }
+
+  return apiRequest<PriceCompareResponse>(baseUrl, `/prices/compare?${params.toString()}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function loadPriceHistory(
+  baseUrl: string,
+  bearerToken: string,
+  query: {
+    item: string;
+    area?: string;
+    storeId?: string;
+    from?: string;
+    to?: string;
+    interval?: 'day' | 'week';
+  },
+): Promise<PriceHistoryResponse> {
+  const params = new URLSearchParams({
+    item: query.item,
+  });
+
+  if (query.area) {
+    params.set('area', query.area);
+  }
+  if (query.storeId) {
+    params.set('storeId', query.storeId);
+  }
+  if (query.from) {
+    params.set('from', query.from);
+  }
+  if (query.to) {
+    params.set('to', query.to);
+  }
+  if (query.interval) {
+    params.set('interval', query.interval);
+  }
+
+  return apiRequest<PriceHistoryResponse>(baseUrl, `/prices/history?${params.toString()}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function runPriceBackfill(
+  baseUrl: string,
+  bearerToken: string,
+  input?: {
+    from?: string;
+    to?: string;
+    dryRun?: boolean;
+    scope?: 'user' | 'all';
+  },
+): Promise<PriceBackfillResponse> {
+  return apiRequest<PriceBackfillResponse>(baseUrl, '/prices/backfill', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input ?? {}),
+  });
 }

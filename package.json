@@ -8,6 +8,7 @@
     "dev:api": "pnpm --filter @clarifi/api start:dev",
     "dev:mobile": "pnpm --filter @clarifi/mobile start",
     "test": "pnpm --filter @clarifi/api test",
-    "acceptance:phase1": "pnpm --filter @clarifi/api acceptance:phase1"
+    "acceptance:phase1": "pnpm --filter @clarifi/api acceptance:phase1",
+    "acceptance:phase2": "pnpm --filter @clarifi/api acceptance:phase2"
   }
 }

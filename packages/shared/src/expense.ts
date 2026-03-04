@@ -77,6 +77,9 @@ export const ConfirmExpenseInputSchema = z.object({
   merchantText: z.string().optional(),
   paymentMethod: PaymentMethodSchema.optional(),
   transactionAt: z.string().datetime(),
+  locationLat: z.number().min(-90).max(90).optional(),
+  locationLng: z.number().min(-180).max(180).optional(),
+  areaText: z.string().optional(),
   parseLatencyMs: z.number().int().nonnegative().optional(),
   requiresCorrection: z.boolean().optional(),
   note: z.string().optional(),
@@ -94,6 +97,72 @@ export const ConfirmExpenseInputSchema = z.object({
     .optional(),
 });
 export type ConfirmExpenseInput = z.infer<typeof ConfirmExpenseInputSchema>;
+
+export const PriceHistoryPointSchema = z.object({
+  bucket: z.string(),
+  minUnitPrice: z.number().nonnegative(),
+  avgUnitPrice: z.number().nonnegative(),
+  maxUnitPrice: z.number().nonnegative(),
+  sampleSize: z.number().int().nonnegative(),
+});
+export type PriceHistoryPoint = z.infer<typeof PriceHistoryPointSchema>;
+
+export const PriceHistoryResponseSchema = z.object({
+  item: z
+    .object({
+      id: z.string(),
+      canonicalName: z.string(),
+      canonicalUnit: z.string().optional().nullable(),
+    })
+    .nullable(),
+  interval: z.enum(['day', 'week']),
+  totalObservations: z.number().int().nonnegative(),
+  points: z.array(PriceHistoryPointSchema),
+  generatedAt: z.string().datetime(),
+  userId: z.string(),
+});
+export type PriceHistoryResponse = z.infer<typeof PriceHistoryResponseSchema>;
+
+export const PriceCompareRowSchema = z.object({
+  storeId: z.string().optional(),
+  storeName: z.string().optional(),
+  areaText: z.string().optional(),
+  latestUnitPrice: z.number().nonnegative(),
+  averageUnitPrice: z.number().nonnegative(),
+  averageTrustScore: z.number().min(0).max(1),
+  sampleSize: z.number().int().nonnegative(),
+  lastObservedAt: z.string().datetime(),
+  distanceKm: z.number().nonnegative().optional(),
+});
+export type PriceCompareRow = z.infer<typeof PriceCompareRowSchema>;
+
+export const PriceCompareResponseSchema = z.object({
+  item: z
+    .object({
+      id: z.string(),
+      canonicalName: z.string(),
+      canonicalUnit: z.string().optional().nullable(),
+    })
+    .nullable(),
+  radiusKm: z.number().nonnegative().optional(),
+  rows: z.array(PriceCompareRowSchema),
+  generatedAt: z.string().datetime(),
+  userId: z.string(),
+});
+export type PriceCompareResponse = z.infer<typeof PriceCompareResponseSchema>;
+
+export const PriceBackfillResponseSchema = z.object({
+  scope: z.enum(['user', 'all']),
+  dryRun: z.boolean(),
+  expensesProcessed: z.number().int().nonnegative(),
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+  errors: z.number().int().nonnegative(),
+  requestedByUserId: z.string(),
+  generatedAt: z.string().datetime(),
+});
+export type PriceBackfillResponse = z.infer<typeof PriceBackfillResponseSchema>;
 
 export const MonthlyReportDtoSchema = z.object({
   year: z.number().int().min(2000),

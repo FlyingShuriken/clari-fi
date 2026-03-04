@@ -83,3 +83,60 @@ export interface UploadArtifactResponse {
   storageProvider: 'supabase' | 'local';
   publicUrl?: string;
 }
+
+export interface PriceHistoryPoint {
+  bucket: string;
+  minUnitPrice: number;
+  avgUnitPrice: number;
+  maxUnitPrice: number;
+  sampleSize: number;
+}
+
+export interface PriceHistoryResponse {
+  item: {
+    id: string;
+    canonicalName: string;
+    canonicalUnit?: string | null;
+  } | null;
+  interval: 'day' | 'week';
+  totalObservations: number;
+  points: PriceHistoryPoint[];
+  generatedAt: string;
+  userId: string;
+}
+
+export interface PriceCompareRow {
+  storeId?: string;
+  storeName?: string;
+  areaText?: string;
+  latestUnitPrice: number;
+  averageUnitPrice: number;
+  averageTrustScore: number;
+  sampleSize: number;
+  lastObservedAt: string;
+  distanceKm?: number;
+}
+
+export interface PriceCompareResponse {
+  item: {
+    id: string;
+    canonicalName: string;
+    canonicalUnit?: string | null;
+  } | null;
+  radiusKm?: number;
+  rows: PriceCompareRow[];
+  generatedAt: string;
+  userId: string;
+}
+
+export interface PriceBackfillResponse {
+  scope: 'user' | 'all';
+  dryRun: boolean;
+  expensesProcessed: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  requestedByUserId: string;
+  generatedAt: string;
+}

@@ -33,6 +33,25 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
     }
   }
 
+  const outlierThresholdRaw = asString(config.PRICE_OUTLIER_ZSCORE_THRESHOLD).trim();
+  if (outlierThresholdRaw) {
+    const threshold = Number(outlierThresholdRaw);
+    if (!Number.isFinite(threshold) || threshold <= 0) {
+      errors.push('PRICE_OUTLIER_ZSCORE_THRESHOLD must be a positive number');
+    }
+  }
+
+  const priceIntelligenceEnabled = asString(config.PRICE_INTELLIGENCE_ENABLED)
+    .trim()
+    .toLowerCase();
+  if (
+    priceIntelligenceEnabled &&
+    priceIntelligenceEnabled !== 'true' &&
+    priceIntelligenceEnabled !== 'false'
+  ) {
+    errors.push('PRICE_INTELLIGENCE_ENABLED must be true or false');
+  }
+
   if (errors.length > 0) {
     throw new Error(`Invalid environment:\n- ${errors.join('\n- ')}`);
   }

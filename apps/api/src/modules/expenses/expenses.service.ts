@@ -8,6 +8,7 @@ import {
 import { MetricsService } from '../../infrastructure/metrics/metrics.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import { PricesService } from '../prices/prices.service';
 import { ConfirmExpenseDto } from './dto/confirm-expense.dto';
 import { ListExpensesDto } from './dto/list-expenses.dto';
 
@@ -26,6 +27,7 @@ export class ExpensesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
+    private readonly pricesService: PricesService,
   ) {}
 
   async confirmExpense(user: AuthenticatedUser, dto: ConfirmExpenseDto) {
@@ -41,6 +43,15 @@ export class ExpensesService {
           merchantText: dto.merchantText,
           paymentMethod: dto.paymentMethod,
           transactionAt: new Date(dto.transactionAt),
+          locationLat:
+            typeof dto.locationLat === 'number'
+              ? new Prisma.Decimal(dto.locationLat)
+              : undefined,
+          locationLng:
+            typeof dto.locationLng === 'number'
+              ? new Prisma.Decimal(dto.locationLng)
+              : undefined,
+          areaText: dto.areaText,
           note: dto.note,
           parseLatencyMs: dto.parseLatencyMs,
           requiresCorrection: dto.requiresCorrection ?? false,
@@ -109,6 +120,21 @@ export class ExpensesService {
 
     if (dto.requiresCorrection) {
       this.metrics.trackCounter('expenses.requires_correction.count', 1, {
+        userId: user.id,
+      });
+    }
+
+    try {
+      const ingestResult = await this.pricesService.ingestExpense(created.id);
+      this.metrics.trackCounter('prices.ingest.expense_processed.count', 1, {
+        userId: user.id,
+        created: String(ingestResult.created),
+        updated: String(ingestResult.updated),
+        skipped: String(ingestResult.skipped),
+        errors: String(ingestResult.errors),
+      });
+    } catch {
+      this.metrics.trackCounter('prices.ingest.expense_failed.count', 1, {
         userId: user.id,
       });
     }

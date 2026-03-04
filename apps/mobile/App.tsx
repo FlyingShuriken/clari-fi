@@ -27,12 +27,16 @@ import {
 } from "./src/features/capture/speech-recognition.service";
 import { VoiceCaptureSection } from "./src/features/capture/VoiceCaptureSection";
 import { InsightsSection } from "./src/features/insights/InsightsSection";
+import { PriceIntelligenceSection } from "./src/features/prices/PriceIntelligenceSection";
 import {
   confirmExpense,
   listExpenses,
+  loadPriceCompare,
+  loadPriceHistory,
   loadMonthlyReport,
   parseReceipt,
   parseVoice,
+  runPriceBackfill,
   uploadArtifact,
   verifyClerkSessionToken,
 } from "./src/shared/api";
@@ -47,6 +51,15 @@ function errorToMessage(error: unknown): string {
 
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
+}
+
+function parseNumberInput(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 const defaultApiBaseUrl =
@@ -120,6 +133,17 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
   const [receiptParseLatencyMs, setReceiptParseLatencyMs] = useState<
     number | null
   >(null);
+  const [priceQueryItem, setPriceQueryItem] = useState("watermelon");
+  const [priceQueryArea, setPriceQueryArea] = useState("");
+  const [priceQueryLat, setPriceQueryLat] = useState("5.9804");
+  const [priceQueryLng, setPriceQueryLng] = useState("116.0735");
+  const [priceQueryRadiusKm, setPriceQueryRadiusKm] = useState("10");
+  const [priceHistoryInterval, setPriceHistoryInterval] = useState<"day" | "week">(
+    "day",
+  );
+  const [priceComparePreview, setPriceComparePreview] = useState("");
+  const [priceHistoryPreview, setPriceHistoryPreview] = useState("");
+  const [priceBackfillPreview, setPriceBackfillPreview] = useState("");
   const [ledgerPreview, setLedgerPreview] = useState("");
   const [reportPreview, setReportPreview] = useState("");
   const [loading, setLoading] = useState(false);
@@ -510,6 +534,80 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
     }
   }
 
+  async function handleLoadPriceCompare() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      if (!priceQueryItem.trim()) {
+        throw new Error("Enter an item name first.");
+      }
+
+      const token = await getBearerTokenOrThrow();
+      const lat = parseNumberInput(priceQueryLat);
+      const lng = parseNumberInput(priceQueryLng);
+      const radiusKm = parseNumberInput(priceQueryRadiusKm);
+      const result = await loadPriceCompare(normalizeBaseUrl(apiBaseUrl), token, {
+        item: priceQueryItem.trim(),
+        area: priceQueryArea.trim() || undefined,
+        lat,
+        lng,
+        radiusKm,
+        limit: 10,
+      });
+
+      setPriceComparePreview(JSON.stringify(result, null, 2));
+      onMessage("Loaded price comparison.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoadPriceHistory() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      if (!priceQueryItem.trim()) {
+        throw new Error("Enter an item name first.");
+      }
+
+      const token = await getBearerTokenOrThrow();
+      const result = await loadPriceHistory(normalizeBaseUrl(apiBaseUrl), token, {
+        item: priceQueryItem.trim(),
+        area: priceQueryArea.trim() || undefined,
+        interval: priceHistoryInterval,
+      });
+      setPriceHistoryPreview(JSON.stringify(result, null, 2));
+      onMessage("Loaded price history.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleBackfillPrices() {
+    setLoading(true);
+    onMessage("");
+
+    try {
+      const token = await getBearerTokenOrThrow();
+      const result = await runPriceBackfill(normalizeBaseUrl(apiBaseUrl), token, {
+        scope: "user",
+        dryRun: false,
+      });
+      setPriceBackfillPreview(JSON.stringify(result, null, 2));
+      onMessage("Backfill completed for current user scope.");
+    } catch (error) {
+      onMessage(errorToMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <View style={styles.appSection}>
       <AuthSection
@@ -554,6 +652,27 @@ function AuthenticatedApp({ message, onMessage }: AuthenticatedAppProps) {
         reportPreview={reportPreview}
         onLoadLedger={handleLoadLedger}
         onLoadReport={handleLoadReport}
+      />
+
+      <PriceIntelligenceSection
+        itemQuery={priceQueryItem}
+        onItemQueryChange={setPriceQueryItem}
+        areaQuery={priceQueryArea}
+        onAreaQueryChange={setPriceQueryArea}
+        latInput={priceQueryLat}
+        onLatInputChange={setPriceQueryLat}
+        lngInput={priceQueryLng}
+        onLngInputChange={setPriceQueryLng}
+        radiusKmInput={priceQueryRadiusKm}
+        onRadiusKmInputChange={setPriceQueryRadiusKm}
+        interval={priceHistoryInterval}
+        onIntervalChange={setPriceHistoryInterval}
+        comparePreview={priceComparePreview}
+        historyPreview={priceHistoryPreview}
+        backfillPreview={priceBackfillPreview}
+        onLoadCompare={handleLoadPriceCompare}
+        onLoadHistory={handleLoadPriceHistory}
+        onRunBackfill={handleBackfillPrices}
       />
 
       {loading ? <ActivityIndicator style={styles.loader} /> : null}

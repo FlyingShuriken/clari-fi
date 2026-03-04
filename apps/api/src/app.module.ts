@@ -10,6 +10,7 @@ import { ArtifactsModule } from './modules/artifacts/artifacts.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { ParseModule } from './modules/parse/parse.module';
+import { PricesModule } from './modules/prices/prices.module';
 import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { ReportsModule } from './modules/reports/reports.module';
     ArtifactsModule,
     ParseModule,
     ExpensesModule,
+    PricesModule,
     ReportsModule,
   ],
 })
