@@ -8,6 +8,7 @@ import type {
   PriceAlert,
   PriceCompareResponse,
   PriceHistoryResponse,
+  PriceSignalResponse,
   PromoIngestionItem,
   PromoReviewStatus,
   PushDevice,
@@ -269,6 +270,48 @@ export async function loadPriceHistory(
   }
 
   return apiRequest<PriceHistoryResponse>(baseUrl, `/prices/history?${params.toString()}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function loadPriceSignal(
+  baseUrl: string,
+  bearerToken: string,
+  query: {
+    item: string;
+    areaText?: string;
+    lat?: number;
+    lng?: number;
+    radiusKm?: number;
+    horizonDays?: number;
+    includePromo?: boolean;
+  },
+): Promise<PriceSignalResponse> {
+  const params = new URLSearchParams({
+    item: query.item,
+  });
+
+  if (query.areaText) {
+    params.set('areaText', query.areaText);
+  }
+  if (typeof query.lat === 'number' && Number.isFinite(query.lat)) {
+    params.set('lat', String(query.lat));
+  }
+  if (typeof query.lng === 'number' && Number.isFinite(query.lng)) {
+    params.set('lng', String(query.lng));
+  }
+  if (typeof query.radiusKm === 'number' && Number.isFinite(query.radiusKm)) {
+    params.set('radiusKm', String(query.radiusKm));
+  }
+  if (typeof query.horizonDays === 'number' && Number.isFinite(query.horizonDays)) {
+    params.set('horizonDays', String(query.horizonDays));
+  }
+  if (typeof query.includePromo === 'boolean') {
+    params.set('includePromo', String(query.includePromo));
+  }
+
+  return apiRequest<PriceSignalResponse>(baseUrl, `/prices/signal?${params.toString()}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${bearerToken}` },
   });

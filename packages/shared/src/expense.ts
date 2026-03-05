@@ -153,6 +153,53 @@ export const PriceCompareResponseSchema = z.object({
 });
 export type PriceCompareResponse = z.infer<typeof PriceCompareResponseSchema>;
 
+export const PriceSignalDecisionSchema = z.enum(['BUY_NOW', 'WAIT', 'NEUTRAL']);
+export type PriceSignalDecision = z.infer<typeof PriceSignalDecisionSchema>;
+
+export const PriceSignalReasonSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  value: z.number(),
+  weight: z.number(),
+});
+export type PriceSignalReason = z.infer<typeof PriceSignalReasonSchema>;
+
+export const PriceSignalDiagnosticsSchema = z.object({
+  score: z.number(),
+  latestUnitPrice: z.number().nonnegative(),
+  avg7d: z.number().nonnegative(),
+  avg30d: z.number().nonnegative(),
+  trendSlope7d: z.number(),
+  volatility30d: z.number().nonnegative(),
+  sampleSize30d: z.number().int().nonnegative(),
+  distinctDays30d: z.number().int().nonnegative(),
+  promoBestUnitPrice: z.number().nonnegative().optional(),
+  gatedNeutral: z.boolean(),
+  gateReason: z.enum(['LOW_DATA', 'LOW_CONFIDENCE']).optional(),
+});
+export type PriceSignalDiagnostics = z.infer<typeof PriceSignalDiagnosticsSchema>;
+
+export const PriceSignalResponseSchema = z.object({
+  item: z
+    .object({
+      id: z.string(),
+      canonicalName: z.string(),
+      canonicalUnit: z.string().optional().nullable(),
+    })
+    .nullable(),
+  decision: PriceSignalDecisionSchema,
+  confidence: z.number().min(0).max(1),
+  expectedDeltaPct: z.number(),
+  horizonDays: z.number().int().min(3).max(14),
+  sampleSize: z.number().int().nonnegative(),
+  reasons: z.array(PriceSignalReasonSchema),
+  diagnostics: PriceSignalDiagnosticsSchema,
+  generatedAt: z.string().datetime(),
+  userId: z.string(),
+  includePromo: z.boolean().optional(),
+});
+export type PriceSignalResponse = z.infer<typeof PriceSignalResponseSchema>;
+
 export const PriceBackfillResponseSchema = z.object({
   scope: z.enum(['user', 'all']),
   dryRun: z.boolean(),

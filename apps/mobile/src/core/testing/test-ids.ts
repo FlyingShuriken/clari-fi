@@ -58,6 +58,7 @@ export const TEST_IDS = {
     includePromoSwitch: 'prices.include_promo.switch',
     compareButton: 'prices.compare.button',
     historyButton: 'prices.history.button',
+    signalButton: 'prices.signal.button',
     promoCameraButton: 'prices.promo.camera.button',
     promoGalleryButton: 'prices.promo.gallery.button',
     promoIngestButton: 'prices.promo.ingest.button',

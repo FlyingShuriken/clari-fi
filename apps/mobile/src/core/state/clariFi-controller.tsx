@@ -25,6 +25,7 @@ import {
   loadMonthlyReport,
   loadPriceCompare,
   loadPriceHistory,
+  loadPriceSignal,
   markAllAlertEventsRead,
   parseReceipt,
   parseVoice,
@@ -44,6 +45,7 @@ import type {
   PriceAlert,
   PriceCompareResponse,
   PriceHistoryResponse,
+  PriceSignalResponse,
   PromoIngestionItem,
   ReceiptParseResult,
   SplitDetailResponse,
@@ -386,6 +388,7 @@ export interface ClariFiController {
   setIncludePromo: (value: boolean) => void;
   priceCompareResult: PriceCompareResponse | null;
   priceHistoryResult: PriceHistoryResponse | null;
+  priceSignalResult: PriceSignalResponse | null;
 
   alertItem: string;
   setAlertItem: (value: string) => void;
@@ -480,6 +483,7 @@ export interface ClariFiController {
 
   loadPriceCompareResult: () => Promise<void>;
   loadPriceHistoryResult: () => Promise<void>;
+  loadPriceSignalResult: () => Promise<void>;
 
   createAlert: () => Promise<void>;
   loadAlerts: () => Promise<void>;
@@ -525,6 +529,7 @@ function useClariFiControllerValue(): ClariFiController {
   const [includePromo, setIncludePromo] = useState(true);
   const [priceCompareResult, setPriceCompareResult] = useState<PriceCompareResponse | null>(null);
   const [priceHistoryResult, setPriceHistoryResult] = useState<PriceHistoryResponse | null>(null);
+  const [priceSignalResult, setPriceSignalResult] = useState<PriceSignalResponse | null>(null);
 
   const [alertItem, setAlertItem] = useState('watermelon');
   const [alertTargetUnitPrice, setAlertTargetUnitPrice] = useState('5');
@@ -1407,6 +1412,38 @@ function useClariFiControllerValue(): ClariFiController {
     runTask,
   ]);
 
+  const loadPriceSignalResult = useCallback(async () => {
+    await runTask(async () => {
+      if (!priceQueryItem.trim()) {
+        throw new Error('Enter an item name first.');
+      }
+
+      const token = await getBearerTokenOrThrow();
+      const result = await loadPriceSignal(normalizeBaseUrl(apiBaseUrl), token, {
+        item: priceQueryItem.trim(),
+        areaText: priceQueryArea.trim() || undefined,
+        lat: parseNumberInput(priceQueryLat),
+        lng: parseNumberInput(priceQueryLng),
+        radiusKm: parseNumberInput(priceQueryRadiusKm),
+        horizonDays: 7,
+        includePromo,
+      });
+
+      setPriceSignalResult(result);
+      setMessage('Loaded buy vs wait signal.');
+    });
+  }, [
+    apiBaseUrl,
+    getBearerTokenOrThrow,
+    includePromo,
+    priceQueryArea,
+    priceQueryItem,
+    priceQueryLat,
+    priceQueryLng,
+    priceQueryRadiusKm,
+    runTask,
+  ]);
+
   const createAlert = useCallback(async () => {
     await runTask(async () => {
       const targetUnitPrice = parseNumberInput(alertTargetUnitPrice);
@@ -1627,6 +1664,7 @@ function useClariFiControllerValue(): ClariFiController {
       setIncludePromo,
       priceCompareResult,
       priceHistoryResult,
+      priceSignalResult,
 
       alertItem,
       setAlertItem,
@@ -1690,6 +1728,7 @@ function useClariFiControllerValue(): ClariFiController {
 
       loadPriceCompareResult,
       loadPriceHistoryResult,
+      loadPriceSignalResult,
 
       createAlert,
       loadAlerts,
@@ -1742,6 +1781,7 @@ function useClariFiControllerValue(): ClariFiController {
       loadLedger,
       loadPriceCompareResult,
       loadPriceHistoryResult,
+      loadPriceSignalResult,
       loadPromos,
       loadReport,
       loadSplitSessions,
@@ -1757,6 +1797,7 @@ function useClariFiControllerValue(): ClariFiController {
       priceCompareResult,
       priceHistoryInterval,
       priceHistoryResult,
+      priceSignalResult,
       priceQueryArea,
       priceQueryItem,
       priceQueryLat,

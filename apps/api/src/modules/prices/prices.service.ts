@@ -29,9 +29,11 @@ import { ListAlertEventsDto } from './dto/list-alert-events.dto';
 import { ListPromosDto } from './dto/list-promos.dto';
 import { PriceCompareQueryDto } from './dto/price-compare-query.dto';
 import { PriceHistoryQueryDto } from './dto/price-history-query.dto';
+import { PriceSignalQueryDto } from './dto/price-signal-query.dto';
 import { ReviewPromoObservationsDto } from './dto/review-promo-observations.dto';
 import { UpdatePriceAlertDto } from './dto/update-price-alert.dto';
 import { ItemNormalizerService } from './item-normalizer.service';
+import { computePriceSignal } from './price-signal.utils';
 import {
   clamp01,
   computeTrustScore,
@@ -464,6 +466,103 @@ export class PricesService {
       },
       radiusKm: includeDistance ? query.radiusKm ?? 15 : undefined,
       rows,
+      generatedAt: new Date().toISOString(),
+      userId: user.id,
+      includePromo,
+    };
+  }
+
+  async getSignal(user: AuthenticatedUser, query: PriceSignalQueryDto) {
+    const startedAt = Date.now();
+    const includePromo = query.includePromo === true && this.isPromoEnabled();
+    const canonicalItem = await this.itemNormalizer.findCanonicalItemByQuery(query.item);
+
+    if (!canonicalItem) {
+      this.metrics.trackCounter('signals.request.count', 1, { result: 'item_not_found' });
+      this.metrics.trackCounter('signals.decision.count', 1, { decision: 'NEUTRAL' });
+      this.metrics.trackCounter('signals.neutral.low_data.count', 1);
+      this.metrics.trackTiming('signals.latency_ms', Date.now() - startedAt);
+      return {
+        item: null,
+        decision: 'NEUTRAL',
+        confidence: 0,
+        expectedDeltaPct: 0,
+        horizonDays: query.horizonDays ?? 7,
+        sampleSize: 0,
+        reasons: [
+          {
+            code: 'ITEM_NOT_FOUND',
+            label: 'No canonical item matched this query',
+            value: 0,
+            weight: 1,
+          },
+        ],
+        diagnostics: {
+          score: 0,
+          latestUnitPrice: 0,
+          avg7d: 0,
+          avg30d: 0,
+          trendSlope7d: 0,
+          volatility30d: 0,
+          sampleSize30d: 0,
+          distinctDays30d: 0,
+          gatedNeutral: true,
+          gateReason: 'LOW_DATA',
+        },
+        generatedAt: new Date().toISOString(),
+        userId: user.id,
+        includePromo,
+      };
+    }
+
+    const horizonDays =
+      typeof query.horizonDays === 'number' && Number.isFinite(query.horizonDays)
+        ? Math.max(3, Math.min(14, Math.floor(query.horizonDays)))
+        : 7;
+
+    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const observations = await this.loadPriceCandidates({
+      canonicalItemId: canonicalItem.id,
+      areaText: query.areaText,
+      lat: query.lat,
+      lng: query.lng,
+      radiusKm: query.radiusKm ?? 15,
+      from,
+      includePromo,
+    });
+
+    const signal = computePriceSignal({
+      observations: observations.map((row) => ({
+        unitPrice: row.unitPrice,
+        observedAt: row.observedAt,
+        source: row.source,
+      })),
+      horizonDays,
+    });
+
+    this.metrics.trackCounter('signals.request.count', 1, { result: 'ok' });
+    this.metrics.trackCounter('signals.decision.count', 1, { decision: signal.decision });
+    this.metrics.trackCounter('signals.confidence.score_x1000', Math.round(signal.confidence * 1000), {
+      decision: signal.decision,
+    });
+    if (signal.decision === 'NEUTRAL' && signal.diagnostics.gateReason === 'LOW_DATA') {
+      this.metrics.trackCounter('signals.neutral.low_data.count', 1);
+    }
+    this.metrics.trackTiming('signals.latency_ms', Date.now() - startedAt);
+
+    return {
+      item: {
+        id: canonicalItem.id,
+        canonicalName: canonicalItem.canonicalName,
+        canonicalUnit: canonicalItem.canonicalUnit,
+      },
+      decision: signal.decision,
+      confidence: signal.confidence,
+      expectedDeltaPct: signal.expectedDeltaPct,
+      horizonDays,
+      sampleSize: signal.sampleSize,
+      reasons: signal.reasons,
+      diagnostics: signal.diagnostics,
       generatedAt: new Date().toISOString(),
       userId: user.id,
       includePromo,

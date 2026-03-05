@@ -96,6 +96,15 @@ export function PricesScreen() {
             >
               History
             </Button>
+            <Button
+              mode="text"
+              onPress={controller.loadPriceSignalResult}
+              disabled={controller.loading}
+              icon="lightning-bolt-outline"
+              testID={TEST_IDS.prices.signalButton}
+            >
+              Buy vs Wait
+            </Button>
           </View>
 
           {controller.priceCompareResult ? (
@@ -145,6 +154,52 @@ export function PricesScreen() {
                   </View>
                 ))
               )}
+            </>
+          ) : null}
+
+          {controller.priceSignalResult ? (
+            <>
+              <Divider />
+              <Text variant="titleSmall">Buy now vs wait signal</Text>
+              <Card mode="outlined" style={styles.innerCard}>
+                <Card.Content style={styles.listBlock}>
+                  <View style={styles.rowBetween}>
+                    <Chip
+                      icon={
+                        controller.priceSignalResult.decision === 'BUY_NOW'
+                          ? 'cart-check'
+                          : controller.priceSignalResult.decision === 'WAIT'
+                            ? 'clock-outline'
+                            : 'minus-circle-outline'
+                      }
+                    >
+                      {controller.priceSignalResult.decision}
+                    </Chip>
+                    <Text variant="bodySmall" style={styles.meta}>
+                      Confidence {(controller.priceSignalResult.confidence * 100).toFixed(1)}%
+                    </Text>
+                  </View>
+                  <Text variant="bodySmall" style={styles.meta}>
+                    Horizon {controller.priceSignalResult.horizonDays}d · Expected delta{' '}
+                    {controller.priceSignalResult.expectedDeltaPct.toFixed(2)}%
+                  </Text>
+                  <Text variant="bodySmall" style={styles.meta}>
+                    Latest {controller.formatCurrency(controller.priceSignalResult.diagnostics.latestUnitPrice)} · Avg
+                    30d {controller.formatCurrency(controller.priceSignalResult.diagnostics.avg30d)}
+                  </Text>
+                  {controller.priceSignalResult.reasons.map((reason) => (
+                    <Text key={reason.code} variant="bodySmall" style={styles.meta}>
+                      • {reason.label}
+                    </Text>
+                  ))}
+                  {controller.priceSignalResult.diagnostics.gatedNeutral &&
+                  controller.priceSignalResult.diagnostics.gateReason ? (
+                    <Text variant="bodySmall" style={styles.meta}>
+                      Gate: {controller.priceSignalResult.diagnostics.gateReason}
+                    </Text>
+                  ) : null}
+                </Card.Content>
+              </Card>
             </>
           ) : null}
 

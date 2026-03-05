@@ -20,6 +20,7 @@ import { ListAlertEventsDto } from './dto/list-alert-events.dto';
 import { ListPromosDto } from './dto/list-promos.dto';
 import { PriceCompareQueryDto } from './dto/price-compare-query.dto';
 import { PriceHistoryQueryDto } from './dto/price-history-query.dto';
+import { PriceSignalQueryDto } from './dto/price-signal-query.dto';
 import { ReviewPromoObservationsDto } from './dto/review-promo-observations.dto';
 import { UpdatePriceAlertDto } from './dto/update-price-alert.dto';
 import { PricesService } from './prices.service';
@@ -43,6 +44,14 @@ export class PricesController {
     @Query() query: PriceCompareQueryDto,
   ) {
     return this.pricesService.compare(user, query);
+  }
+
+  @Get('signal')
+  async signal(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: PriceSignalQueryDto,
+  ) {
+    return this.pricesService.getSignal(user, query);
   }
 
   @Post('backfill')

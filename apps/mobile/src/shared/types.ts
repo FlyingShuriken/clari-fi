@@ -131,6 +131,45 @@ export interface PriceCompareResponse {
   includePromo?: boolean;
 }
 
+export type PriceSignalDecision = 'BUY_NOW' | 'WAIT' | 'NEUTRAL';
+
+export interface PriceSignalReason {
+  code: string;
+  label: string;
+  value: number;
+  weight: number;
+}
+
+export interface PriceSignalResponse {
+  item: {
+    id: string;
+    canonicalName: string;
+    canonicalUnit?: string | null;
+  } | null;
+  decision: PriceSignalDecision;
+  confidence: number;
+  expectedDeltaPct: number;
+  horizonDays: number;
+  sampleSize: number;
+  reasons: PriceSignalReason[];
+  diagnostics: {
+    score: number;
+    latestUnitPrice: number;
+    avg7d: number;
+    avg30d: number;
+    trendSlope7d: number;
+    volatility30d: number;
+    sampleSize30d: number;
+    distinctDays30d: number;
+    promoBestUnitPrice?: number;
+    gatedNeutral: boolean;
+    gateReason?: 'LOW_DATA' | 'LOW_CONFIDENCE';
+  };
+  generatedAt: string;
+  userId: string;
+  includePromo?: boolean;
+}
+
 export type ObservationSource = 'EXPENSE' | 'PROMO';
 
 export interface PriceAlert {
