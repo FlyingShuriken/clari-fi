@@ -7,12 +7,21 @@ import { Platform } from 'react-native';
 import { speechRecognitionService, type RecognitionState } from '../../features/capture/speech-recognition.service';
 import {
   confirmExpense,
+  createFamily,
+  createFamilyInvite,
   createPriceAlert,
+  createSplit,
+  finalizeSplit,
+  getSplit,
+  getSplitBalances,
   ingestPromo,
+  joinFamilyByCode,
   listAlertEvents,
   listExpenses,
+  listFamilies,
   listPriceAlerts,
   listPromos,
+  listSplits,
   loadMonthlyReport,
   loadPriceCompare,
   loadPriceHistory,
@@ -20,17 +29,25 @@ import {
   parseReceipt,
   parseVoice,
   registerPushDevice,
+  removeFamilyMember,
   revokePushDevice,
   uploadArtifact,
+  updateFamilyMemberRole,
+  updateSplitAllocations,
+  updateSplitParticipants,
   verifyClerkSessionToken,
 } from '../../shared/api';
 import type {
   AlertEvent,
+  FamilyProfile,
+  FamilyRole,
   PriceAlert,
   PriceCompareResponse,
   PriceHistoryResponse,
   PromoIngestionItem,
   ReceiptParseResult,
+  SplitDetailResponse,
+  SplitSummary,
   VoiceParseResult,
 } from '../../shared/types';
 
@@ -77,6 +94,32 @@ function parseNumberInput(value: string): number | undefined {
   }
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function parseCsvList(value: string): string[] {
+  return value
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function parseLineAssignments(value: string): Array<{ expenseLineItemId: string; participantIds: string[] }> {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [left, right] = line.split('=');
+      const expenseLineItemId = (left ?? '').trim();
+      const participantIds = parseCsvList(right ?? '');
+      if (!expenseLineItemId || participantIds.length === 0) {
+        throw new Error(`Invalid assignment row: "${line}". Use format lineItemId=participantId1,participantId2`);
+      }
+      return {
+        expenseLineItemId,
+        participantIds,
+      };
+    });
 }
 
 function toNumber(value: unknown): number {
@@ -277,6 +320,56 @@ export interface ClariFiController {
   ledgerTotal: number;
   reportSummary: ReportSummary | null;
 
+  families: FamilyProfile[];
+  activeFamilyId: string;
+  setActiveFamilyId: (value: string) => void;
+  familyNameInput: string;
+  setFamilyNameInput: (value: string) => void;
+  familyInviteCodeInput: string;
+  setFamilyInviteCodeInput: (value: string) => void;
+  familyInviteLatestCode: string;
+  familyRoleTarget: FamilyRole;
+  setFamilyRoleTarget: (value: FamilyRole) => void;
+  familyMemberIdInput: string;
+  setFamilyMemberIdInput: (value: string) => void;
+
+  splitExpenseIdInput: string;
+  setSplitExpenseIdInput: (value: string) => void;
+  splitTitleInput: string;
+  setSplitTitleInput: (value: string) => void;
+  splitSharedChargeInput: string;
+  setSplitSharedChargeInput: (value: string) => void;
+  splitParticipantMemberIdsInput: string;
+  setSplitParticipantMemberIdsInput: (value: string) => void;
+  splitParticipantGuestNamesInput: string;
+  setSplitParticipantGuestNamesInput: (value: string) => void;
+  splitPayerParticipantIdInput: string;
+  setSplitPayerParticipantIdInput: (value: string) => void;
+  splitAssignmentsInput: string;
+  setSplitAssignmentsInput: (value: string) => void;
+  splitSummaries: SplitSummary[];
+  splitDetail: SplitDetailResponse | null;
+  splitBalanceSummary:
+    | {
+        splitId: string;
+        status: 'DRAFT' | 'FINALIZED' | 'CANCELLED';
+        balances: Array<{
+          participantId: string;
+          displayName: string;
+          owedAmount: number;
+          paidAmount: number;
+          netAmount: number;
+        }>;
+        settlements: Array<{
+          fromParticipantId: string;
+          toParticipantId: string;
+          amount: number;
+        }>;
+      }
+    | null;
+  activeSplitId: string;
+  setActiveSplitId: (value: string) => void;
+
   priceQueryItem: string;
   setPriceQueryItem: (value: string) => void;
   priceQueryArea: string;
@@ -337,6 +430,53 @@ export interface ClariFiController {
 
   loadLedger: () => Promise<void>;
   loadReport: () => Promise<void>;
+
+  createFamilyProfile: () => Promise<void>;
+  loadFamiliesList: () => Promise<void>;
+  createActiveFamilyInvite: () => Promise<void>;
+  joinFamilyByInviteCode: () => Promise<void>;
+  updateFamilyMemberRoleById: (memberId: string, role: FamilyRole) => Promise<void>;
+  removeFamilyMemberById: (memberId: string) => Promise<void>;
+  updateFamilyMemberRoleAction: () => Promise<void>;
+  removeFamilyMemberAction: () => Promise<void>;
+
+  createSplitDraft: (input: {
+    familyId: string;
+    expenseId?: string;
+    title?: string;
+    sharedCharge?: number;
+    participantFamilyMemberIds?: string[];
+    guestParticipants?: string[];
+  }) => Promise<void>;
+  loadSplitDetailById: (splitId: string) => Promise<void>;
+  updateSplitParticipantsById: (
+    splitId: string,
+    participants: Array<{
+      familyMemberId?: string;
+      displayName?: string;
+      isPayer?: boolean;
+      paidAmount?: number;
+    }>,
+  ) => Promise<void>;
+  updateSplitAllocationsById: (
+    splitId: string,
+    input: {
+      lineAssignments: Array<{
+        expenseLineItemId: string;
+        participantIds: string[];
+      }>;
+      sharedCharge?: number;
+    },
+  ) => Promise<void>;
+  finalizeSplitById: (splitId: string) => Promise<void>;
+  loadSplitBalancesById: (splitId: string) => Promise<void>;
+  createSplitSessionAction: () => Promise<void>;
+  loadSplitSessions: () => Promise<void>;
+  loadActiveSplitDetail: () => Promise<void>;
+  saveSplitParticipantsAction: () => Promise<void>;
+  saveSplitAllocationsAction: () => Promise<void>;
+  finalizeActiveSplit: () => Promise<void>;
+  loadActiveSplitBalances: () => Promise<void>;
 
   loadPriceCompareResult: () => Promise<void>;
   loadPriceHistoryResult: () => Promise<void>;
@@ -413,6 +553,41 @@ function useClariFiControllerValue(): ClariFiController {
 
   const [ledgerItems, setLedgerItems] = useState<LedgerExpense[]>([]);
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
+
+  const [families, setFamilies] = useState<FamilyProfile[]>([]);
+  const [activeFamilyId, setActiveFamilyId] = useState('');
+  const [familyNameInput, setFamilyNameInput] = useState('');
+  const [familyInviteCodeInput, setFamilyInviteCodeInput] = useState('');
+  const [familyInviteLatestCode, setFamilyInviteLatestCode] = useState('');
+  const [familyRoleTarget, setFamilyRoleTarget] = useState<FamilyRole>('VIEWER');
+  const [familyMemberIdInput, setFamilyMemberIdInput] = useState('');
+
+  const [splitExpenseIdInput, setSplitExpenseIdInput] = useState('');
+  const [splitTitleInput, setSplitTitleInput] = useState('');
+  const [splitSharedChargeInput, setSplitSharedChargeInput] = useState('0');
+  const [splitParticipantMemberIdsInput, setSplitParticipantMemberIdsInput] = useState('');
+  const [splitParticipantGuestNamesInput, setSplitParticipantGuestNamesInput] = useState('');
+  const [splitPayerParticipantIdInput, setSplitPayerParticipantIdInput] = useState('');
+  const [splitAssignmentsInput, setSplitAssignmentsInput] = useState('');
+  const [splitSummaries, setSplitSummaries] = useState<SplitSummary[]>([]);
+  const [splitDetail, setSplitDetail] = useState<SplitDetailResponse | null>(null);
+  const [splitBalanceSummary, setSplitBalanceSummary] = useState<{
+    splitId: string;
+    status: 'DRAFT' | 'FINALIZED' | 'CANCELLED';
+    balances: Array<{
+      participantId: string;
+      displayName: string;
+      owedAmount: number;
+      paidAmount: number;
+      netAmount: number;
+    }>;
+    settlements: Array<{
+      fromParticipantId: string;
+      toParticipantId: string;
+      amount: number;
+    }>;
+  } | null>(null);
+  const [activeSplitId, setActiveSplitId] = useState('');
 
   const signedInEmail =
     user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? '-';
@@ -794,6 +969,385 @@ function useClariFiControllerValue(): ClariFiController {
     });
   }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
 
+  const loadFamiliesList = useCallback(async () => {
+    await runTask(async () => {
+      const token = await getBearerTokenOrThrow();
+      const result = await listFamilies(normalizeBaseUrl(apiBaseUrl), token);
+      setFamilies(result.items);
+      if (result.items.length > 0) {
+        const hasActive = result.items.some((item) => item.id === activeFamilyId);
+        if (!hasActive) {
+          setActiveFamilyId(result.items[0]?.id ?? '');
+        }
+      }
+      setMessage(`Loaded ${result.items.length} families.`);
+    });
+  }, [activeFamilyId, apiBaseUrl, getBearerTokenOrThrow, runTask]);
+
+  const createFamilyProfile = useCallback(async () => {
+    await runTask(async () => {
+      if (!familyNameInput.trim()) {
+        throw new Error('Enter a family name first.');
+      }
+
+      const token = await getBearerTokenOrThrow();
+      const result = await createFamily(normalizeBaseUrl(apiBaseUrl), token, {
+        name: familyNameInput.trim(),
+      });
+      setFamilies((previous) => [result.family, ...previous.filter((item) => item.id !== result.family.id)]);
+      setActiveFamilyId(result.family.id);
+      setFamilyNameInput('');
+      setMessage(`Family created: ${result.family.name}`);
+    });
+  }, [apiBaseUrl, familyNameInput, getBearerTokenOrThrow, runTask]);
+
+  const createActiveFamilyInvite = useCallback(async () => {
+    await runTask(async () => {
+      if (!activeFamilyId) {
+        throw new Error('Select an active family first.');
+      }
+      const token = await getBearerTokenOrThrow();
+      const result = await createFamilyInvite(normalizeBaseUrl(apiBaseUrl), token, activeFamilyId);
+      setFamilyInviteLatestCode(result.invite.code);
+      setMessage(`Invite code created: ${result.invite.code}`);
+      const refreshed = await listFamilies(normalizeBaseUrl(apiBaseUrl), token);
+      setFamilies(refreshed.items);
+    });
+  }, [activeFamilyId, apiBaseUrl, getBearerTokenOrThrow, runTask]);
+
+  const joinFamilyByInviteCode = useCallback(async () => {
+    await runTask(async () => {
+      if (!familyInviteCodeInput.trim()) {
+        throw new Error('Enter invite code first.');
+      }
+      const token = await getBearerTokenOrThrow();
+      const result = await joinFamilyByCode(normalizeBaseUrl(apiBaseUrl), token, {
+        code: familyInviteCodeInput.trim().toUpperCase(),
+      });
+      setFamilyInviteCodeInput('');
+      setFamilies((previous) => [
+        result.family,
+        ...previous.filter((item) => item.id !== result.family.id),
+      ]);
+      setActiveFamilyId(result.family.id);
+      setMessage(`Joined family: ${result.family.name}`);
+    });
+  }, [apiBaseUrl, familyInviteCodeInput, getBearerTokenOrThrow, runTask]);
+
+  const updateFamilyMemberRoleById = useCallback(
+    async (memberId: string, role: FamilyRole) => {
+      await runTask(async () => {
+        if (!activeFamilyId || !memberId.trim()) {
+          throw new Error('Provide active family and member.');
+        }
+        const token = await getBearerTokenOrThrow();
+        await updateFamilyMemberRole(
+          normalizeBaseUrl(apiBaseUrl),
+          token,
+          activeFamilyId,
+          memberId.trim(),
+          { role },
+        );
+        const refreshed = await listFamilies(normalizeBaseUrl(apiBaseUrl), token);
+        setFamilies(refreshed.items);
+        setMessage('Family member role updated.');
+      });
+    },
+    [activeFamilyId, apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  const removeFamilyMemberById = useCallback(
+    async (memberId: string) => {
+      await runTask(async () => {
+        if (!activeFamilyId || !memberId.trim()) {
+          throw new Error('Provide active family and member.');
+        }
+        const token = await getBearerTokenOrThrow();
+        await removeFamilyMember(
+          normalizeBaseUrl(apiBaseUrl),
+          token,
+          activeFamilyId,
+          memberId.trim(),
+        );
+        const refreshed = await listFamilies(normalizeBaseUrl(apiBaseUrl), token);
+        setFamilies(refreshed.items);
+        setMessage('Family member removed.');
+      });
+    },
+    [activeFamilyId, apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  const updateFamilyMemberRoleAction = useCallback(async () => {
+    await updateFamilyMemberRoleById(familyMemberIdInput, familyRoleTarget);
+  }, [familyMemberIdInput, familyRoleTarget, updateFamilyMemberRoleById]);
+
+  const removeFamilyMemberAction = useCallback(async () => {
+    await removeFamilyMemberById(familyMemberIdInput);
+  }, [familyMemberIdInput, removeFamilyMemberById]);
+
+  const createSplitDraft = useCallback(
+    async (input: {
+      familyId: string;
+      expenseId?: string;
+      title?: string;
+      sharedCharge?: number;
+      participantFamilyMemberIds?: string[];
+      guestParticipants?: string[];
+    }) => {
+      await runTask(async () => {
+        if (!input.familyId) {
+          throw new Error('Select a family first.');
+        }
+
+        const token = await getBearerTokenOrThrow();
+        const result = await createSplit(normalizeBaseUrl(apiBaseUrl), token, {
+          familyId: input.familyId,
+          expenseId: input.expenseId,
+          title: input.title,
+          sharedCharge: input.sharedCharge ?? 0,
+          participantFamilyMemberIds: input.participantFamilyMemberIds ?? [],
+          guestParticipants: input.guestParticipants ?? [],
+        });
+        setSplitDetail(result);
+        setActiveSplitId(result.split.id);
+        setSplitBalanceSummary(null);
+        setMessage(`Split created: ${result.split.id}`);
+      });
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  const loadSplitDetailById = useCallback(
+    async (splitId: string) => {
+      await runTask(async () => {
+        if (!splitId.trim()) {
+          throw new Error('Provide split ID.');
+        }
+        const token = await getBearerTokenOrThrow();
+        const result = await getSplit(normalizeBaseUrl(apiBaseUrl), token, splitId.trim());
+        setActiveSplitId(result.split.id);
+        setSplitDetail(result);
+        setMessage('Split detail loaded.');
+      });
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  const updateSplitParticipantsById = useCallback(
+    async (
+      splitId: string,
+      participants: Array<{
+        familyMemberId?: string;
+        displayName?: string;
+        isPayer?: boolean;
+        paidAmount?: number;
+      }>,
+    ) => {
+      await runTask(async () => {
+        if (!splitId.trim()) {
+          throw new Error('Provide split ID.');
+        }
+        if (participants.length === 0) {
+          throw new Error('At least one participant is required.');
+        }
+        const token = await getBearerTokenOrThrow();
+        const result = await updateSplitParticipants(normalizeBaseUrl(apiBaseUrl), token, splitId, {
+          participants,
+        });
+        setActiveSplitId(result.split.id);
+        setSplitDetail(result);
+        setMessage('Split participants saved.');
+      });
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  const updateSplitAllocationsById = useCallback(
+    async (
+      splitId: string,
+      input: {
+        lineAssignments: Array<{
+          expenseLineItemId: string;
+          participantIds: string[];
+        }>;
+        sharedCharge?: number;
+      },
+    ) => {
+      await runTask(async () => {
+        if (!splitId.trim()) {
+          throw new Error('Provide split ID.');
+        }
+        const token = await getBearerTokenOrThrow();
+        const result = await updateSplitAllocations(normalizeBaseUrl(apiBaseUrl), token, splitId, input);
+        setActiveSplitId(result.split.id);
+        setSplitDetail(result);
+        setMessage('Split allocations saved.');
+      });
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  const finalizeSplitById = useCallback(
+    async (splitId: string) => {
+      await runTask(async () => {
+        if (!splitId.trim()) {
+          throw new Error('Provide split ID.');
+        }
+        const token = await getBearerTokenOrThrow();
+        const result = await finalizeSplit(normalizeBaseUrl(apiBaseUrl), token, splitId);
+        setActiveSplitId(result.split.id);
+        setSplitDetail(result);
+        setMessage('Split finalized.');
+      });
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  const loadSplitBalancesById = useCallback(
+    async (splitId: string) => {
+      await runTask(async () => {
+        if (!splitId.trim()) {
+          throw new Error('Provide split ID.');
+        }
+        const token = await getBearerTokenOrThrow();
+        const result = await getSplitBalances(normalizeBaseUrl(apiBaseUrl), token, splitId);
+        setActiveSplitId(result.splitId);
+        setSplitBalanceSummary({
+          splitId: result.splitId,
+          status: result.status,
+          balances: result.balances,
+          settlements: result.settlements,
+        });
+        setMessage('Split balances loaded.');
+      });
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  const createSplitSessionAction = useCallback(async () => {
+    await createSplitDraft({
+      familyId: activeFamilyId,
+      expenseId: splitExpenseIdInput.trim() || undefined,
+      title: splitTitleInput.trim() || undefined,
+      sharedCharge: parseNumberInput(splitSharedChargeInput) ?? 0,
+      participantFamilyMemberIds: parseCsvList(splitParticipantMemberIdsInput),
+      guestParticipants: parseCsvList(splitParticipantGuestNamesInput),
+    });
+  }, [
+    activeFamilyId,
+    createSplitDraft,
+    splitExpenseIdInput,
+    splitParticipantGuestNamesInput,
+    splitParticipantMemberIdsInput,
+    splitSharedChargeInput,
+    splitTitleInput,
+  ]);
+
+  const loadSplitSessions = useCallback(async () => {
+    await runTask(async () => {
+      if (!activeFamilyId) {
+        throw new Error('Select an active family first.');
+      }
+      const token = await getBearerTokenOrThrow();
+      const result = await listSplits(normalizeBaseUrl(apiBaseUrl), token, {
+        familyId: activeFamilyId,
+        limit: 20,
+      });
+      setSplitSummaries(result.items);
+      if (result.items.length > 0 && !activeSplitId) {
+        setActiveSplitId(result.items[0]?.id ?? '');
+      }
+      setMessage(`Loaded ${result.items.length} split sessions.`);
+    });
+  }, [activeFamilyId, activeSplitId, apiBaseUrl, getBearerTokenOrThrow, runTask]);
+
+  const loadActiveSplitDetail = useCallback(async () => {
+    await loadSplitDetailById(activeSplitId);
+  }, [activeSplitId, loadSplitDetailById]);
+
+  const saveSplitParticipantsAction = useCallback(async () => {
+    await runTask(async () => {
+      if (!activeSplitId.trim()) {
+        throw new Error('Provide active split ID.');
+      }
+      const memberIds = parseCsvList(splitParticipantMemberIdsInput);
+      const guestNames = parseCsvList(splitParticipantGuestNamesInput);
+      const fallbackTotal = splitDetail?.split.totalAmount ?? 0;
+
+      const participants = [
+        ...memberIds.map((familyMemberId) => ({
+          familyMemberId,
+          isPayer: false,
+          paidAmount: 0,
+        })),
+        ...guestNames.map((displayName) => ({
+          displayName,
+          isPayer: false,
+          paidAmount: 0,
+        })),
+      ];
+
+      if (participants.length === 0) {
+        throw new Error('Provide participant member IDs or guest names.');
+      }
+
+      const targetPayer = splitPayerParticipantIdInput.trim();
+      if (targetPayer) {
+        for (const participant of participants) {
+          if ('familyMemberId' in participant && participant.familyMemberId === targetPayer) {
+            participant.isPayer = true;
+            participant.paidAmount = fallbackTotal;
+          }
+        }
+      }
+
+      if (!participants.some((participant) => participant.isPayer)) {
+        participants[0] = {
+          ...participants[0],
+          isPayer: true,
+          paidAmount: fallbackTotal,
+        };
+      }
+
+      await updateSplitParticipantsById(activeSplitId, participants);
+    });
+  }, [
+    activeSplitId,
+    runTask,
+    splitDetail?.split.totalAmount,
+    splitParticipantGuestNamesInput,
+    splitParticipantMemberIdsInput,
+    splitPayerParticipantIdInput,
+    updateSplitParticipantsById,
+  ]);
+
+  const saveSplitAllocationsAction = useCallback(async () => {
+    await runTask(async () => {
+      if (!activeSplitId.trim()) {
+        throw new Error('Provide active split ID.');
+      }
+      const lineAssignments = parseLineAssignments(splitAssignmentsInput);
+      await updateSplitAllocationsById(activeSplitId, {
+        lineAssignments,
+        sharedCharge: parseNumberInput(splitSharedChargeInput),
+      });
+    });
+  }, [
+    activeSplitId,
+    runTask,
+    splitAssignmentsInput,
+    splitSharedChargeInput,
+    updateSplitAllocationsById,
+  ]);
+
+  const finalizeActiveSplit = useCallback(async () => {
+    await finalizeSplitById(activeSplitId);
+  }, [activeSplitId, finalizeSplitById]);
+
+  const loadActiveSplitBalances = useCallback(async () => {
+    await loadSplitBalancesById(activeSplitId);
+  }, [activeSplitId, loadSplitBalancesById]);
+
   const loadPriceCompareResult = useCallback(async () => {
     await runTask(async () => {
       if (!priceQueryItem.trim()) {
@@ -1024,6 +1578,39 @@ function useClariFiControllerValue(): ClariFiController {
       ledgerTotal: ledgerItems.reduce((acc, item) => acc + item.totalAmount, 0),
       reportSummary,
 
+      families,
+      activeFamilyId,
+      setActiveFamilyId,
+      familyNameInput,
+      setFamilyNameInput,
+      familyInviteCodeInput,
+      setFamilyInviteCodeInput,
+      familyInviteLatestCode,
+      familyRoleTarget,
+      setFamilyRoleTarget,
+      familyMemberIdInput,
+      setFamilyMemberIdInput,
+
+      splitExpenseIdInput,
+      setSplitExpenseIdInput,
+      splitTitleInput,
+      setSplitTitleInput,
+      splitSharedChargeInput,
+      setSplitSharedChargeInput,
+      splitParticipantMemberIdsInput,
+      setSplitParticipantMemberIdsInput,
+      splitParticipantGuestNamesInput,
+      setSplitParticipantGuestNamesInput,
+      splitPayerParticipantIdInput,
+      setSplitPayerParticipantIdInput,
+      splitAssignmentsInput,
+      setSplitAssignmentsInput,
+      splitSummaries,
+      splitDetail,
+      splitBalanceSummary,
+      activeSplitId,
+      setActiveSplitId,
+
       priceQueryItem,
       setPriceQueryItem,
       priceQueryArea,
@@ -1078,6 +1665,29 @@ function useClariFiControllerValue(): ClariFiController {
       loadLedger,
       loadReport,
 
+      createFamilyProfile,
+      loadFamiliesList,
+      createActiveFamilyInvite,
+      joinFamilyByInviteCode,
+      updateFamilyMemberRoleById,
+      removeFamilyMemberById,
+      updateFamilyMemberRoleAction,
+      removeFamilyMemberAction,
+
+      createSplitDraft,
+      loadSplitDetailById,
+      updateSplitParticipantsById,
+      updateSplitAllocationsById,
+      finalizeSplitById,
+      loadSplitBalancesById,
+      createSplitSessionAction,
+      loadSplitSessions,
+      loadActiveSplitDetail,
+      saveSplitParticipantsAction,
+      saveSplitAllocationsAction,
+      finalizeActiveSplit,
+      loadActiveSplitBalances,
+
       loadPriceCompareResult,
       loadPriceHistoryResult,
 
@@ -1101,23 +1711,40 @@ function useClariFiControllerValue(): ClariFiController {
       alertTargetUnitPrice,
       alertUnreadCount,
       alerts,
+      activeFamilyId,
+      activeSplitId,
       apiBaseUrl,
       backendUserId,
       clearMessage,
       confirmReceiptExpense,
       confirmVoiceExpense,
       createAlert,
+      createActiveFamilyInvite,
+      createFamilyProfile,
+      createSplitSessionAction,
       formatCurrency,
+      families,
+      familyInviteCodeInput,
+      familyInviteLatestCode,
+      familyMemberIdInput,
+      familyNameInput,
+      familyRoleTarget,
+      finalizeActiveSplit,
       includePromo,
       ingestPromoFile,
+      joinFamilyByInviteCode,
       ledgerItems,
+      loadActiveSplitBalances,
+      loadActiveSplitDetail,
       loadAlertEvents,
       loadAlerts,
+      loadFamiliesList,
       loadLedger,
       loadPriceCompareResult,
       loadPriceHistoryResult,
       loadPromos,
       loadReport,
+      loadSplitSessions,
       loading,
       markAllEventsRead,
       message,
@@ -1149,6 +1776,9 @@ function useClariFiControllerValue(): ClariFiController {
       recognitionState,
       recognizerAvailable,
       reportSummary,
+      removeFamilyMemberAction,
+      saveSplitAllocationsAction,
+      saveSplitParticipantsAction,
       selectedReceiptBase64,
       selectedReceiptFileRef,
       selectedReceiptUri,
@@ -1156,7 +1786,13 @@ function useClariFiControllerValue(): ClariFiController {
       setAlertItem,
       setAlertRadiusKm,
       setAlertTargetUnitPrice,
+      setActiveFamilyId,
+      setActiveSplitId,
       setApiBaseUrl,
+      setFamilyInviteCodeInput,
+      setFamilyMemberIdInput,
+      setFamilyNameInput,
+      setFamilyRoleTarget,
       setIncludePromo,
       setPriceHistoryInterval,
       setPriceQueryArea,
@@ -1166,6 +1802,13 @@ function useClariFiControllerValue(): ClariFiController {
       setPriceQueryRadiusKm,
       setPromoAreaHint,
       setPromoMerchantHint,
+      setSplitAssignmentsInput,
+      setSplitExpenseIdInput,
+      setSplitParticipantGuestNamesInput,
+      setSplitParticipantMemberIdsInput,
+      setSplitPayerParticipantIdInput,
+      setSplitSharedChargeInput,
+      setSplitTitleInput,
       setTranscriptInput,
       signOutUser,
       signedInEmail,
@@ -1173,6 +1816,17 @@ function useClariFiControllerValue(): ClariFiController {
       stopListening,
       syncBackendUser,
       transcriptInput,
+      splitAssignmentsInput,
+      splitBalanceSummary,
+      splitDetail,
+      splitExpenseIdInput,
+      splitParticipantGuestNamesInput,
+      splitParticipantMemberIdsInput,
+      splitPayerParticipantIdInput,
+      splitSharedChargeInput,
+      splitSummaries,
+      splitTitleInput,
+      updateFamilyMemberRoleAction,
       voiceParse,
       voiceParseLatencyMs,
     ],

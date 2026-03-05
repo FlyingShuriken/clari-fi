@@ -8,14 +8,18 @@ import { useClariFiController } from '../state/clariFi-controller';
 import { AlertsScreen } from '../../features/alerts/screens/AlertsScreen';
 import { AccountScreen } from '../../features/auth/screens/AccountScreen';
 import { CaptureScreen } from '../../features/capture/screens/CaptureScreen';
+import { FamilyScreen } from '../../features/families/screens/FamilyScreen';
 import { LedgerScreen } from '../../features/ledger/screens/LedgerScreen';
 import { PricesScreen } from '../../features/prices/screens/PricesScreen';
 import { ReportsScreen } from '../../features/reports/screens/ReportsScreen';
+import { SplitsScreen } from '../../features/splits/screens/SplitsScreen';
 
 export type MainTabParamList = {
   Capture: undefined;
   Ledger: undefined;
   Reports: undefined;
+  Families: undefined;
+  Splits: undefined;
   Prices: undefined;
   Alerts: undefined;
   Account: undefined;
@@ -48,6 +52,10 @@ function tabIconName(routeName: keyof MainTabParamList): keyof typeof MaterialCo
       return 'book-open-page-variant-outline';
     case 'Reports':
       return 'chart-line';
+    case 'Families':
+      return 'account-group-outline';
+    case 'Splits':
+      return 'call-split';
     case 'Prices':
       return 'store-search-outline';
     case 'Alerts':
@@ -98,6 +106,8 @@ export function AppNavigator() {
                 <Tab.Screen name="Capture" component={CaptureScreen} />
                 <Tab.Screen name="Ledger" component={LedgerScreen} />
                 <Tab.Screen name="Reports" component={ReportsScreen} />
+                <Tab.Screen name="Families" component={FamilyScreen} />
+                <Tab.Screen name="Splits" component={SplitsScreen} />
                 <Tab.Screen name="Prices" component={PricesScreen} />
                 <Tab.Screen
                   name="Alerts"

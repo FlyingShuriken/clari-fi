@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import {
   ExpenseProvenance,
   ExpenseSource,
+  FamilyMemberStatus,
   Prisma,
   ProcessingStatus,
 } from '@prisma/client';
@@ -31,11 +32,30 @@ export class ExpensesService {
   ) {}
 
   async confirmExpense(user: AuthenticatedUser, dto: ConfirmExpenseDto) {
+    if (dto.familyId) {
+      const membership = await this.prisma.familyMember.findUnique({
+        where: {
+          familyId_userId: {
+            familyId: dto.familyId,
+            userId: user.id,
+          },
+        },
+        select: {
+          status: true,
+        },
+      });
+
+      if (!membership || membership.status !== FamilyMemberStatus.ACTIVE) {
+        throw new ForbiddenException('You are not an active member of the selected family.');
+      }
+    }
+
     const created = await this.prisma.$transaction(async (tx) => {
       const rawPayload = dto.rawPayload as Prisma.InputJsonValue | undefined;
       const expense = await tx.expense.create({
         data: {
           userId: user.id,
+          familyId: dto.familyId,
           source: dto.source,
           provenance: dto.provenance ?? defaultProvenanceForSource(dto.source),
           currency: dto.currency,
@@ -151,9 +171,31 @@ export class ExpensesService {
     const limit = Math.min(query.limit ?? 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.ExpenseWhereInput = {
-      userId: user.id,
-    };
+    const where: Prisma.ExpenseWhereInput = query.familyId
+      ? {
+          familyId: query.familyId,
+        }
+      : {
+          userId: user.id,
+        };
+
+    if (query.familyId) {
+      const membership = await this.prisma.familyMember.findUnique({
+        where: {
+          familyId_userId: {
+            familyId: query.familyId,
+            userId: user.id,
+          },
+        },
+        select: {
+          status: true,
+        },
+      });
+
+      if (!membership || membership.status !== FamilyMemberStatus.ACTIVE) {
+        throw new ForbiddenException('You are not an active member of the selected family.');
+      }
+    }
 
     if (query.from || query.to) {
       where.transactionAt = {

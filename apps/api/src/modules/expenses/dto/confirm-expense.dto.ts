@@ -71,6 +71,10 @@ class ConfirmReceiptDto {
 }
 
 export class ConfirmExpenseDto {
+  @IsOptional()
+  @IsString()
+  familyId?: string;
+
   @IsEnum(ExpenseSource)
   source!: ExpenseSource;
 

@@ -1,6 +1,10 @@
 import type {
   AlertEvent,
   AuthVerifyResponse,
+  FamilyInviteCreated,
+  FamilyListResponse,
+  FamilyProfile,
+  FamilyRole,
   PriceAlert,
   PriceCompareResponse,
   PriceHistoryResponse,
@@ -8,6 +12,8 @@ import type {
   PromoReviewStatus,
   PushDevice,
   ReceiptParseResult,
+  SplitDetailResponse,
+  SplitSummary,
   UploadArtifactResponse,
   VoiceParseResult,
 } from './types';
@@ -153,8 +159,17 @@ export async function confirmExpense(
 export async function listExpenses(
   baseUrl: string,
   bearerToken: string,
+  query?: {
+    familyId?: string;
+  },
 ): Promise<{ total: number; items: unknown[] }> {
-  return apiRequest<{ total: number; items: unknown[] }>(baseUrl, '/expenses', {
+  const params = new URLSearchParams();
+  if (query?.familyId) {
+    params.set('familyId', query.familyId);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+
+  return apiRequest<{ total: number; items: unknown[] }>(baseUrl, `/expenses${suffix}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${bearerToken}` },
   });
@@ -455,4 +470,226 @@ export async function reviewPromoObservations(
       body: JSON.stringify(input),
     },
   );
+}
+
+export async function createFamily(
+  baseUrl: string,
+  bearerToken: string,
+  input: { name: string },
+): Promise<{ family: FamilyProfile }> {
+  return apiRequest<{ family: FamilyProfile }>(baseUrl, '/families', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listFamilies(
+  baseUrl: string,
+  bearerToken: string,
+): Promise<FamilyListResponse> {
+  return apiRequest<FamilyListResponse>(baseUrl, '/families', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function createFamilyInvite(
+  baseUrl: string,
+  bearerToken: string,
+  familyId: string,
+  input?: { expiresInDays?: number },
+): Promise<FamilyInviteCreated> {
+  return apiRequest<FamilyInviteCreated>(baseUrl, `/families/${familyId}/invites`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input ?? {}),
+  });
+}
+
+export async function joinFamilyByCode(
+  baseUrl: string,
+  bearerToken: string,
+  input: { code: string },
+): Promise<{ family: FamilyProfile; joinedAt: string }> {
+  return apiRequest<{ family: FamilyProfile; joinedAt: string }>(baseUrl, '/families/join', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateFamilyMemberRole(
+  baseUrl: string,
+  bearerToken: string,
+  familyId: string,
+  memberId: string,
+  input: { role: FamilyRole },
+): Promise<{ member: { id: string; role: FamilyRole } }> {
+  return apiRequest<{ member: { id: string; role: FamilyRole } }>(
+    baseUrl,
+    `/families/${familyId}/members/${memberId}`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export async function removeFamilyMember(
+  baseUrl: string,
+  bearerToken: string,
+  familyId: string,
+  memberId: string,
+): Promise<{ memberId: string; familyId: string; removed: boolean; removedAt: string }> {
+  return apiRequest<{ memberId: string; familyId: string; removed: boolean; removedAt: string }>(
+    baseUrl,
+    `/families/${familyId}/members/${memberId}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    },
+  );
+}
+
+export async function createSplit(
+  baseUrl: string,
+  bearerToken: string,
+  input: {
+    familyId: string;
+    expenseId?: string;
+    title?: string;
+    currency?: 'MYR' | 'SGD' | 'USD';
+    sharedCharge?: number;
+    participantFamilyMemberIds?: string[];
+    guestParticipants?: string[];
+  },
+): Promise<SplitDetailResponse> {
+  return apiRequest<SplitDetailResponse>(baseUrl, '/splits', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listSplits(
+  baseUrl: string,
+  bearerToken: string,
+  query: {
+    familyId: string;
+    status?: 'DRAFT' | 'FINALIZED' | 'CANCELLED';
+    limit?: number;
+  },
+): Promise<{ total: number; items: SplitSummary[] }> {
+  const params = new URLSearchParams({
+    familyId: query.familyId,
+  });
+
+  if (query.status) {
+    params.set('status', query.status);
+  }
+  if (typeof query.limit === 'number') {
+    params.set('limit', String(query.limit));
+  }
+
+  return apiRequest<{ total: number; items: SplitSummary[] }>(
+    baseUrl,
+    `/splits?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    },
+  );
+}
+
+export async function getSplit(
+  baseUrl: string,
+  bearerToken: string,
+  splitId: string,
+): Promise<SplitDetailResponse> {
+  return apiRequest<SplitDetailResponse>(baseUrl, `/splits/${splitId}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function updateSplitParticipants(
+  baseUrl: string,
+  bearerToken: string,
+  splitId: string,
+  input: {
+    participants: Array<{
+      familyMemberId?: string;
+      displayName?: string;
+      isPayer?: boolean;
+      paidAmount?: number;
+    }>;
+  },
+): Promise<SplitDetailResponse> {
+  return apiRequest<SplitDetailResponse>(baseUrl, `/splits/${splitId}/participants`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateSplitAllocations(
+  baseUrl: string,
+  bearerToken: string,
+  splitId: string,
+  input: {
+    lineAssignments: Array<{
+      expenseLineItemId: string;
+      participantIds: string[];
+    }>;
+    sharedCharge?: number;
+  },
+): Promise<SplitDetailResponse> {
+  return apiRequest<SplitDetailResponse>(baseUrl, `/splits/${splitId}/allocations`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function finalizeSplit(
+  baseUrl: string,
+  bearerToken: string,
+  splitId: string,
+): Promise<SplitDetailResponse> {
+  return apiRequest<SplitDetailResponse>(baseUrl, `/splits/${splitId}/finalize`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify({}),
+  });
+}
+
+export async function getSplitBalances(
+  baseUrl: string,
+  bearerToken: string,
+  splitId: string,
+): Promise<{
+  splitId: string;
+  familyId: string;
+  currency: string;
+  status: 'DRAFT' | 'FINALIZED' | 'CANCELLED';
+  balances: Array<{
+    participantId: string;
+    displayName: string;
+    owedAmount: number;
+    paidAmount: number;
+    netAmount: number;
+  }>;
+  settlements: Array<{
+    fromParticipantId: string;
+    toParticipantId: string;
+    amount: number;
+  }>;
+  generatedAt: string;
+}> {
+  return apiRequest(baseUrl, `/splits/${splitId}/balances`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
 }

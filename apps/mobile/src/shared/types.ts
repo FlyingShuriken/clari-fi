@@ -206,3 +206,139 @@ export interface PromoIngestionItem {
   createdAt: string;
   observations: PromoObservation[];
 }
+
+export type FamilyRole = 'OWNER' | 'EDITOR' | 'VIEWER';
+export type FamilyMemberStatus = 'ACTIVE' | 'REMOVED';
+export type FamilyInviteStatus = 'ACTIVE' | 'USED' | 'REVOKED' | 'EXPIRED';
+
+export interface FamilyMember {
+  id: string;
+  userId: string;
+  email: string;
+  displayName?: string | null;
+  role: FamilyRole;
+  status: FamilyMemberStatus;
+  joinedAt: string;
+}
+
+export interface FamilyInvite {
+  id: string;
+  code: string;
+  status: FamilyInviteStatus;
+  expiresAt: string;
+  createdAt: string;
+  createdBy: {
+    id: string;
+    email: string;
+    displayName?: string | null;
+  };
+}
+
+export interface FamilyProfile {
+  id: string;
+  name: string;
+  currentUserRole: FamilyRole | null;
+  createdAt: string;
+  updatedAt: string;
+  members: FamilyMember[];
+  invites: FamilyInvite[];
+}
+
+export interface FamilyInviteCreated {
+  invite: {
+    id: string;
+    familyId: string;
+    code: string;
+    status: FamilyInviteStatus;
+    expiresAt: string;
+    createdAt: string;
+  };
+}
+
+export interface FamilyListResponse {
+  total: number;
+  items: FamilyProfile[];
+}
+
+export interface SplitSummary {
+  id: string;
+  familyId: string;
+  expenseId?: string | null;
+  title?: string | null;
+  currency: 'MYR' | 'SGD' | 'USD';
+  subtotal: number;
+  sharedCharge: number;
+  totalAmount: number;
+  status: 'DRAFT' | 'FINALIZED' | 'CANCELLED';
+  participantCount: number;
+  finalizedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SplitParticipant {
+  id: string;
+  familyMemberId?: string | null;
+  userId?: string | null;
+  displayName: string;
+  type: 'MEMBER' | 'GUEST';
+  isPayer: boolean;
+  paidAmount: number;
+}
+
+export interface SplitAllocation {
+  id: string;
+  participantId: string;
+  allocationType: 'ITEM' | 'SHARED_CHARGE';
+  expenseLineItemId?: string;
+  lineItemLabel?: string;
+  amount: number;
+}
+
+export interface SplitBalanceRow {
+  participantId: string;
+  displayName: string;
+  owedAmount: number;
+  paidAmount: number;
+  netAmount: number;
+}
+
+export interface SplitSettlement {
+  id?: string;
+  fromParticipantId: string;
+  toParticipantId: string;
+  amount: number;
+  status?: 'PENDING' | 'SETTLED';
+  settledAt?: string | null;
+  createdAt?: string;
+}
+
+export interface SplitDetailResponse {
+  split: {
+    id: string;
+    familyId: string;
+    familyName: string;
+    expenseId?: string | null;
+    title?: string | null;
+    currency: 'MYR' | 'SGD' | 'USD';
+    subtotal: number;
+    sharedCharge: number;
+    totalAmount: number;
+    status: 'DRAFT' | 'FINALIZED' | 'CANCELLED';
+    finalizedAt?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+  expenseLineItems: Array<{
+    id: string;
+    descriptionRaw: string;
+    totalPrice: number;
+    quantity?: number;
+    unitRaw?: string | null;
+    unitPrice?: number;
+  }>;
+  participants: SplitParticipant[];
+  allocations: SplitAllocation[];
+  balances: SplitBalanceRow[];
+  settlements: SplitSettlement[];
+}

@@ -236,6 +236,69 @@ export const PromoObservationSchema = z.object({
 });
 export type PromoObservation = z.infer<typeof PromoObservationSchema>;
 
+export const FamilyRoleSchema = z.enum(['OWNER', 'EDITOR', 'VIEWER']);
+export type FamilyRole = z.infer<typeof FamilyRoleSchema>;
+
+export const FamilyMemberStatusSchema = z.enum(['ACTIVE', 'REMOVED']);
+export type FamilyMemberStatus = z.infer<typeof FamilyMemberStatusSchema>;
+
+export const FamilyMemberSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  email: z.string().email(),
+  displayName: z.string().nullable().optional(),
+  role: FamilyRoleSchema,
+  status: FamilyMemberStatusSchema,
+  joinedAt: z.string().datetime(),
+});
+export type FamilyMember = z.infer<typeof FamilyMemberSchema>;
+
+export const FamilyInviteSchema = z.object({
+  id: z.string(),
+  code: z.string(),
+  status: z.enum(['ACTIVE', 'USED', 'REVOKED', 'EXPIRED']),
+  expiresAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
+});
+export type FamilyInvite = z.infer<typeof FamilyInviteSchema>;
+
+export const FamilyProfileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  currentUserRole: FamilyRoleSchema.nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  members: z.array(FamilyMemberSchema),
+  invites: z.array(FamilyInviteSchema),
+});
+export type FamilyProfile = z.infer<typeof FamilyProfileSchema>;
+
+export const SplitSummarySchema = z.object({
+  id: z.string(),
+  familyId: z.string(),
+  expenseId: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  currency: CurrencyCodeSchema,
+  subtotal: z.number(),
+  sharedCharge: z.number(),
+  totalAmount: z.number(),
+  status: z.enum(['DRAFT', 'FINALIZED', 'CANCELLED']),
+  participantCount: z.number().int().nonnegative(),
+  finalizedAt: z.string().datetime().nullable().optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type SplitSummary = z.infer<typeof SplitSummarySchema>;
+
+export const SplitBalanceRowSchema = z.object({
+  participantId: z.string(),
+  displayName: z.string(),
+  owedAmount: z.number(),
+  paidAmount: z.number(),
+  netAmount: z.number(),
+});
+export type SplitBalanceRow = z.infer<typeof SplitBalanceRowSchema>;
+
 export const MonthlyReportDtoSchema = z.object({
   year: z.number().int().min(2000),
   month: z.number().int().min(1).max(12),

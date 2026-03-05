@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsISO8601, IsOptional, Min } from 'class-validator';
+import { IsInt, IsISO8601, IsOptional, IsString, Min } from 'class-validator';
 
 export class ListExpensesDto {
   @IsOptional()
@@ -21,4 +21,8 @@ export class ListExpensesDto {
   @IsOptional()
   @IsISO8601()
   to?: string;
+
+  @IsOptional()
+  @IsString()
+  familyId?: string;
 }
