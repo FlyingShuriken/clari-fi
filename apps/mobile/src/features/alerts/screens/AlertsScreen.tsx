@@ -1,244 +1,519 @@
-import { StyleSheet, View } from 'react-native';
-import { Button, Card, Chip, Divider, Text, TextInput } from 'react-native-paper';
-import { ScreenContainer } from '../../../components/ui/screen-container';
+import { useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { TextInput } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
+import { SectionLabel } from '../../../components/ui/section-label';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
+
+type BadgeColor = 'green' | 'indigo' | 'coral' | 'amber';
+
+interface BadgeSpec {
+  label: string;
+  color: BadgeColor;
+  bg: string;
+  border: string;
+}
+
+function getEventBadge(eventKind: string, decision?: string | null): BadgeSpec {
+  if (eventKind === 'SIGNAL') {
+    if (decision === 'BUY_NOW')  return { label: '● BUY NOW',   color: 'green',  bg: Colors.greenDim,  border: '#32D58330' };
+    if (decision === 'WAIT')     return { label: '● WAIT',      color: 'coral',  bg: Colors.coralDim,  border: '#E85A4F30' };
+    return                              { label: '● PRICE DROP', color: 'indigo', bg: Colors.indigoDim, border: '#6366F130' };
+  }
+  return { label: '● THRESHOLD', color: 'amber', bg: '#FFB54720', border: '#FFB54730' };
+}
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`;
+  return new Date(iso).toLocaleDateString('default', { month: 'short', day: 'numeric' });
+}
+
+const inputTheme = {
+  colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary },
+};
 
 export function AlertsScreen() {
   const controller = useClariFiController();
+  const insets = useSafeAreaInsets();
+  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  const unread = controller.alertEvents.filter((e) => !e.readAt);
+  const read   = controller.alertEvents.filter((e) => !!e.readAt);
 
   return (
-    <ScreenContainer>
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Price Alerts" subtitle="Create and evaluate threshold alerts" />
-        <Card.Content style={styles.content}>
-          <View style={styles.row}>
-            <Chip
-              selected={controller.alertKind === 'THRESHOLD'}
-              onPress={() => controller.setAlertKind('THRESHOLD')}
-              icon="bell-outline"
-            >
-              Threshold
-            </Chip>
-            <Chip
-              selected={controller.alertKind === 'SIGNAL'}
-              onPress={() => controller.setAlertKind('SIGNAL')}
-              icon="lightning-bolt-outline"
-            >
-              Signal
-            </Chip>
-          </View>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
 
-          <TextInput
-            label="Item"
-            value={controller.alertItem}
-            onChangeText={controller.setAlertItem}
-            mode="outlined"
-          />
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>Alerts</Text>
+          <Text style={styles.subtitle}>
+            {controller.alertUnreadCount} unread notification{controller.alertUnreadCount !== 1 ? 's' : ''}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.newAlertBtn}
+          onPress={() => setShowCreateForm((v) => !v)}
+        >
+          <MaterialCommunityIcons name="plus" size={14} color={Colors.bg} />
+          <Text style={styles.newAlertText}>New Alert</Text>
+        </TouchableOpacity>
+      </View>
 
-          {controller.alertKind === 'THRESHOLD' ? (
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Inline create form */}
+        {showCreateForm ? (
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>Create alert</Text>
+
+            <View style={styles.kindRow}>
+              {(['THRESHOLD', 'SIGNAL'] as const).map((k) => (
+                <TouchableOpacity
+                  key={k}
+                  style={[styles.kindChip, controller.alertKind === k && styles.kindChipActive]}
+                  onPress={() => controller.setAlertKind(k)}
+                >
+                  <Text style={[styles.kindText, controller.alertKind === k && styles.kindTextActive]}>
+                    {k}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <TextInput
-              label="Target unit price"
-              value={controller.alertTargetUnitPrice}
-              onChangeText={controller.setAlertTargetUnitPrice}
-              keyboardType="decimal-pad"
+              label="Item"
+              value={controller.alertItem}
+              onChangeText={controller.setAlertItem}
               mode="outlined"
+              style={styles.input}
+              theme={inputTheme}
             />
-          ) : (
-            <>
-              <View style={styles.row}>
-                <Chip
-                  selected={controller.alertSignalDecisionFilter === 'BOTH'}
-                  onPress={() => controller.setAlertSignalDecisionFilter('BOTH')}
-                >
-                  Buy + Wait
-                </Chip>
-                <Chip
-                  selected={controller.alertSignalDecisionFilter === 'BUY_NOW'}
-                  onPress={() => controller.setAlertSignalDecisionFilter('BUY_NOW')}
-                >
-                  Buy only
-                </Chip>
-                <Chip
-                  selected={controller.alertSignalDecisionFilter === 'WAIT'}
-                  onPress={() => controller.setAlertSignalDecisionFilter('WAIT')}
-                >
-                  Wait only
-                </Chip>
-              </View>
+
+            {controller.alertKind === 'THRESHOLD' ? (
               <TextInput
-                label="Min confidence (0-1)"
-                value={controller.alertSignalMinConfidence}
-                onChangeText={controller.setAlertSignalMinConfidence}
+                label="Target unit price"
+                value={controller.alertTargetUnitPrice}
+                onChangeText={controller.setAlertTargetUnitPrice}
                 keyboardType="decimal-pad"
                 mode="outlined"
+                style={styles.input}
+                theme={inputTheme}
               />
-            </>
-          )}
+            ) : (
+              <>
+                <View style={styles.kindRow}>
+                  {(['BOTH', 'BUY_NOW', 'WAIT'] as const).map((f) => (
+                    <TouchableOpacity
+                      key={f}
+                      style={[styles.kindChip, controller.alertSignalDecisionFilter === f && styles.kindChipActive]}
+                      onPress={() => controller.setAlertSignalDecisionFilter(f)}
+                    >
+                      <Text style={[styles.kindText, controller.alertSignalDecisionFilter === f && styles.kindTextActive]}>
+                        {f === 'BOTH' ? 'Buy + Wait' : f === 'BUY_NOW' ? 'Buy' : 'Wait'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TextInput
+                  label="Min confidence (0–1)"
+                  value={controller.alertSignalMinConfidence}
+                  onChangeText={controller.setAlertSignalMinConfidence}
+                  keyboardType="decimal-pad"
+                  mode="outlined"
+                  style={styles.input}
+                  theme={inputTheme}
+                />
+              </>
+            )}
 
-          <View style={styles.row}>
-            <TextInput
-              style={styles.flexInput}
-              label="Radius km"
-              value={controller.alertRadiusKm}
-              onChangeText={controller.setAlertRadiusKm}
-              keyboardType="decimal-pad"
-              mode="outlined"
-            />
-            <TextInput
-              style={styles.flexInput}
-              label="Area"
-              value={controller.alertAreaText}
-              onChangeText={controller.setAlertAreaText}
-              mode="outlined"
-            />
+            <View style={styles.locationRow}>
+              <TextInput
+                label="Radius km"
+                value={controller.alertRadiusKm}
+                onChangeText={controller.setAlertRadiusKm}
+                keyboardType="decimal-pad"
+                mode="outlined"
+                style={[styles.input, { flex: 1 }]}
+                theme={inputTheme}
+              />
+              <TextInput
+                label="Area"
+                value={controller.alertAreaText}
+                onChangeText={controller.setAlertAreaText}
+                mode="outlined"
+                style={[styles.input, { flex: 1 }]}
+                theme={inputTheme}
+              />
+            </View>
+
+            <View style={styles.formBtns}>
+              <TouchableOpacity
+                style={styles.createBtn}
+                onPress={async () => {
+                  await controller.createAlert();
+                  setShowCreateForm(false);
+                }}
+                disabled={controller.loading}
+                testID={TEST_IDS.alerts.createButton}
+              >
+                <Text style={styles.createBtnText}>Create</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.loadBtn}
+                onPress={controller.loadAlerts}
+                disabled={controller.loading}
+                testID={TEST_IDS.alerts.loadAlertsButton}
+              >
+                <Text style={styles.loadBtnText}>Load alerts</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+        ) : null}
 
-          <View style={styles.row}>
-            <Button
-              mode="contained"
-              onPress={controller.createAlert}
-              disabled={controller.loading}
-              icon="plus"
-              testID={TEST_IDS.alerts.createButton}
-            >
-              Create
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={controller.loadAlerts}
-              disabled={controller.loading}
-              icon="refresh"
-              testID={TEST_IDS.alerts.loadAlertsButton}
-            >
-              Load alerts
-            </Button>
-          </View>
-
-          <Divider />
-
-          <View style={styles.rowBetween}>
-            <Text variant="titleSmall">Alert inbox</Text>
-            <Chip compact icon="bell-outline">
-              Unread: {controller.alertUnreadCount}
-            </Chip>
-          </View>
-
-          <View style={styles.row}>
-            <Button
-              mode="outlined"
-              onPress={controller.loadAlertEvents}
-              disabled={controller.loading}
-              testID={TEST_IDS.alerts.loadEventsButton}
-            >
-              Load events
-            </Button>
-            <Button
-              mode="text"
+        {/* Utility row */}
+        <View style={styles.utilRow}>
+          <TouchableOpacity
+            onPress={controller.loadAlertEvents}
+            disabled={controller.loading}
+            style={styles.utilBtn}
+            testID={TEST_IDS.alerts.loadEventsButton}
+          >
+            <MaterialCommunityIcons name="refresh" size={16} color={Colors.textSecondary} />
+            <Text style={styles.utilBtnText}>Refresh</Text>
+          </TouchableOpacity>
+          {controller.alertUnreadCount > 0 ? (
+            <TouchableOpacity
               onPress={controller.markAllEventsRead}
-              disabled={controller.loading || controller.alertEvents.length === 0}
+              disabled={controller.loading}
+              style={styles.utilBtn}
               testID={TEST_IDS.alerts.markAllReadButton}
             >
-              Mark all read
-            </Button>
-          </View>
-
-          {controller.alerts.length > 0 ? (
-            <>
-              <Text variant="titleSmall">Configured alerts</Text>
-              {controller.alerts.map((alert) => (
-                <Card key={alert.id} mode="outlined" style={styles.innerCard}>
-                  <Card.Content style={styles.listBlock}>
-                    <Text variant="bodyMedium">
-                      {alert.item.canonicalName}{' '}
-                      {alert.kind === 'THRESHOLD'
-                        ? `≤ ${controller.formatCurrency(alert.targetUnitPrice ?? 0)}`
-                        : `(${alert.signalDecisionFilter ?? 'BOTH'})`}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.meta}>
-                      {alert.kind} · Radius {alert.radiusKm} km · {alert.areaText || 'No area'} ·{' '}
-                      {alert.active ? 'Active' : 'Inactive'}
-                    </Text>
-                    {alert.kind === 'SIGNAL' ? (
-                      <Text variant="bodySmall" style={styles.meta}>
-                        Min confidence {(alert.signalMinConfidence ?? 0.65).toFixed(2)} · Cooldown{' '}
-                        {alert.signalCooldownMinutes ?? 360} min
-                      </Text>
-                    ) : null}
-                  </Card.Content>
-                </Card>
-              ))}
-            </>
+              <Text style={styles.utilBtnText}>Mark all read</Text>
+            </TouchableOpacity>
           ) : null}
+        </View>
 
-          {controller.alertEvents.length > 0 ? (
-            <>
-              <Text variant="titleSmall">Recent events</Text>
-              {controller.alertEvents.map((event) => (
-                <Card key={event.id} mode="outlined" style={styles.innerCard}>
-                  <Card.Content style={styles.listBlock}>
-                    <Text variant="bodyMedium">
-                      {event.item}: {controller.formatCurrency(event.triggerUnitPrice)}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.meta}>
-                      {event.eventKind === 'SIGNAL'
-                        ? `${event.signal?.decision ?? 'SIGNAL'} · ${event.signal?.confidence ? `${Math.round(event.signal.confidence * 100)}%` : 'n/a'}`
-                        : `Target ${controller.formatCurrency(event.targetUnitPrice ?? 0)}`}{' '}
-                      · {event.areaText || 'Unknown area'}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.meta}>
-                      {event.eventKind} · {new Date(event.triggeredAt).toLocaleString()} ·{' '}
-                      {event.readAt ? 'Read' : 'Unread'} · {event.deliveryStatus || 'N/A'}
-                    </Text>
-                    {event.readAt === null ? (
-                      <View style={styles.row}>
-                        <Button
-                          mode="text"
-                          compact
-                          onPress={() => controller.markEventRead(event.id)}
-                          disabled={controller.loading}
-                        >
-                          Mark read
-                        </Button>
+        {/* Unread events */}
+        {unread.length > 0 ? (
+          <>
+            <SectionLabel label="UNREAD" />
+            {unread.map((event) => {
+              const isSignal = event.eventKind === 'SIGNAL';
+              const badge = getEventBadge(event.eventKind, event.signal?.decision);
+              const confidence = event.signal?.confidence
+                ? `${Math.round(event.signal.confidence * 100)}%`
+                : null;
+
+              return (
+                <TouchableOpacity
+                  key={event.id}
+                  onPress={() => controller.markEventRead(event.id)}
+                  disabled={controller.loading}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.eventCard, { borderLeftColor: badge.border }]}>
+                    {/* Top row: badge + time */}
+                    <View style={styles.eventTopRow}>
+                      <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                        <Text style={[styles.badgeText, { color: badge.color === 'green' ? Colors.green : badge.color === 'indigo' ? Colors.indigo : badge.color === 'coral' ? Colors.coral : Colors.amber }]}>
+                          {badge.label}
+                        </Text>
                       </View>
-                    ) : null}
-                  </Card.Content>
-                </Card>
-              ))}
-            </>
-          ) : null}
-        </Card.Content>
-      </Card>
-    </ScreenContainer>
+                      <Text style={styles.eventTime}>{formatRelativeTime(event.triggeredAt)}</Text>
+                    </View>
+
+                    {/* Item name */}
+                    <Text style={styles.eventItem}>{event.item}</Text>
+
+                    {/* Meta columns */}
+                    <View style={styles.metaRow}>
+                      {isSignal && event.signal ? (
+                        <>
+                          <View style={styles.metaBlock}>
+                            <Text style={styles.metaLabel}>Current Price</Text>
+                            <Text style={[styles.metaValue, { color: Colors.green }]}>
+                              {controller.formatCurrency(event.triggerUnitPrice)}
+                            </Text>
+                          </View>
+                          {confidence ? (
+                            <View style={styles.metaBlock}>
+                              <Text style={styles.metaLabel}>Confidence</Text>
+                              <Text style={styles.metaValue}>{confidence}</Text>
+                            </View>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <View style={styles.metaBlock}>
+                            <Text style={styles.metaLabel}>Now</Text>
+                            <Text style={[styles.metaValue, { color: Colors.green }]}>
+                              {controller.formatCurrency(event.triggerUnitPrice)}
+                            </Text>
+                          </View>
+                          {event.targetUnitPrice ? (
+                            <View style={styles.metaBlock}>
+                              <Text style={styles.metaLabel}>Target</Text>
+                              <Text style={styles.metaValue}>
+                                {controller.formatCurrency(event.targetUnitPrice)}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </>
+                      )}
+                    </View>
+
+                    {/* Store */}
+                    <Text style={styles.eventStore}>{event.areaText || 'Unknown area'}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </>
+        ) : null}
+
+        {/* Read events */}
+        {read.length > 0 ? (
+          <>
+            <SectionLabel label="EARLIER" />
+            {read.map((event) => {
+              const badge = getEventBadge(event.eventKind, event.signal?.decision);
+              return (
+                <View key={event.id} style={[styles.eventCard, styles.eventCardRead]}>
+                  <View style={styles.eventTopRow}>
+                    <View style={[styles.badge, { backgroundColor: badge.bg }]}>
+                      <Text style={[styles.badgeText, { color: Colors.textMuted }]}>
+                        {badge.label}
+                      </Text>
+                    </View>
+                    <Text style={styles.eventTime}>{formatRelativeTime(event.triggeredAt)}</Text>
+                  </View>
+                  <Text style={[styles.eventItem, { color: Colors.textTertiary }]}>{event.item}</Text>
+                  <Text style={styles.eventStore}>
+                    {event.areaText || 'Unknown area'} · Read
+                  </Text>
+                </View>
+              );
+            })}
+          </>
+        ) : null}
+
+        {controller.alertEvents.length === 0 && !showCreateForm ? (
+          <EmptyState
+            icon="bell-outline"
+            message="No alert events yet. Tap Refresh or create an alert."
+          />
+        ) : null}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
+  screen: {
+    flex: 1,
+    backgroundColor: Colors.bg,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 4,
+    paddingBottom: 12,
+  },
+  headerLeft: {
+    gap: 2,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    fontFamily: 'Georgia',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  newAlertBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.green,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 100,
+  },
+  newAlertText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.bg,
+  },
+  scroll: {
+    flex: 1,
   },
   content: {
-    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 100,
+    gap: 10,
   },
-  row: {
+  formCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+  },
+  formTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  kindRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  kindChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  kindChipActive: {
+    backgroundColor: Colors.greenDim,
+    borderColor: Colors.green,
+  },
+  kindText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  kindTextActive: {
+    color: Colors.green,
+    fontWeight: '600',
+  },
+  input: {
+    backgroundColor: Colors.surface,
+  },
+  locationRow: {
     flexDirection: 'row',
     gap: 10,
   },
-  rowBetween: {
+  formBtns: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  createBtn: {
+    flex: 1,
+    backgroundColor: Colors.green,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  createBtnText: {
+    color: Colors.bg,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  loadBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  loadBtnText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+  },
+  utilRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  utilBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+  },
+  utilBtnText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  eventCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: 'transparent',
+  },
+  eventCardRead: {
+    opacity: 0.6,
+  },
+  eventTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  flexInput: {
-    flex: 1,
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 100,
   },
-  meta: {
-    color: '#64748b',
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
-  innerCard: {
-    borderRadius: 12,
+  eventTime: {
+    fontSize: 11,
+    color: Colors.textMuted,
   },
-  listBlock: {
-    gap: 4,
+  eventItem: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  metaBlock: {
+    gap: 2,
+  },
+  metaLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  metaValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  eventStore: {
+    fontSize: 12,
+    color: Colors.textSecondary,
   },
 });

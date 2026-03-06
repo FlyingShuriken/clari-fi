@@ -1,186 +1,333 @@
-import { StyleSheet, View } from 'react-native';
-import { Button, Card, Chip, Divider, Text, TextInput } from 'react-native-paper';
-import { ScreenContainer } from '../../../components/ui/screen-container';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
+import { DarkCard } from '../../../components/ui/dark-card';
+import { PillBadge } from '../../../components/ui/pill-badge';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
+
+const inputTheme = {
+  colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary },
+};
 
 export function FamilyScreen() {
   const controller = useClariFiController();
-  const activeFamily = controller.families.find((family) => family.id === controller.activeFamilyId);
+  const activeFamily = controller.families.find((f) => f.id === controller.activeFamilyId);
   const canManageMembers = activeFamily?.currentUserRole === 'OWNER';
 
   return (
-    <ScreenContainer>
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Family Mode" subtitle="Create, join, invite, and select active family" />
-        <Card.Content style={styles.content}>
-          <View style={styles.row}>
-            <Button
-              mode="contained"
-              onPress={controller.loadFamiliesList}
-              disabled={controller.loading}
-              icon="refresh"
-              testID={TEST_IDS.families.loadButton}
-            >
-              Load families
-            </Button>
-            <Button
-              mode="outlined"
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Create family card */}
+      <DarkCard radius={16}>
+        <Text style={styles.cardTitle}>Create family</Text>
+        <TextInput
+          label="Family name"
+          value={controller.familyNameInput}
+          onChangeText={controller.setFamilyNameInput}
+          mode="outlined"
+          style={styles.input}
+          testID={TEST_IDS.families.nameInput}
+          theme={inputTheme}
+        />
+        <TouchableOpacity
+          style={styles.primaryBtn}
+          onPress={controller.createFamilyProfile}
+          disabled={controller.loading}
+          testID={TEST_IDS.families.createButton}
+        >
+          <Text style={styles.primaryBtnText}>Create family</Text>
+        </TouchableOpacity>
+      </DarkCard>
+
+      {/* Join family card */}
+      <DarkCard radius={16}>
+        <Text style={styles.cardTitle}>Join via invite code</Text>
+        <TextInput
+          label="Invite code"
+          value={controller.familyInviteCodeInput}
+          onChangeText={controller.setFamilyInviteCodeInput}
+          mode="outlined"
+          autoCapitalize="characters"
+          style={styles.input}
+          testID={TEST_IDS.families.inviteCodeInput}
+          theme={inputTheme}
+        />
+        <TouchableOpacity
+          style={[styles.secondaryBtn]}
+          onPress={controller.joinFamilyByInviteCode}
+          disabled={controller.loading}
+          testID={TEST_IDS.families.joinButton}
+        >
+          <Text style={styles.secondaryBtnText}>Join via code</Text>
+        </TouchableOpacity>
+        {controller.familyInviteLatestCode ? (
+          <Text style={styles.codeHint}>
+            Latest invite code: {controller.familyInviteLatestCode}
+          </Text>
+        ) : null}
+      </DarkCard>
+
+      {/* Families list */}
+      <View style={styles.listHeader}>
+        <Text style={styles.listTitle}>Your families</Text>
+        <TouchableOpacity
+          style={styles.refreshBtn}
+          onPress={controller.loadFamiliesList}
+          disabled={controller.loading}
+          testID={TEST_IDS.families.loadButton}
+        >
+          <Text style={styles.refreshText}>Refresh</Text>
+        </TouchableOpacity>
+      </View>
+
+      {controller.families.length === 0 ? (
+        <EmptyState icon="account-group-outline" message="No families yet. Create or join one above." />
+      ) : (
+        controller.families.map((family) => {
+          const isActive = family.id === controller.activeFamilyId;
+          return (
+            <DarkCard key={family.id} radius={16} glow={isActive ? 'green' : undefined}>
+              <View style={styles.familyRow}>
+                <View style={styles.familyInfo}>
+                  <Text style={styles.familyName}>{family.name}</Text>
+                  <Text style={styles.familyMeta}>
+                    {family.currentUserRole ?? 'N/A'} · {family.members.length} member{family.members.length !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[styles.setActiveBtn, isActive && styles.setActiveBtnActive]}
+                  onPress={() => controller.setActiveFamilyId(family.id)}
+                >
+                  <Text style={[styles.setActiveBtnText, isActive && styles.setActiveBtnTextActive]}>
+                    {isActive ? 'Active' : 'Set active'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </DarkCard>
+          );
+        })
+      )}
+
+      {/* Active family members */}
+      {activeFamily ? (
+        <>
+          <View style={styles.listHeader}>
+            <Text style={styles.listTitle}>Members — {activeFamily.name}</Text>
+            <TouchableOpacity
+              style={styles.refreshBtn}
               onPress={controller.createActiveFamilyInvite}
-              disabled={controller.loading || !controller.activeFamilyId}
-              icon="link-variant"
+              disabled={controller.loading}
               testID={TEST_IDS.families.createInviteButton}
             >
-              Create invite
-            </Button>
+              <Text style={styles.refreshText}>+ Invite</Text>
+            </TouchableOpacity>
           </View>
-
-          <TextInput
-            label="Create family name"
-            value={controller.familyNameInput}
-            onChangeText={controller.setFamilyNameInput}
-            mode="outlined"
-            testID={TEST_IDS.families.nameInput}
-          />
-          <Button
-            mode="contained"
-            onPress={controller.createFamilyProfile}
-            disabled={controller.loading}
-            icon="account-group-outline"
-            testID={TEST_IDS.families.createButton}
-          >
-            Create family
-          </Button>
-
-          <Divider />
-
-          <TextInput
-            label="Invite code"
-            value={controller.familyInviteCodeInput}
-            onChangeText={controller.setFamilyInviteCodeInput}
-            mode="outlined"
-            autoCapitalize="characters"
-            testID={TEST_IDS.families.inviteCodeInput}
-          />
-          <Button
-            mode="outlined"
-            onPress={controller.joinFamilyByInviteCode}
-            disabled={controller.loading}
-            icon="account-plus-outline"
-            testID={TEST_IDS.families.joinButton}
-          >
-            Join via code
-          </Button>
-
-          <Text variant="bodySmall" style={styles.meta}>
-            Latest invite code: {controller.familyInviteLatestCode || '-'}
-          </Text>
-          <Text variant="bodySmall" style={styles.meta}>
-            Active family: {activeFamily?.name || '-'}
-          </Text>
-        </Card.Content>
-      </Card>
-
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Families" subtitle="Select active family for split wizard" />
-        <Card.Content style={styles.content}>
-          {controller.families.length === 0 ? (
-            <Text variant="bodySmall" style={styles.meta}>
-              No families yet.
-            </Text>
-          ) : (
-            controller.families.map((family) => (
-              <Card key={family.id} mode="outlined" style={styles.innerCard}>
-                <Card.Content style={styles.listBlock}>
-                  <View style={styles.rowBetween}>
-                    <View style={styles.titleBlock}>
-                      <Text variant="titleSmall">{family.name}</Text>
-                      <Text variant="bodySmall" style={styles.meta}>
-                        Role: {family.currentUserRole || 'N/A'} · Members: {family.members.length}
-                      </Text>
-                    </View>
-                    <Button mode="text" onPress={() => controller.setActiveFamilyId(family.id)}>
-                      {controller.activeFamilyId === family.id ? 'Active' : 'Set active'}
-                    </Button>
-                  </View>
-                </Card.Content>
-              </Card>
-            ))
-          )}
-        </Card.Content>
-      </Card>
-
-      {activeFamily ? (
-        <Card mode="contained" style={styles.card}>
-          <Card.Title title="Members" subtitle="Role and member controls for active family" />
-          <Card.Content style={styles.content}>
-            {activeFamily.members.map((member) => (
-              <Card key={member.id} mode="outlined" style={styles.innerCard}>
-                <Card.Content style={styles.listBlock}>
-                  <Text variant="titleSmall">{member.displayName || member.email}</Text>
-                  <Text variant="bodySmall" style={styles.meta}>
-                    {member.role} · joined {new Date(member.joinedAt).toLocaleDateString()}
+          {activeFamily.members.map((member) => (
+            <DarkCard key={member.id} radius={16}>
+              <View style={styles.memberRow}>
+                <View style={styles.memberInfo}>
+                  <Text style={styles.memberName}>{member.displayName || member.email}</Text>
+                  <Text style={styles.memberMeta}>
+                    Joined {new Date(member.joinedAt).toLocaleDateString()}
                   </Text>
-
-                  {canManageMembers ? (
-                    <View style={styles.row}>
-                      {member.role !== 'OWNER' ? (
-                        <Chip onPress={() => controller.updateFamilyMemberRoleById(member.id, 'OWNER')}>
-                          Make OWNER
-                        </Chip>
-                      ) : null}
-                      {member.role !== 'EDITOR' ? (
-                        <Chip onPress={() => controller.updateFamilyMemberRoleById(member.id, 'EDITOR')}>
-                          Make EDITOR
-                        </Chip>
-                      ) : null}
-                      {member.role !== 'VIEWER' ? (
-                        <Chip onPress={() => controller.updateFamilyMemberRoleById(member.id, 'VIEWER')}>
-                          Make VIEWER
-                        </Chip>
-                      ) : null}
-                      <Chip onPress={() => controller.removeFamilyMemberById(member.id)}>Remove</Chip>
-                    </View>
+                </View>
+                <PillBadge
+                  label={member.role}
+                  color={member.role === 'OWNER' ? 'green' : member.role === 'EDITOR' ? 'indigo' : 'amber'}
+                />
+              </View>
+              {canManageMembers ? (
+                <View style={styles.roleActions}>
+                  {member.role !== 'OWNER' ? (
+                    <TouchableOpacity
+                      style={styles.roleChip}
+                      onPress={() => controller.updateFamilyMemberRoleById(member.id, 'OWNER')}
+                    >
+                      <Text style={styles.roleChipText}>Owner</Text>
+                    </TouchableOpacity>
                   ) : null}
-                </Card.Content>
-              </Card>
-            ))}
-          </Card.Content>
-        </Card>
+                  {member.role !== 'EDITOR' ? (
+                    <TouchableOpacity
+                      style={styles.roleChip}
+                      onPress={() => controller.updateFamilyMemberRoleById(member.id, 'EDITOR')}
+                    >
+                      <Text style={styles.roleChipText}>Editor</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  {member.role !== 'VIEWER' ? (
+                    <TouchableOpacity
+                      style={styles.roleChip}
+                      onPress={() => controller.updateFamilyMemberRoleById(member.id, 'VIEWER')}
+                    >
+                      <Text style={styles.roleChipText}>Viewer</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                  <TouchableOpacity
+                    style={[styles.roleChip, styles.roleChipDanger]}
+                    onPress={() => controller.removeFamilyMemberById(member.id)}
+                  >
+                    <Text style={[styles.roleChipText, styles.roleChipDangerText]}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+            </DarkCard>
+          ))}
+        </>
       ) : null}
-    </ScreenContainer>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
+  scroll: {
+    flex: 1,
+    backgroundColor: Colors.bg,
   },
   content: {
-    gap: 12,
+    padding: 20,
+    paddingBottom: 40,
+    gap: 14,
   },
-  row: {
-    flexDirection: 'row',
-    gap: 10,
-    flexWrap: 'wrap',
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 12,
   },
-  rowBetween: {
+  input: {
+    backgroundColor: Colors.surface,
+    marginBottom: 10,
+  },
+  primaryBtn: {
+    backgroundColor: Colors.green,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  primaryBtnText: {
+    color: Colors.bg,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  secondaryBtn: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  secondaryBtnText: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+  },
+  codeHint: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 10,
+  },
+  listHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    paddingHorizontal: 2,
   },
-  titleBlock: {
+  listTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  refreshBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+  },
+  refreshText: {
+    fontSize: 12,
+    color: Colors.green,
+    fontWeight: '500',
+  },
+  familyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  familyInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  familyName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  familyMeta: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  setActiveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  setActiveBtnActive: {
+    borderColor: Colors.green,
+    backgroundColor: Colors.greenDim,
+  },
+  setActiveBtnText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  setActiveBtnTextActive: {
+    color: Colors.green,
+    fontWeight: '600',
+  },
+  memberRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  memberInfo: {
+    flex: 1,
     gap: 2,
-    flexShrink: 1,
   },
-  meta: {
-    color: '#64748b',
+  memberName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textPrimary,
   },
-  innerCard: {
-    borderRadius: 12,
+  memberMeta: {
+    fontSize: 12,
+    color: Colors.textSecondary,
   },
-  listBlock: {
-    gap: 6,
+  roleActions: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginTop: 10,
+  },
+  roleChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  roleChipText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  roleChipDanger: {
+    borderColor: Colors.coral,
+  },
+  roleChipDangerText: {
+    color: Colors.coral,
   },
 });

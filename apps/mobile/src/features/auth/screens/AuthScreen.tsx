@@ -1,6 +1,6 @@
-import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { StyleSheet, View, Text } from 'react-native';
 import { ClerkEmailSignInSection } from '../ClerkEmailSignInSection';
+import { Colors } from '../../../theme';
 
 interface AuthScreenProps {
   message: string;
@@ -11,10 +11,8 @@ export function AuthScreen({ message, onMessage }: AuthScreenProps) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text variant="headlineMedium" style={styles.title}>
-          ClariFi
-        </Text>
-        <Text variant="bodyMedium" style={styles.subtitle}>
+        <Text style={styles.title}>ClariFi</Text>
+        <Text style={styles.subtitle}>
           Expense capture with voice, receipts, and price intelligence.
         </Text>
       </View>
@@ -27,18 +25,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: '#f8fafc',
+    backgroundColor: Colors.bg,
     justifyContent: 'center',
-    gap: 18,
+    gap: 24,
   },
   header: {
-    gap: 6,
+    gap: 8,
   },
   title: {
+    fontSize: 36,
     fontWeight: '700',
-    color: '#0f172a',
+    color: Colors.green,
+    fontFamily: 'Georgia',
   },
   subtitle: {
-    color: '#475569',
+    fontSize: 15,
+    color: Colors.textSecondary,
   },
 });

@@ -4,11 +4,23 @@ import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { SafeAreaView, StyleSheet } from 'react-native';
-import { PaperProvider, Text } from 'react-native-paper';
+import { MD3DarkTheme, PaperProvider, Text } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/core/navigation/AppNavigator';
 import { ClariFiControllerProvider } from './src/core/state/clariFi-controller';
 import { AuthScreen } from './src/features/auth/screens/AuthScreen';
+
+const paperTheme = {
+  ...MD3DarkTheme,
+  colors: {
+    ...MD3DarkTheme.colors,
+    primary: '#32D583',
+    background: '#0B0B0E',
+    surface: '#16161A',
+    onSurface: '#FAFAF9',
+    onBackground: '#FAFAF9',
+  },
+};
 
 const publishableKey =
   String(Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '').trim() ||
@@ -52,9 +64,9 @@ export default function App() {
 
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <PaperProvider>
+      <PaperProvider theme={paperTheme}>
         <SafeAreaProvider>
-          <StatusBar style="dark" />
+          <StatusBar style="light" />
           <SignedOut>
             <SignedOutRoot />
           </SignedOut>
@@ -72,11 +84,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#0B0B0E',
     padding: 24,
   },
   fallbackText: {
-    color: '#0f172a',
+    color: '#FAFAF9',
     textAlign: 'center',
   },
 });

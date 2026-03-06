@@ -1,348 +1,585 @@
-import { StyleSheet, View } from 'react-native';
-import { Button, Card, Chip, Divider, Switch, Text, TextInput } from 'react-native-paper';
-import { ScreenContainer } from '../../../components/ui/screen-container';
+import { useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { TextInput } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
+import { DarkCard } from '../../../components/ui/dark-card';
+import { PillBadge } from '../../../components/ui/pill-badge';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
+
+type Segment = 'intelligence' | 'promos';
+
+const inputTheme = {
+  colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary },
+};
 
 export function PricesScreen() {
   const controller = useClariFiController();
+  const [segment, setSegment] = useState<Segment>('intelligence');
 
   return (
-    <ScreenContainer>
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Price Intelligence" subtitle="Compare and track item prices" />
-        <Card.Content style={styles.content}>
-          <TextInput
-            label="Item"
-            value={controller.priceQueryItem}
-            onChangeText={controller.setPriceQueryItem}
-            mode="outlined"
-            autoCapitalize="none"
-            testID={TEST_IDS.prices.itemInput}
-          />
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Segment toggle */}
+      <View style={styles.segmentRow}>
+        <TouchableOpacity
+          style={[styles.segmentBtn, segment === 'intelligence' && styles.segmentBtnActive]}
+          onPress={() => setSegment('intelligence')}
+        >
+          <Text style={[styles.segmentText, segment === 'intelligence' && styles.segmentTextActive]}>
+            Intelligence
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, segment === 'promos' && styles.segmentBtnActive]}
+          onPress={() => setSegment('promos')}
+        >
+          <Text style={[styles.segmentText, segment === 'promos' && styles.segmentTextActive]}>
+            Promos
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-          <TextInput
-            label="Area (optional)"
-            value={controller.priceQueryArea}
-            onChangeText={controller.setPriceQueryArea}
-            mode="outlined"
-          />
-
-          <View style={styles.row}>
-            <TextInput
-              style={styles.flexInput}
-              label="Lat"
-              value={controller.priceQueryLat}
-              onChangeText={controller.setPriceQueryLat}
-              mode="outlined"
-              keyboardType="decimal-pad"
-            />
-            <TextInput
-              style={styles.flexInput}
-              label="Lng"
-              value={controller.priceQueryLng}
-              onChangeText={controller.setPriceQueryLng}
-              mode="outlined"
-              keyboardType="decimal-pad"
-            />
-            <TextInput
-              style={styles.flexInput}
-              label="Radius km"
-              value={controller.priceQueryRadiusKm}
-              onChangeText={controller.setPriceQueryRadiusKm}
-              mode="outlined"
-              keyboardType="decimal-pad"
-            />
-          </View>
-
-          <View style={styles.rowBetween}>
-            <Chip
-              icon={controller.priceHistoryInterval === 'day' ? 'calendar-today' : 'calendar-week'}
-              onPress={() =>
-                controller.setPriceHistoryInterval(
-                  controller.priceHistoryInterval === 'day' ? 'week' : 'day',
-                )
-              }
-            >
-              Interval: {controller.priceHistoryInterval}
-            </Chip>
-            <View style={styles.switchRow}>
-              <Text variant="bodyMedium">Include promos</Text>
-              <Switch
-                value={controller.includePromo}
-                onValueChange={controller.setIncludePromo}
-                testID={TEST_IDS.prices.includePromoSwitch}
+      {segment === 'intelligence' ? (
+        <>
+          <DarkCard radius={16}>
+            <View style={styles.inputRow}>
+              <TextInput
+                label="Item"
+                value={controller.priceQueryItem}
+                onChangeText={controller.setPriceQueryItem}
+                mode="outlined"
+                autoCapitalize="none"
+                testID={TEST_IDS.prices.itemInput}
+                style={[styles.input, styles.flexInput]}
+                theme={inputTheme}
+              />
+              <TextInput
+                label="Area (optional)"
+                value={controller.priceQueryArea}
+                onChangeText={controller.setPriceQueryArea}
+                mode="outlined"
+                style={[styles.input, styles.flexInput]}
+                theme={inputTheme}
               />
             </View>
-          </View>
 
-          <View style={styles.row}>
-            <Button
-              mode="contained"
-              onPress={controller.loadPriceCompareResult}
-              loading={controller.loading}
-              disabled={controller.loading}
-              icon="swap-horizontal"
-              testID={TEST_IDS.prices.compareButton}
-            >
-              Compare
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={controller.loadPriceHistoryResult}
-              disabled={controller.loading}
-              icon="chart-timeline-variant"
-              testID={TEST_IDS.prices.historyButton}
-            >
-              History
-            </Button>
-            <Button
-              mode="text"
-              onPress={controller.loadPriceSignalResult}
-              disabled={controller.loading}
-              icon="lightning-bolt-outline"
-              testID={TEST_IDS.prices.signalButton}
-            >
-              Buy vs Wait
-            </Button>
-            <Button
-              mode="text"
-              onPress={controller.createSignalAlertFromPriceQuery}
-              disabled={controller.loading}
-              icon="bell-plus-outline"
-              testID={TEST_IDS.prices.signalNotifyButton}
-            >
-              Notify
-            </Button>
-          </View>
+            <View style={styles.coordRow}>
+              <TextInput
+                label="Lat"
+                value={controller.priceQueryLat}
+                onChangeText={controller.setPriceQueryLat}
+                mode="outlined"
+                keyboardType="decimal-pad"
+                style={[styles.input, styles.flexInput]}
+                theme={inputTheme}
+              />
+              <TextInput
+                label="Lng"
+                value={controller.priceQueryLng}
+                onChangeText={controller.setPriceQueryLng}
+                mode="outlined"
+                keyboardType="decimal-pad"
+                style={[styles.input, styles.flexInput]}
+                theme={inputTheme}
+              />
+              <TextInput
+                label="Radius"
+                value={controller.priceQueryRadiusKm}
+                onChangeText={controller.setPriceQueryRadiusKm}
+                mode="outlined"
+                keyboardType="decimal-pad"
+                style={[styles.input, styles.flexInput]}
+                theme={inputTheme}
+              />
+            </View>
 
-          {controller.priceCompareResult ? (
-            <>
-              <Divider />
-              <Text variant="titleSmall">Price comparison</Text>
-              {controller.priceCompareResult.rows.length === 0 ? (
-                <Text variant="bodySmall" style={styles.meta}>
-                  No rows for selected filters.
+            <View style={styles.optionRow}>
+              <TouchableOpacity
+                style={styles.intervalChip}
+                onPress={() =>
+                  controller.setPriceHistoryInterval(
+                    controller.priceHistoryInterval === 'day' ? 'week' : 'day',
+                  )
+                }
+              >
+                <MaterialCommunityIcons
+                  name={controller.priceHistoryInterval === 'day' ? 'calendar-today' : 'calendar-week'}
+                  size={14}
+                  color={Colors.textSecondary}
+                />
+                <Text style={styles.intervalText}>
+                  {controller.priceHistoryInterval}
                 </Text>
+              </TouchableOpacity>
+              <View style={styles.switchRow}>
+                <Text style={styles.switchLabel}>Promos</Text>
+                <Switch
+                  value={controller.includePromo}
+                  onValueChange={controller.setIncludePromo}
+                  trackColor={{ true: Colors.green, false: Colors.border }}
+                  thumbColor={Colors.textPrimary}
+                  testID={TEST_IDS.prices.includePromoSwitch}
+                />
+              </View>
+            </View>
+
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={controller.loadPriceCompareResult}
+                disabled={controller.loading}
+                testID={TEST_IDS.prices.compareButton}
+              >
+                <MaterialCommunityIcons name="swap-horizontal" size={16} color={Colors.green} />
+                <Text style={styles.actionBtnText}>Compare</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={controller.loadPriceHistoryResult}
+                disabled={controller.loading}
+                testID={TEST_IDS.prices.historyButton}
+              >
+                <MaterialCommunityIcons name="chart-timeline-variant" size={16} color={Colors.indigo} />
+                <Text style={styles.actionBtnText}>History</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={controller.loadPriceSignalResult}
+                disabled={controller.loading}
+                testID={TEST_IDS.prices.signalButton}
+              >
+                <MaterialCommunityIcons name="lightning-bolt-outline" size={16} color={Colors.amber} />
+                <Text style={styles.actionBtnText}>Buy vs Wait</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={controller.createSignalAlertFromPriceQuery}
+                disabled={controller.loading}
+                testID={TEST_IDS.prices.signalNotifyButton}
+              >
+                <MaterialCommunityIcons name="bell-plus-outline" size={16} color={Colors.textSecondary} />
+                <Text style={styles.actionBtnText}>Notify</Text>
+              </TouchableOpacity>
+            </View>
+          </DarkCard>
+
+          {/* Compare results */}
+          {controller.priceCompareResult ? (
+            <DarkCard radius={16}>
+              <Text style={styles.resultTitle}>Price comparison</Text>
+              {controller.priceCompareResult.rows.length === 0 ? (
+                <Text style={styles.emptyText}>No rows for selected filters.</Text>
               ) : (
-                controller.priceCompareResult.rows.map((row, index) => (
-                  <Card mode="outlined" style={styles.innerCard} key={`${row.storeName ?? row.areaText ?? 'row'}-${index}`}>
-                    <Card.Content style={styles.listBlock}>
-                      <Text variant="titleSmall">{row.storeName || row.areaText || 'Unknown area'}</Text>
-                      <Text variant="bodySmall" style={styles.meta}>
-                        Latest: {controller.formatCurrency(row.latestUnitPrice)} · Avg:{' '}
-                        {controller.formatCurrency(row.averageUnitPrice)}
+                controller.priceCompareResult.rows.map((row, i) => (
+                  <View
+                    key={`${row.storeName ?? row.areaText ?? 'row'}-${i}`}
+                    style={styles.resultRow}
+                  >
+                    <View style={styles.resultInfo}>
+                      <Text style={styles.resultName}>
+                        {row.storeName || row.areaText || 'Unknown area'}
                       </Text>
-                      <Text variant="bodySmall" style={styles.meta}>
-                        Trust: {(row.averageTrustScore * 100).toFixed(1)}% · Samples: {row.sampleSize}
+                      <Text style={styles.resultMeta}>
+                        Trust {(row.averageTrustScore * 100).toFixed(1)}% · {row.sampleSize} samples
                       </Text>
-                    </Card.Content>
-                  </Card>
+                    </View>
+                    <View style={styles.resultPrices}>
+                      <Text style={styles.resultPrice}>
+                        {controller.formatCurrency(row.latestUnitPrice)}
+                      </Text>
+                      <Text style={styles.resultAvg}>
+                        avg {controller.formatCurrency(row.averageUnitPrice)}
+                      </Text>
+                    </View>
+                  </View>
                 ))
               )}
-            </>
+            </DarkCard>
           ) : null}
 
+          {/* History results */}
           {controller.priceHistoryResult ? (
-            <>
-              <Divider />
-              <Text variant="titleSmall">Price history</Text>
+            <DarkCard radius={16}>
+              <Text style={styles.resultTitle}>Price history</Text>
               {controller.priceHistoryResult.points.length === 0 ? (
-                <Text variant="bodySmall" style={styles.meta}>
-                  No historical observations yet.
-                </Text>
+                <Text style={styles.emptyText}>No historical observations yet.</Text>
               ) : (
                 controller.priceHistoryResult.points.map((point) => (
-                  <View style={styles.rowBetween} key={point.bucket}>
-                    <Text variant="bodySmall">{point.bucket}</Text>
-                    <Text variant="bodySmall">
-                      Min {controller.formatCurrency(point.minUnitPrice)} / Avg{' '}
-                      {controller.formatCurrency(point.avgUnitPrice)} / Max{' '}
-                      {controller.formatCurrency(point.maxUnitPrice)}
+                  <View key={point.bucket} style={styles.historyRow}>
+                    <Text style={styles.historyBucket}>{point.bucket}</Text>
+                    <Text style={styles.historyValues}>
+                      {controller.formatCurrency(point.minUnitPrice)} / {controller.formatCurrency(point.avgUnitPrice)} / {controller.formatCurrency(point.maxUnitPrice)}
                     </Text>
                   </View>
                 ))
               )}
-            </>
+            </DarkCard>
           ) : null}
 
+          {/* Signal result */}
           {controller.priceSignalResult ? (
-            <>
-              <Divider />
-              <Text variant="titleSmall">Buy now vs wait signal</Text>
-              <Card mode="outlined" style={styles.innerCard}>
-                <Card.Content style={styles.listBlock}>
-                  <View style={styles.rowBetween}>
-                    <Chip
-                      icon={
-                        controller.priceSignalResult.decision === 'BUY_NOW'
-                          ? 'cart-check'
-                          : controller.priceSignalResult.decision === 'WAIT'
-                            ? 'clock-outline'
-                            : 'minus-circle-outline'
-                      }
-                    >
-                      {controller.priceSignalResult.decision}
-                    </Chip>
-                    <Text variant="bodySmall" style={styles.meta}>
-                      Confidence {(controller.priceSignalResult.confidence * 100).toFixed(1)}%
-                    </Text>
-                  </View>
-                  <Text variant="bodySmall" style={styles.meta}>
-                    Horizon {controller.priceSignalResult.horizonDays}d · Expected delta{' '}
-                    {controller.priceSignalResult.expectedDeltaPct.toFixed(2)}%
-                  </Text>
-                  <Text variant="bodySmall" style={styles.meta}>
-                    Latest {controller.formatCurrency(controller.priceSignalResult.diagnostics.latestUnitPrice)} · Avg
-                    30d {controller.formatCurrency(controller.priceSignalResult.diagnostics.avg30d)}
-                  </Text>
-                  {controller.priceSignalResult.reasons.map((reason) => (
-                    <Text key={reason.code} variant="bodySmall" style={styles.meta}>
-                      • {reason.label}
-                    </Text>
-                  ))}
-                  {controller.priceSignalResult.diagnostics.gatedNeutral &&
-                  controller.priceSignalResult.diagnostics.gateReason ? (
-                    <Text variant="bodySmall" style={styles.meta}>
-                      Gate: {controller.priceSignalResult.diagnostics.gateReason}
-                    </Text>
-                  ) : null}
-                </Card.Content>
-              </Card>
-            </>
+            <DarkCard radius={16} glow={controller.priceSignalResult.decision === 'BUY_NOW' ? 'green' : 'coral'}>
+              <Text style={styles.resultTitle}>Buy now vs wait</Text>
+              <View style={styles.signalRow}>
+                <PillBadge
+                  label={controller.priceSignalResult.decision}
+                  color={
+                    controller.priceSignalResult.decision === 'BUY_NOW'
+                      ? 'green'
+                      : controller.priceSignalResult.decision === 'WAIT'
+                      ? 'coral'
+                      : 'amber'
+                  }
+                />
+                <Text style={styles.signalConfidence}>
+                  {(controller.priceSignalResult.confidence * 100).toFixed(1)}% confidence
+                </Text>
+              </View>
+              <Text style={styles.resultMeta}>
+                Horizon {controller.priceSignalResult.horizonDays}d · Expected delta{' '}
+                {controller.priceSignalResult.expectedDeltaPct.toFixed(2)}%
+              </Text>
+              <Text style={styles.resultMeta}>
+                Latest {controller.formatCurrency(controller.priceSignalResult.diagnostics.latestUnitPrice)} · Avg30d{' '}
+                {controller.formatCurrency(controller.priceSignalResult.diagnostics.avg30d)}
+              </Text>
+              {controller.priceSignalResult.reasons.map((reason) => (
+                <Text key={reason.code} style={styles.signalReason}>
+                  · {reason.label}
+                </Text>
+              ))}
+            </DarkCard>
           ) : null}
+        </>
+      ) : (
+        <>
+          <DarkCard radius={16}>
+            <Text style={styles.resultTitle}>Promo ingestion</Text>
+            <View style={styles.promoButtons}>
+              <TouchableOpacity
+                style={[styles.promoBtn, styles.promoBtnPrimary]}
+                onPress={controller.pickPromoCamera}
+                disabled={controller.loading}
+                testID={TEST_IDS.prices.promoCameraButton}
+              >
+                <MaterialCommunityIcons name="camera" size={18} color={Colors.bg} />
+                <Text style={styles.promoBtnPrimaryText}>Camera</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.promoBtn, styles.promoBtnOutline]}
+                onPress={controller.pickPromoGallery}
+                disabled={controller.loading}
+                testID={TEST_IDS.prices.promoGalleryButton}
+              >
+                <MaterialCommunityIcons name="image-multiple-outline" size={18} color={Colors.textSecondary} />
+                <Text style={styles.promoBtnOutlineText}>Gallery</Text>
+              </TouchableOpacity>
+            </View>
 
-        </Card.Content>
-      </Card>
-
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Promo Ingestion" subtitle="Upload booklet/promo images for price signals" />
-        <Card.Content style={styles.content}>
-          <View style={styles.row}>
-            <Button
-              mode="contained"
-              onPress={controller.pickPromoCamera}
-              disabled={controller.loading}
-              icon="camera"
-              testID={TEST_IDS.prices.promoCameraButton}
-            >
-              Camera
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={controller.pickPromoGallery}
-              disabled={controller.loading}
-              icon="image-multiple-outline"
-              testID={TEST_IDS.prices.promoGalleryButton}
-            >
-              Gallery
-            </Button>
-          </View>
-
-          <Text variant="bodySmall" style={styles.meta}>
-            Promo image: {controller.promoReady ? 'Ready' : 'Not selected'}
-          </Text>
-          <Text variant="bodySmall" style={styles.meta}>
-            File ref: {controller.promoFileRef || '-'}
-          </Text>
-
-          <TextInput
-            label="Merchant hint"
-            value={controller.promoMerchantHint}
-            onChangeText={controller.setPromoMerchantHint}
-            mode="outlined"
-          />
-          <TextInput
-            label="Area hint"
-            value={controller.promoAreaHint}
-            onChangeText={controller.setPromoAreaHint}
-            mode="outlined"
-          />
-
-          <View style={styles.row}>
-            <Button
-              mode="contained"
-              onPress={controller.ingestPromoFile}
-              disabled={controller.loading || !controller.promoFileRef}
-              icon="upload"
-              testID={TEST_IDS.prices.promoIngestButton}
-            >
-              Ingest promo
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={controller.loadPromos}
-              disabled={controller.loading}
-              icon="refresh"
-              testID={TEST_IDS.prices.promoListButton}
-            >
-              Load promos
-            </Button>
-          </View>
-
-          {controller.promoIngestionResult ? (
-            <Text variant="bodySmall" style={styles.meta}>
-              Ingestion {controller.promoIngestionResult.status} · created {controller.promoIngestionResult.created}
-              , skipped {controller.promoIngestionResult.skipped}
+            <Text style={styles.promoStatus}>
+              {controller.promoReady ? 'Image ready' : 'No image selected'}
             </Text>
-          ) : null}
+
+            <TextInput
+              label="Merchant hint"
+              value={controller.promoMerchantHint}
+              onChangeText={controller.setPromoMerchantHint}
+              mode="outlined"
+              style={styles.input}
+              theme={inputTheme}
+            />
+            <TextInput
+              label="Area hint"
+              value={controller.promoAreaHint}
+              onChangeText={controller.setPromoAreaHint}
+              mode="outlined"
+              style={styles.input}
+              theme={inputTheme}
+            />
+
+            <View style={styles.promoActions}>
+              <TouchableOpacity
+                style={[styles.promoBtn, styles.promoBtnPrimary, !controller.promoFileRef && styles.promoBtnDisabled]}
+                onPress={controller.ingestPromoFile}
+                disabled={controller.loading || !controller.promoFileRef}
+                testID={TEST_IDS.prices.promoIngestButton}
+              >
+                <Text style={styles.promoBtnPrimaryText}>Ingest promo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.promoBtn, styles.promoBtnOutline]}
+                onPress={controller.loadPromos}
+                disabled={controller.loading}
+                testID={TEST_IDS.prices.promoListButton}
+              >
+                <Text style={styles.promoBtnOutlineText}>Load promos</Text>
+              </TouchableOpacity>
+            </View>
+
+            {controller.promoIngestionResult ? (
+              <Text style={styles.ingestionResult}>
+                {controller.promoIngestionResult.status} · created {controller.promoIngestionResult.created}, skipped{' '}
+                {controller.promoIngestionResult.skipped}
+              </Text>
+            ) : null}
+          </DarkCard>
 
           {controller.promoItems.length > 0 ? (
-            <>
-              <Divider />
-              {controller.promoItems.map((item) => (
-                <Card key={item.id} mode="outlined" style={styles.innerCard}>
-                  <Card.Content style={styles.listBlock}>
-                    <Text variant="titleSmall">{item.merchantText || 'Promo source'}</Text>
-                    <Text variant="bodySmall" style={styles.meta}>
-                      {item.status} · {item.areaText || 'No area'}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.meta}>
-                      Observations: {item.observations.length}
-                    </Text>
-                  </Card.Content>
-                </Card>
-              ))}
-            </>
+            controller.promoItems.map((item) => (
+              <DarkCard key={item.id} radius={16}>
+                <Text style={styles.promoItemName}>{item.merchantText || 'Promo source'}</Text>
+                <Text style={styles.resultMeta}>
+                  {item.status} · {item.areaText || 'No area'} · {item.observations.length} obs
+                </Text>
+              </DarkCard>
+            ))
           ) : null}
-        </Card.Content>
-      </Card>
-    </ScreenContainer>
+
+          {controller.promoItems.length === 0 && !controller.promoIngestionResult ? (
+            <EmptyState icon="tag-outline" message="No promos loaded yet." />
+          ) : null}
+        </>
+      )}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
+  scroll: {
+    flex: 1,
+    backgroundColor: Colors.bg,
   },
   content: {
-    gap: 12,
+    padding: 20,
+    paddingBottom: 100,
+    gap: 16,
   },
-  row: {
+  segmentRow: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    padding: 4,
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  segmentBtnActive: {
+    backgroundColor: Colors.surfaceHigh,
+  },
+  segmentText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  segmentTextActive: {
+    color: Colors.textPrimary,
+    fontWeight: '600',
+  },
+  inputRow: {
     flexDirection: 'row',
     gap: 10,
+    marginBottom: 8,
   },
-  rowBetween: {
+  coordRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: Colors.surface,
+    fontSize: 13,
+    marginBottom: 0,
+  },
+  flexInput: {
+    flex: 1,
+  },
+  optionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 10,
+    marginBottom: 12,
+  },
+  intervalChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  intervalText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
   },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  flexInput: {
+  switchLabel: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  actionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  actionBtnText: {
+    fontSize: 12,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
+  resultTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 10,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  resultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  resultInfo: {
     flex: 1,
+    gap: 2,
   },
-  meta: {
-    color: '#64748b',
+  resultName: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '500',
   },
-  innerCard: {
+  resultMeta: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  resultPrices: {
+    alignItems: 'flex-end',
+  },
+  resultPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.green,
+  },
+  resultAvg: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  historyBucket: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  historyValues: {
+    fontSize: 12,
+    color: Colors.textPrimary,
+  },
+  signalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 8,
+  },
+  signalConfidence: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  signalReason: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  promoButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  promoBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
     borderRadius: 12,
   },
-  listBlock: {
-    gap: 4,
+  promoBtnPrimary: {
+    backgroundColor: Colors.green,
+  },
+  promoBtnPrimaryText: {
+    color: Colors.bg,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  promoBtnOutline: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  promoBtnOutlineText: {
+    color: Colors.textSecondary,
+    fontSize: 14,
+  },
+  promoBtnDisabled: {
+    opacity: 0.4,
+  },
+  promoStatus: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 10,
+  },
+  promoActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  ingestionResult: {
+    fontSize: 12,
+    color: Colors.green,
+    marginTop: 10,
+  },
+  promoItemName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 4,
   },
 });

@@ -1,129 +1,189 @@
-import { StyleSheet, View } from 'react-native';
-import { Button, Card, Text, TextInput } from 'react-native-paper';
-import { ScreenContainer } from '../../../components/ui/screen-container';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { MetaRow } from '../../../components/ui/meta-row';
+import { DarkCard } from '../../../components/ui/dark-card';
+import { PillBadge } from '../../../components/ui/pill-badge';
 import { TEST_IDS } from '../../../core/testing/test-ids';
+import { Colors } from '../../../theme';
 
 function formatTimestamp(value: string): string {
-  if (!value) {
-    return '-';
-  }
-
+  if (!value) return '-';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 export function AccountScreen() {
   const controller = useClariFiController();
-  const activePushDeviceCount = controller.pushDevices.filter((device) => device.active).length;
+  const activePushDeviceCount = controller.pushDevices.filter((d) => d.active).length;
+  const isLive = controller.backendLiveHealth?.status === 'ok';
+  const isReady = controller.backendReadyHealth?.status === 'ok';
 
   return (
-    <ScreenContainer>
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Account" subtitle="Auth, backend health, and push diagnostics" />
-        <Card.Content style={styles.content}>
-          <TextInput
-            label="API Base URL"
-            value={controller.apiBaseUrl}
-            onChangeText={controller.setApiBaseUrl}
-            autoCapitalize="none"
-            mode="outlined"
-            testID={TEST_IDS.account.apiBaseInput}
-          />
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
+      <DarkCard radius={20}>
+        <Text style={styles.cardTitle}>Status</Text>
+        <View style={styles.statusRow}>
+          <PillBadge label={isLive ? 'Live' : 'Offline'} color={isLive ? 'green' : 'coral'} />
+          <PillBadge label={isReady ? 'Ready' : 'Not ready'} color={isReady ? 'green' : 'amber'} />
+        </View>
+        <View style={styles.metaGroup}>
+          <MetaRow label="Signed in as" value={controller.signedInEmail || '-'} />
+          <MetaRow label="Backend user" value={controller.backendUserId || '-'} />
+          <MetaRow label="Health checked" value={formatTimestamp(controller.backendHealthCheckedAt)} />
+        </View>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnPrimary]}
+            onPress={controller.syncBackendUser}
+            disabled={controller.loading}
+            testID={TEST_IDS.account.syncBackendButton}
+          >
+            <Text style={styles.btnPrimaryText}>Sync user</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnOutline]}
+            onPress={controller.checkBackendHealth}
+            disabled={controller.loading}
+            testID={TEST_IDS.account.checkHealthButton}
+          >
+            <Text style={styles.btnOutlineText}>Check health</Text>
+          </TouchableOpacity>
+        </View>
+      </DarkCard>
 
-          <MetaRow label="Clerk user" value={controller.signedInEmail || '-'} />
-          <MetaRow label="API user id" value={controller.backendUserId || '-'} />
-          <MetaRow label="Backend live" value={controller.backendLiveHealth?.status || '-'} />
-          <MetaRow label="Backend ready" value={controller.backendReadyHealth?.status || '-'} />
-          <MetaRow
-            label="Health checked"
-            value={formatTimestamp(controller.backendHealthCheckedAt)}
-          />
-          <MetaRow label="Push status" value={controller.pushStatus || '-'} />
-          <MetaRow label="Push token" value={controller.pushTokenPreview || '-'} />
-          <MetaRow
-            label="Active push devices"
-            value={`${activePushDeviceCount} / ${controller.pushDevices.length}`}
-          />
+      <DarkCard radius={16}>
+        <Text style={styles.cardTitle}>Push notifications</Text>
+        <MetaRow label="Status" value={controller.pushStatus || '-'} />
+        <MetaRow label="Token" value={controller.pushTokenPreview || '-'} />
+        <MetaRow
+          label="Active devices"
+          value={`${activePushDeviceCount} / ${controller.pushDevices.length}`}
+        />
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnOutline]}
+            onPress={controller.loadPushDevices}
+            disabled={controller.loading}
+            testID={TEST_IDS.account.refreshPushDevicesButton}
+          >
+            <Text style={styles.btnOutlineText}>Refresh devices</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btn, styles.btnOutline]}
+            onPress={controller.revokeCurrentPushDevice}
+            disabled={controller.loading || controller.pushTokenPreview === '-'}
+            testID={TEST_IDS.account.revokePushDeviceButton}
+          >
+            <Text style={styles.btnOutlineText}>Revoke device</Text>
+          </TouchableOpacity>
+        </View>
+      </DarkCard>
 
-          <View style={styles.row}>
-            <Button
-              mode="contained"
-              onPress={controller.syncBackendUser}
-              loading={controller.loading}
-              disabled={controller.loading}
-              testID={TEST_IDS.account.syncBackendButton}
-            >
-              Sync user
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={controller.checkBackendHealth}
-              disabled={controller.loading}
-              testID={TEST_IDS.account.checkHealthButton}
-            >
-              Check health
-            </Button>
-          </View>
+      <DarkCard radius={16}>
+        <Text style={styles.cardTitle}>Developer</Text>
+        <TextInput
+          label="API Base URL"
+          value={controller.apiBaseUrl}
+          onChangeText={controller.setApiBaseUrl}
+          autoCapitalize="none"
+          mode="outlined"
+          testID={TEST_IDS.account.apiBaseInput}
+          theme={{ colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary } }}
+          style={styles.apiInput}
+        />
+        <Text style={styles.hint}>
+          Use your machine's LAN IP, e.g. http://192.168.x.x:3000/v1
+        </Text>
+      </DarkCard>
 
-          <View style={styles.row}>
-            <Button
-              mode="outlined"
-              onPress={controller.loadPushDevices}
-              disabled={controller.loading}
-              testID={TEST_IDS.account.refreshPushDevicesButton}
-            >
-              Refresh devices
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={controller.revokeCurrentPushDevice}
-              disabled={controller.loading || controller.pushTokenPreview === '-'}
-              testID={TEST_IDS.account.revokePushDeviceButton}
-            >
-              Revoke device
-            </Button>
-            <Button
-              mode="outlined"
-              onPress={controller.signOutUser}
-              disabled={controller.loading}
-              testID={TEST_IDS.account.signOutButton}
-            >
-              Sign out
-            </Button>
-          </View>
-        </Card.Content>
-      </Card>
-
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Notes" />
-        <Card.Content style={styles.content}>
-          <Text variant="bodySmall" style={styles.helpText}>
-            Use a reachable API URL on your phone, for example your machine LAN IP: `http://192.168.x.x:3000/v1`.
-          </Text>
-          <Text variant="bodySmall" style={styles.helpText}>
-            Internal beta flow: Sync user, Check health, Refresh devices, then run Capture, Ledger, Reports, Prices, Families, Splits, and Alerts smoke.
-          </Text>
-        </Card.Content>
-      </Card>
-    </ScreenContainer>
+      <TouchableOpacity
+        style={[styles.btn, styles.btnDestructive]}
+        onPress={controller.signOutUser}
+        disabled={controller.loading}
+        testID={TEST_IDS.account.signOutButton}
+      >
+        <Text style={styles.btnDestructiveText}>Sign out</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
+  scroll: {
+    flex: 1,
+    backgroundColor: Colors.bg,
   },
   content: {
-    gap: 12,
+    padding: 20,
+    paddingBottom: 40,
+    gap: 16,
   },
-  row: {
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 12,
+  },
+  statusRow: {
     flexDirection: 'row',
-    gap: 12,
-    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
   },
-  helpText: {
-    color: '#475569',
+  metaGroup: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  btn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnPrimary: {
+    backgroundColor: Colors.green,
+  },
+  btnPrimaryText: {
+    color: '#0B0B0E',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  btnOutline: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  btnOutlineText: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+  },
+  btnDestructive: {
+    backgroundColor: Colors.coralDim,
+    borderWidth: 1,
+    borderColor: Colors.coral,
+  },
+  btnDestructiveText: {
+    color: Colors.coral,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  apiInput: {
+    backgroundColor: Colors.surface,
+    fontSize: 13,
+  },
+  hint: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 8,
   },
 });

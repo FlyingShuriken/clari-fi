@@ -1,16 +1,29 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Button, Card, Chip, Divider, Text, TextInput } from 'react-native-paper';
-import { ScreenContainer } from '../../../components/ui/screen-container';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
+import { DarkCard } from '../../../components/ui/dark-card';
+import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 
 type WizardStep = 1 | 2 | 3 | 4 | 5;
+
+const STEP_LABELS: Record<WizardStep, string> = {
+  1: 'Select family',
+  2: 'Select expense',
+  3: 'Select participants',
+  4: 'Assign items',
+  5: 'Review & finalize',
+};
 
 function toNumber(value: string): number {
   const parsed = Number(value.trim());
   return Number.isFinite(parsed) ? parsed : 0;
 }
+
+const inputTheme = {
+  colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary },
+};
 
 export function SplitsScreen() {
   const controller = useClariFiController();
@@ -23,7 +36,7 @@ export function SplitsScreen() {
   const [assignmentsByLineItemId, setAssignmentsByLineItemId] = useState<Record<string, string[]>>({});
 
   const activeFamily = useMemo(
-    () => controller.families.find((family) => family.id === controller.activeFamilyId) ?? null,
+    () => controller.families.find((f) => f.id === controller.activeFamilyId) ?? null,
     [controller.activeFamilyId, controller.families],
   );
   const splitDetail = controller.splitDetail;
@@ -41,62 +54,47 @@ export function SplitsScreen() {
   }, [controller.activeFamilyId]);
 
   useEffect(() => {
-    if (!splitDetail || splitLineItems.length === 0 || splitParticipants.length === 0) {
-      return;
-    }
-    setAssignmentsByLineItemId((previous) => {
+    if (!splitDetail || splitLineItems.length === 0 || splitParticipants.length === 0) return;
+    setAssignmentsByLineItemId((prev) => {
       let changed = false;
-      const next = { ...previous };
+      const next = { ...prev };
       for (const lineItem of splitLineItems) {
-        const current = next[lineItem.id] ?? [];
-        if (current.length === 0) {
-          next[lineItem.id] = splitParticipants.map((participant) => participant.id);
+        if ((next[lineItem.id] ?? []).length === 0) {
+          next[lineItem.id] = splitParticipants.map((p) => p.id);
           changed = true;
         }
       }
-      return changed ? next : previous;
+      return changed ? next : prev;
     });
   }, [splitDetail?.split.id, splitLineItems, splitParticipants]);
 
-  const toggleFamilyMember = (familyMemberId: string) => {
-    setSelectedFamilyMemberIds((previous) =>
-      previous.includes(familyMemberId)
-        ? previous.filter((item) => item !== familyMemberId)
-        : [...previous, familyMemberId],
+  const toggleFamilyMember = (id: string) => {
+    setSelectedFamilyMemberIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
 
-  const addGuestParticipant = () => {
-    const trimmed = guestInput.trim();
-    if (!trimmed || guestParticipants.includes(trimmed)) {
-      return;
-    }
-    setGuestParticipants((previous) => [...previous, trimmed]);
+  const addGuest = () => {
+    const t = guestInput.trim();
+    if (!t || guestParticipants.includes(t)) return;
+    setGuestParticipants((prev) => [...prev, t]);
     setGuestInput('');
   };
 
-  const removeGuestParticipant = (name: string) => {
-    setGuestParticipants((previous) => previous.filter((item) => item !== name));
-  };
-
   const toggleAssignment = (lineItemId: string, participantId: string) => {
-    setAssignmentsByLineItemId((previous) => {
-      const current = previous[lineItemId] ?? [];
-      const next = current.includes(participantId)
-        ? current.filter((item) => item !== participantId)
-        : [...current, participantId];
+    setAssignmentsByLineItemId((prev) => {
+      const cur = prev[lineItemId] ?? [];
       return {
-        ...previous,
-        [lineItemId]: next,
+        ...prev,
+        [lineItemId]: cur.includes(participantId)
+          ? cur.filter((x) => x !== participantId)
+          : [...cur, participantId],
       };
     });
   };
 
   const createDraft = async () => {
-    if (!controller.activeFamilyId) {
-      return;
-    }
-
+    if (!controller.activeFamilyId) return;
     await controller.createSplitDraft({
       familyId: controller.activeFamilyId,
       expenseId: selectedExpenseId || undefined,
@@ -108,19 +106,11 @@ export function SplitsScreen() {
   };
 
   const saveAllocations = async () => {
-    if (!controller.activeSplitId || !splitDetail || splitLineItems.length === 0) {
-      return;
-    }
-
-    const lineAssignments = splitLineItems.map((lineItem) => ({
-      expenseLineItemId: lineItem.id,
-      participantIds: assignmentsByLineItemId[lineItem.id] ?? [],
+    if (!controller.activeSplitId || !splitDetail || splitLineItems.length === 0) return;
+    const lineAssignments = splitLineItems.map((li) => ({
+      expenseLineItemId: li.id,
+      participantIds: assignmentsByLineItemId[li.id] ?? [],
     }));
-
-    if (lineAssignments.some((assignment) => assignment.participantIds.length === 0)) {
-      throw new Error('Each line item must have at least one participant selected.');
-    }
-
     await controller.updateSplitAllocationsById(controller.activeSplitId, {
       lineAssignments,
       sharedCharge: toNumber(sharedChargeInput),
@@ -128,362 +118,543 @@ export function SplitsScreen() {
     setStep(5);
   };
 
-  const activeStepLabel = (() => {
-    switch (step) {
-      case 1:
-        return '1. Select family';
-      case 2:
-        return '2. Select expense';
-      case 3:
-        return '3. Select participants';
-      case 4:
-        return '4. Assign items';
-      case 5:
-        return '5. Review and finalize';
-      default:
-        return '';
-    }
-  })();
-
   return (
-    <ScreenContainer>
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Split Wizard" subtitle={activeStepLabel} />
-        <Card.Content style={styles.content}>
-          <View style={styles.row}>
-            {[1, 2, 3, 4, 5].map((stepNumber) => (
-              <Chip
-                key={stepNumber}
-                selected={step === stepNumber}
-                onPress={() => setStep(stepNumber as WizardStep)}
-              >
-                {stepNumber}
-              </Chip>
-            ))}
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
+      {/* Progress bar */}
+      <View style={styles.progressContainer}>
+        {([1, 2, 3, 4, 5] as WizardStep[]).map((s) => (
+          <TouchableOpacity key={s} style={styles.stepWrapper} onPress={() => setStep(s)}>
+            <View style={[styles.stepBar, step >= s && styles.stepBarFilled]} />
+            <Text style={[styles.stepNum, step === s && styles.stepNumActive]}>{s}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={styles.stepLabel}>{STEP_LABELS[step]}</Text>
+
+      {/* Step 1: Select family */}
+      {step === 1 ? (
+        <DarkCard radius={16}>
+          <View style={styles.stepHeader}>
+            <Text style={styles.stepSectionTitle}>Select active family</Text>
+            <TouchableOpacity
+              style={styles.smallBtn}
+              onPress={controller.loadFamiliesList}
+              disabled={controller.loading}
+            >
+              <Text style={styles.smallBtnText}>Refresh</Text>
+            </TouchableOpacity>
           </View>
-
-          {step === 1 ? (
-            <>
-              <View style={styles.row}>
-                <Button
-                  mode="contained"
-                  onPress={controller.loadFamiliesList}
-                  disabled={controller.loading}
-                  icon="refresh"
+          {controller.families.length === 0 ? (
+            <Text style={styles.emptyText}>No families found. Go to Families tab to create one.</Text>
+          ) : (
+            controller.families.map((family) => {
+              const isActive = family.id === controller.activeFamilyId;
+              return (
+                <TouchableOpacity
+                  key={family.id}
+                  style={[styles.listItem, isActive && styles.listItemActive]}
+                  onPress={() => controller.setActiveFamilyId(family.id)}
                 >
-                  Load families
-                </Button>
-              </View>
-              {controller.families.length === 0 ? (
-                <Text variant="bodySmall" style={styles.meta}>
-                  No families found.
+                  <Text style={styles.listItemTitle}>{family.name}</Text>
+                  <Text style={styles.listItemMeta}>
+                    {family.currentUserRole ?? 'N/A'} · {family.members.length} members
+                  </Text>
+                  {isActive ? (
+                    <Text style={styles.activeIndicator}>✓ Active</Text>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })
+          )}
+          <TouchableOpacity
+            style={[styles.continueBtn, !controller.activeFamilyId && styles.continueBtnDisabled]}
+            onPress={() => setStep(2)}
+            disabled={!controller.activeFamilyId}
+          >
+            <Text style={styles.continueBtnText}>Continue →</Text>
+          </TouchableOpacity>
+        </DarkCard>
+      ) : null}
+
+      {/* Step 2: Select expense */}
+      {step === 2 ? (
+        <DarkCard radius={16}>
+          <View style={styles.stepHeader}>
+            <Text style={styles.stepSectionTitle}>Select expense</Text>
+            <TouchableOpacity
+              style={styles.smallBtn}
+              onPress={controller.loadLedger}
+              disabled={controller.loading}
+              testID={TEST_IDS.ledger.refreshButton}
+            >
+              <Text style={styles.smallBtnText}>Load</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.emptyText}>
+            Family: {activeFamily?.name ?? '-'}
+          </Text>
+          {controller.ledgerItems.slice(0, 20).map((expense) => {
+            const isSelected = selectedExpenseId === expense.id;
+            return (
+              <TouchableOpacity
+                key={expense.id}
+                style={[styles.listItem, isSelected && styles.listItemActive]}
+                onPress={() => setSelectedExpenseId(expense.id)}
+              >
+                <Text style={styles.listItemTitle}>{expense.merchant}</Text>
+                <Text style={styles.listItemMeta}>
+                  {controller.formatCurrency(expense.totalAmount, expense.currency)} ·{' '}
+                  {new Date(expense.transactionAt).toLocaleDateString()}
                 </Text>
-              ) : (
-                controller.families.map((family) => (
-                  <Card key={family.id} mode="outlined" style={styles.innerCard}>
-                    <Card.Content style={styles.listBlock}>
-                      <View style={styles.rowBetween}>
-                        <Text variant="titleSmall">{family.name}</Text>
-                        <Button mode="text" onPress={() => controller.setActiveFamilyId(family.id)}>
-                          {controller.activeFamilyId === family.id ? 'Active' : 'Use'}
-                        </Button>
-                      </View>
-                      <Text variant="bodySmall" style={styles.meta}>
-                        Role {family.currentUserRole || 'N/A'} · members {family.members.length}
-                      </Text>
-                    </Card.Content>
-                  </Card>
-                ))
-              )}
-              <Button mode="contained" disabled={!controller.activeFamilyId} onPress={() => setStep(2)}>
-                Continue
-              </Button>
-            </>
-          ) : null}
+              </TouchableOpacity>
+            );
+          })}
+          <TextInput
+            label="Shared charge"
+            value={sharedChargeInput}
+            onChangeText={setSharedChargeInput}
+            keyboardType="decimal-pad"
+            mode="outlined"
+            style={styles.input}
+            theme={inputTheme}
+          />
+          <TouchableOpacity style={styles.continueBtn} onPress={() => setStep(3)}>
+            <Text style={styles.continueBtnText}>Continue →</Text>
+          </TouchableOpacity>
+        </DarkCard>
+      ) : null}
 
-          {step === 2 ? (
-            <>
-              <Text variant="bodySmall" style={styles.meta}>
-                Active family: {activeFamily?.name || '-'}
-              </Text>
-              <View style={styles.row}>
-                <Button
-                  mode="contained"
-                  onPress={controller.loadLedger}
-                  disabled={controller.loading}
-                  icon="refresh"
-                  testID={TEST_IDS.ledger.refreshButton}
-                >
-                  Load expenses
-                </Button>
-                <Button mode="outlined" onPress={() => setSelectedExpenseId('')}>
-                  Manual split
-                </Button>
-              </View>
-              {controller.ledgerItems.length === 0 ? (
-                <Text variant="bodySmall" style={styles.meta}>
-                  No expenses loaded yet.
-                </Text>
-              ) : (
-                controller.ledgerItems.slice(0, 20).map((expense) => (
-                  <Card key={expense.id} mode="outlined" style={styles.innerCard}>
-                    <Card.Content style={styles.listBlock}>
-                      <View style={styles.rowBetween}>
-                        <Text variant="titleSmall">{expense.merchant}</Text>
-                        <Button mode="text" onPress={() => setSelectedExpenseId(expense.id)}>
-                          {selectedExpenseId === expense.id ? 'Selected' : 'Select'}
-                        </Button>
-                      </View>
-                      <Text variant="bodySmall" style={styles.meta}>
-                        {controller.formatCurrency(expense.totalAmount, expense.currency)} ·{' '}
-                        {new Date(expense.transactionAt).toLocaleDateString()}
-                      </Text>
-                    </Card.Content>
-                  </Card>
-                ))
-              )}
-              <TextInput
-                label="Shared charge"
-                value={sharedChargeInput}
-                onChangeText={setSharedChargeInput}
-                keyboardType="decimal-pad"
-                mode="outlined"
-              />
-              <Button mode="contained" onPress={() => setStep(3)}>
-                Continue
-              </Button>
-            </>
-          ) : null}
-
-          {step === 3 ? (
-            <>
-              <Text variant="bodySmall" style={styles.meta}>
-                Select participants from active family and add guests if needed.
-              </Text>
-
-              {activeFamily?.members.map((member) => (
-                <Chip
+      {/* Step 3: Select participants */}
+      {step === 3 ? (
+        <DarkCard radius={16}>
+          <Text style={styles.stepSectionTitle}>Select participants</Text>
+          <Text style={styles.emptyText}>Family members:</Text>
+          <View style={styles.chipRow}>
+            {activeFamily?.members.map((member) => {
+              const selected = selectedFamilyMemberIds.includes(member.id);
+              return (
+                <TouchableOpacity
                   key={member.id}
-                  selected={selectedFamilyMemberIds.includes(member.id)}
+                  style={[styles.participantChip, selected && styles.participantChipActive]}
                   onPress={() => toggleFamilyMember(member.id)}
                 >
-                  {member.displayName || member.email}
-                </Chip>
-              ))}
-
-              <Divider />
-
-              <TextInput
-                label="Add guest participant"
-                value={guestInput}
-                onChangeText={setGuestInput}
-                mode="outlined"
-              />
-              <View style={styles.row}>
-                <Button mode="outlined" onPress={addGuestParticipant}>
-                  Add guest
-                </Button>
-              </View>
-              <View style={styles.row}>
-                {guestParticipants.map((guest) => (
-                  <Chip key={guest} onClose={() => removeGuestParticipant(guest)}>
-                    {guest}
-                  </Chip>
-                ))}
-              </View>
-
-              <Button
-                mode="contained"
-                onPress={createDraft}
-                disabled={controller.loading || !controller.activeFamilyId}
-                testID={TEST_IDS.splits.createButton}
+                  <Text style={[styles.participantChipText, selected && styles.participantChipTextActive]}>
+                    {member.displayName || member.email}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={styles.divider} />
+          <View style={styles.guestRow}>
+            <TextInput
+              label="Add guest"
+              value={guestInput}
+              onChangeText={setGuestInput}
+              mode="outlined"
+              style={[styles.input, { flex: 1 }]}
+              theme={inputTheme}
+            />
+            <TouchableOpacity style={styles.addGuestBtn} onPress={addGuest}>
+              <Text style={styles.addGuestText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.chipRow}>
+            {guestParticipants.map((guest) => (
+              <TouchableOpacity
+                key={guest}
+                style={[styles.participantChip, styles.participantChipActive]}
+                onPress={() => setGuestParticipants((prev) => prev.filter((g) => g !== guest))}
               >
-                Create split draft
-              </Button>
-            </>
-          ) : null}
+                <Text style={styles.participantChipTextActive}>{guest} ×</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={[styles.continueBtn, (!controller.activeFamilyId || controller.loading) && styles.continueBtnDisabled]}
+            onPress={createDraft}
+            disabled={controller.loading || !controller.activeFamilyId}
+            testID={TEST_IDS.splits.createButton}
+          >
+            <Text style={styles.continueBtnText}>Create draft →</Text>
+          </TouchableOpacity>
+        </DarkCard>
+      ) : null}
 
-          {step === 4 ? (
-            <>
-              <Text variant="bodySmall" style={styles.meta}>
-                Active split: {controller.activeSplitId || '-'}
+      {/* Step 4: Assign items */}
+      {step === 4 ? (
+        <DarkCard radius={16}>
+          <View style={styles.stepHeader}>
+            <Text style={styles.stepSectionTitle}>Assign line items</Text>
+            <TouchableOpacity
+              style={styles.smallBtn}
+              onPress={controller.loadSplitSessions}
+              disabled={controller.loading || !controller.activeFamilyId}
+            >
+              <Text style={styles.smallBtnText}>Load sessions</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.emptyText}>Active split: {controller.activeSplitId || '-'}</Text>
+          {controller.splitSummaries.map((split) => (
+            <TouchableOpacity
+              key={split.id}
+              style={styles.listItem}
+              onPress={() => controller.loadSplitDetailById(split.id)}
+            >
+              <Text style={styles.listItemTitle}>{split.title || 'Split session'}</Text>
+              <Text style={styles.listItemMeta}>
+                {split.status} · {controller.formatCurrency(split.totalAmount)}
               </Text>
-              <View style={styles.row}>
-                <Button
-                  mode="outlined"
-                  onPress={controller.loadSplitSessions}
-                  disabled={controller.loading || !controller.activeFamilyId}
-                >
-                  Load sessions
-                </Button>
-              </View>
-              {controller.splitSummaries.map((split) => (
-                <Card key={split.id} mode="outlined" style={styles.innerCard}>
-                  <Card.Content style={styles.listBlock}>
-                    <View style={styles.rowBetween}>
-                      <Text variant="bodyMedium">{split.title || 'Split session'}</Text>
-                      <Button
-                        mode="text"
-                        onPress={async () => {
-                          await controller.loadSplitDetailById(split.id);
-                        }}
-                      >
-                        Use
-                      </Button>
-                    </View>
-                    <Text variant="bodySmall" style={styles.meta}>
-                      {split.status} · {controller.formatCurrency(split.totalAmount)}
-                    </Text>
-                  </Card.Content>
-                </Card>
+            </TouchableOpacity>
+          ))}
+          {splitDetail && splitLineItems.length > 0 ? (
+            <>
+              {splitLineItems.map((lineItem) => (
+                <View key={lineItem.id} style={styles.lineItemBlock}>
+                  <Text style={styles.lineItemTitle}>
+                    {lineItem.descriptionRaw} · {controller.formatCurrency(lineItem.totalPrice)}
+                  </Text>
+                  <View style={styles.chipRow}>
+                    {splitParticipants.map((participant) => {
+                      const assigned = (assignmentsByLineItemId[lineItem.id] ?? []).includes(participant.id);
+                      return (
+                        <TouchableOpacity
+                          key={`${lineItem.id}-${participant.id}`}
+                          style={[styles.participantChip, assigned && styles.participantChipActive]}
+                          onPress={() => toggleAssignment(lineItem.id, participant.id)}
+                        >
+                          <Text style={[styles.participantChipText, assigned && styles.participantChipTextActive]}>
+                            {participant.displayName}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
               ))}
+              <TouchableOpacity
+                style={[styles.continueBtn, (!controller.activeSplitId || controller.loading) && styles.continueBtnDisabled]}
+                onPress={saveAllocations}
+                disabled={controller.loading || !controller.activeSplitId}
+                testID={TEST_IDS.splits.saveAllocationsButton}
+              >
+                <Text style={styles.continueBtnText}>Save allocations →</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.emptyText}>Load a split with line items to continue.</Text>
+          )}
+        </DarkCard>
+      ) : null}
 
-              {splitDetail && splitLineItems.length > 0 ? (
+      {/* Step 5: Review and finalize */}
+      {step === 5 ? (
+        <DarkCard radius={16}>
+          <Text style={styles.stepSectionTitle}>Review and finalize</Text>
+          {splitDetail ? (
+            <View style={styles.reviewBlock}>
+              <Text style={styles.listItemTitle}>{splitDetail.split.title || 'Split'}</Text>
+              <Text style={styles.listItemMeta}>
+                {splitDetail.split.status} · {controller.formatCurrency(splitDetail.split.totalAmount)}
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.smallBtn, styles.smallBtnOutline]}
+              onPress={async () => {
+                if (controller.activeSplitId) {
+                  await controller.loadSplitBalancesById(controller.activeSplitId);
+                }
+              }}
+              disabled={controller.loading || !controller.activeSplitId}
+              testID={TEST_IDS.splits.loadBalancesButton}
+            >
+              <Text style={styles.smallBtnOutlineText}>Load balances</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.continueBtn, { flex: 1 }, (!controller.activeSplitId || controller.loading) && styles.continueBtnDisabled]}
+              onPress={async () => {
+                if (controller.activeSplitId) {
+                  await controller.finalizeSplitById(controller.activeSplitId);
+                  await controller.loadSplitBalancesById(controller.activeSplitId);
+                }
+              }}
+              disabled={controller.loading || !controller.activeSplitId}
+              testID={TEST_IDS.splits.finalizeButton}
+            >
+              <Text style={styles.continueBtnText}>Finalize split</Text>
+            </TouchableOpacity>
+          </View>
+          {controller.splitBalanceSummary ? (
+            <View style={styles.balanceBlock}>
+              <Text style={styles.balanceTitle}>Balances</Text>
+              {controller.splitBalanceSummary.balances.map((row) => (
+                <View key={row.participantId} style={styles.balanceRow}>
+                  <Text style={styles.balanceName}>{row.displayName}</Text>
+                  <Text style={styles.balanceValues}>
+                    owed {controller.formatCurrency(row.owedAmount)} · net {controller.formatCurrency(row.netAmount)}
+                  </Text>
+                </View>
+              ))}
+              {controller.splitBalanceSummary.settlements.length > 0 ? (
                 <>
-                  <Divider />
-                  {splitLineItems.map((lineItem) => (
-                    <Card key={lineItem.id} mode="outlined" style={styles.innerCard}>
-                      <Card.Content style={styles.listBlock}>
-                        <Text variant="titleSmall">
-                          {lineItem.descriptionRaw} · {controller.formatCurrency(lineItem.totalPrice)}
-                        </Text>
-                        <View style={styles.row}>
-                          {splitParticipants.map((participant) => (
-                            <Chip
-                              key={`${lineItem.id}-${participant.id}`}
-                              selected={(assignmentsByLineItemId[lineItem.id] ?? []).includes(participant.id)}
-                              onPress={() => toggleAssignment(lineItem.id, participant.id)}
-                            >
-                              {participant.displayName}
-                            </Chip>
-                          ))}
-                        </View>
-                      </Card.Content>
-                    </Card>
+                  <Text style={[styles.balanceTitle, { marginTop: 12 }]}>Settlements</Text>
+                  {controller.splitBalanceSummary.settlements.map((row, i) => (
+                    <Text
+                      key={`${row.fromParticipantId}-${row.toParticipantId}-${i}`}
+                      style={styles.listItemMeta}
+                    >
+                      {row.fromParticipantId} → {row.toParticipantId}: {controller.formatCurrency(row.amount)}
+                    </Text>
                   ))}
-
-                  <Button
-                    mode="contained"
-                    onPress={saveAllocations}
-                    disabled={controller.loading || !controller.activeSplitId}
-                    testID={TEST_IDS.splits.saveAllocationsButton}
-                  >
-                    Save allocations
-                  </Button>
                 </>
               ) : (
-                <Text variant="bodySmall" style={styles.meta}>
-                  Load a split with line items to continue.
-                </Text>
+                <Text style={styles.emptyText}>No settlement transfers required.</Text>
               )}
-            </>
+            </View>
           ) : null}
+        </DarkCard>
+      ) : null}
 
-          {step === 5 ? (
-            <>
-              <Text variant="bodySmall" style={styles.meta}>
-                Active split: {controller.activeSplitId || '-'}
-              </Text>
-              {splitDetail ? (
-                <>
-                  <Text variant="titleSmall">
-                    {splitDetail.split.title || 'Split'} · {splitDetail.split.status}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.meta}>
-                    Total {controller.formatCurrency(splitDetail.split.totalAmount)}
-                  </Text>
-                </>
-              ) : null}
-              <View style={styles.row}>
-                <Button
-                  mode="outlined"
-                  onPress={async () => {
-                    if (controller.activeSplitId) {
-                      await controller.loadSplitBalancesById(controller.activeSplitId);
-                    }
-                  }}
-                  disabled={controller.loading || !controller.activeSplitId}
-                  testID={TEST_IDS.splits.loadBalancesButton}
-                >
-                  Load balances
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={async () => {
-                    if (controller.activeSplitId) {
-                      await controller.finalizeSplitById(controller.activeSplitId);
-                      await controller.loadSplitBalancesById(controller.activeSplitId);
-                    }
-                  }}
-                  disabled={controller.loading || !controller.activeSplitId}
-                  testID={TEST_IDS.splits.finalizeButton}
-                >
-                  Finalize split
-                </Button>
-              </View>
-
-              {controller.splitBalanceSummary ? (
-                <>
-                  <Divider />
-                  <Text variant="titleSmall">Balances</Text>
-                  {controller.splitBalanceSummary.balances.map((row) => (
-                    <Text key={row.participantId} variant="bodySmall" style={styles.meta}>
-                      {row.displayName}: owed {controller.formatCurrency(row.owedAmount)} · paid{' '}
-                      {controller.formatCurrency(row.paidAmount)} · net{' '}
-                      {controller.formatCurrency(row.netAmount)}
-                    </Text>
-                  ))}
-                  <Text variant="titleSmall">Settlements</Text>
-                  {controller.splitBalanceSummary.settlements.length === 0 ? (
-                    <Text variant="bodySmall" style={styles.meta}>
-                      No settlement transfers required.
-                    </Text>
-                  ) : (
-                    controller.splitBalanceSummary.settlements.map((row, index) => (
-                      <Text
-                        key={`${row.fromParticipantId}-${row.toParticipantId}-${index}`}
-                        variant="bodySmall"
-                        style={styles.meta}
-                      >
-                        {row.fromParticipantId} → {row.toParticipantId}: {controller.formatCurrency(row.amount)}
-                      </Text>
-                    ))
-                  )}
-                </>
-              ) : null}
-            </>
-          ) : null}
-        </Card.Content>
-      </Card>
-    </ScreenContainer>
+      {/* Back button */}
+      {step > 1 ? (
+        <TouchableOpacity style={styles.backBtn} onPress={() => setStep((s) => (s - 1) as WizardStep)}>
+          <Text style={styles.backBtnText}>← Back</Text>
+        </TouchableOpacity>
+      ) : null}
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
+  scroll: {
+    flex: 1,
+    backgroundColor: Colors.bg,
   },
   content: {
-    gap: 12,
+    padding: 20,
+    paddingBottom: 40,
+    gap: 16,
   },
-  row: {
+  progressContainer: {
     flexDirection: 'row',
-    gap: 10,
-    flexWrap: 'wrap',
+    gap: 6,
+    alignItems: 'flex-end',
   },
-  rowBetween: {
+  stepWrapper: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  stepBar: {
+    height: 4,
+    width: '100%',
+    borderRadius: 2,
+    backgroundColor: Colors.border,
+  },
+  stepBarFilled: {
+    backgroundColor: Colors.green,
+  },
+  stepNum: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    fontWeight: '500',
+  },
+  stepNumActive: {
+    color: Colors.green,
+    fontWeight: '700',
+  },
+  stepLabel: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    marginTop: -8,
+  },
+  stepHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    marginBottom: 12,
   },
-  innerCard: {
+  stepSectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginVertical: 4,
+  },
+  listItem: {
+    backgroundColor: Colors.surfaceHigh,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    gap: 3,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  listItemActive: {
+    borderColor: Colors.green,
+    backgroundColor: Colors.greenDim,
+  },
+  listItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  listItemMeta: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  activeIndicator: {
+    fontSize: 12,
+    color: Colors.green,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  continueBtn: {
+    backgroundColor: Colors.green,
+    paddingVertical: 12,
     borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
   },
-  listBlock: {
+  continueBtnDisabled: {
+    opacity: 0.4,
+  },
+  continueBtnText: {
+    color: Colors.bg,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  input: {
+    backgroundColor: Colors.surface,
+    marginBottom: 8,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginVertical: 8,
+  },
+  participantChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  participantChipActive: {
+    backgroundColor: Colors.greenDim,
+    borderColor: Colors.green,
+  },
+  participantChipText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  participantChipTextActive: {
+    color: Colors.green,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 8,
+  },
+  guestRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  addGuestBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginTop: 2,
+  },
+  addGuestText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+  },
+  lineItemBlock: {
+    marginBottom: 12,
+    gap: 6,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  lineItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginVertical: 8,
+  },
+  smallBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+  },
+  smallBtnText: {
+    fontSize: 12,
+    color: Colors.green,
+    fontWeight: '500',
+  },
+  smallBtnOutline: {
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: 'transparent',
+  },
+  smallBtnOutlineText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  reviewBlock: {
+    marginBottom: 12,
+    gap: 3,
+  },
+  balanceBlock: {
+    marginTop: 12,
     gap: 6,
   },
-  meta: {
-    color: '#64748b',
+  balanceTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  balanceName: {
+    fontSize: 13,
+    color: Colors.textPrimary,
+  },
+  balanceValues: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  backBtn: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  backBtnText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
 });

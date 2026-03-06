@@ -1,15 +1,11 @@
-import { StyleSheet, View } from 'react-native';
-import { Text } from 'react-native-paper';
+import { StyleSheet, View, Text } from 'react-native';
+import { Colors } from '../../theme';
 
 export function MetaRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.row}>
-      <Text variant="labelMedium" style={styles.label}>
-        {label}
-      </Text>
-      <Text variant="bodyMedium" style={styles.value}>
-        {value}
-      </Text>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value}>{value}</Text>
     </View>
   );
 }
@@ -21,11 +17,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   label: {
-    color: '#475569',
+    fontSize: 13,
+    color: Colors.textSecondary,
   },
   value: {
     flexShrink: 1,
     textAlign: 'right',
-    color: '#0f172a',
+    fontSize: 13,
+    color: Colors.textPrimary,
   },
 });

@@ -1,9 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { NavigationContainer, DefaultTheme, type Theme } from '@react-navigation/native';
-import { createBottomTabNavigator, type BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
+import { DarkTheme, NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Snackbar } from 'react-native-paper';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { Snackbar, ActivityIndicator } from 'react-native-paper';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../state/clariFi-controller';
 import { AlertsScreen } from '../../features/alerts/screens/AlertsScreen';
 import { AccountScreen } from '../../features/auth/screens/AccountScreen';
@@ -13,82 +14,125 @@ import { LedgerScreen } from '../../features/ledger/screens/LedgerScreen';
 import { PricesScreen } from '../../features/prices/screens/PricesScreen';
 import { ReportsScreen } from '../../features/reports/screens/ReportsScreen';
 import { SplitsScreen } from '../../features/splits/screens/SplitsScreen';
+import { Colors, Shadows } from '../../theme';
 
 export type MainTabParamList = {
-  Capture: undefined;
+  Home: undefined;
   Ledger: undefined;
   Reports: undefined;
-  Families: undefined;
-  Splits: undefined;
   Prices: undefined;
   Alerts: undefined;
+};
+
+export type RootStackParamList = {
+  MainTabs: undefined;
   Account: undefined;
+  Families: undefined;
+  Splits: undefined;
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
-type RootStackParamList = {
-  MainTabs: undefined;
-};
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 
-const navigationTheme: Theme = {
-  ...DefaultTheme,
+const navigationTheme = {
+  ...DarkTheme,
   colors: {
-    ...DefaultTheme.colors,
-    background: '#f8fafc',
-    card: '#ffffff',
-    text: '#0f172a',
-    border: '#e2e8f0',
-    primary: '#0f766e',
-    notification: '#b91c1c',
+    ...DarkTheme.colors,
+    background: Colors.bg,
+    card: Colors.surfaceHigh,
+    text: Colors.textPrimary,
+    border: Colors.border,
+    primary: Colors.green,
+    notification: Colors.coral,
   },
 };
 
-function tabIconName(routeName: keyof MainTabParamList): keyof typeof MaterialCommunityIcons.glyphMap {
+type TabIconName = keyof typeof MaterialCommunityIcons.glyphMap;
+
+function tabIcon(routeName: keyof MainTabParamList): TabIconName {
   switch (routeName) {
-    case 'Capture':
-      return 'microphone-outline';
-    case 'Ledger':
-      return 'book-open-page-variant-outline';
-    case 'Reports':
-      return 'chart-line';
-    case 'Families':
-      return 'account-group-outline';
-    case 'Splits':
-      return 'call-split';
-    case 'Prices':
-      return 'store-search-outline';
-    case 'Alerts':
-      return 'bell-outline';
-    case 'Account':
-      return 'account-circle-outline';
-    default:
-      return 'circle-outline';
+    case 'Home':    return 'home-outline';
+    case 'Ledger':  return 'format-list-bulleted';
+    case 'Reports': return 'trending-up';
+    case 'Prices':  return 'tag-outline';
+    case 'Alerts':  return 'bell-outline';
+    default:        return 'circle-outline';
   }
 }
 
-function screenOptions({ route }: { route: { name: keyof MainTabParamList } }): BottomTabNavigationOptions {
-  return {
-    tabBarIcon: ({ color, size }) => (
-      <MaterialCommunityIcons name={tabIconName(route.name)} color={color} size={size} />
-    ),
-    headerTitleStyle: {
-      fontWeight: '700',
-      color: '#0f172a',
-    },
-    headerStyle: {
-      backgroundColor: '#ffffff',
-    },
-    tabBarActiveTintColor: '#0f766e',
-    tabBarInactiveTintColor: '#64748b',
-    tabBarStyle: {
-      backgroundColor: '#ffffff',
-      borderTopColor: '#e2e8f0',
-      height: 62,
-      paddingBottom: 8,
-      paddingTop: 6,
-    },
-  };
+function CustomTabBar({ state, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+  const controller = useClariFiController();
+
+  return (
+    <View style={[styles.tabBarWrapper, { paddingBottom: Math.max(insets.bottom, 12) }]} pointerEvents="box-none">
+      <View style={styles.tabBarPill}>
+        {state.routes.map((route, index) => {
+          const isFocused = state.index === index;
+          const isAlerts = route.name === 'Alerts';
+
+          const onPress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name as keyof MainTabParamList);
+            }
+          };
+
+          return (
+            <TouchableOpacity
+              key={route.key}
+              onPress={onPress}
+              style={[styles.tabItem, isFocused && styles.tabItemActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isFocused }}
+            >
+              <View style={styles.tabIconWrapper}>
+                <MaterialCommunityIcons
+                  name={tabIcon(route.name as keyof MainTabParamList)}
+                  size={22}
+                  color={isFocused ? Colors.green : Colors.textSecondary}
+                />
+                {isAlerts && controller.alertUnreadCount > 0 && (
+                  <View style={styles.badgeDot}>
+                    <Text style={styles.badgeText}>
+                      {controller.alertUnreadCount > 9 ? '9+' : String(controller.alertUnreadCount)}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
+                {route.name}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      tabBar={(props) => <CustomTabBar {...props} />}
+      screenOptions={{
+        headerStyle: { backgroundColor: Colors.bg },
+        headerTintColor: Colors.textPrimary,
+        headerTitleStyle: { color: Colors.textPrimary, fontWeight: '700' },
+        headerShadowVisible: false,
+      }}
+    >
+      <Tab.Screen name="Home" component={CaptureScreen} options={{ headerShown: false }} />
+      <Tab.Screen name="Ledger" component={LedgerScreen} options={{ headerShown: false }} />
+      <Tab.Screen name="Reports" component={ReportsScreen} options={{ headerShown: false }} />
+      <Tab.Screen name="Prices" component={PricesScreen} />
+      <Tab.Screen name="Alerts" component={AlertsScreen} options={{ headerShown: false }} />
+    </Tab.Navigator>
+  );
 }
 
 export function AppNavigator() {
@@ -97,30 +141,22 @@ export function AppNavigator() {
   return (
     <View style={styles.container}>
       <NavigationContainer theme={navigationTheme}>
-        <RootStack.Navigator>
+        <RootStack.Navigator
+          screenOptions={{
+            headerStyle: { backgroundColor: Colors.bg },
+            headerTintColor: Colors.textPrimary,
+            headerTitleStyle: { color: Colors.textPrimary, fontWeight: '700' },
+            headerShadowVisible: false,
+          }}
+        >
+          <RootStack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
           <RootStack.Screen
-            name="MainTabs"
-            options={{ headerShown: false }}
-            children={() => (
-              <Tab.Navigator initialRouteName="Capture" screenOptions={screenOptions}>
-                <Tab.Screen name="Capture" component={CaptureScreen} />
-                <Tab.Screen name="Ledger" component={LedgerScreen} />
-                <Tab.Screen name="Reports" component={ReportsScreen} />
-                <Tab.Screen name="Families" component={FamilyScreen} />
-                <Tab.Screen name="Splits" component={SplitsScreen} />
-                <Tab.Screen name="Prices" component={PricesScreen} />
-                <Tab.Screen
-                  name="Alerts"
-                  component={AlertsScreen}
-                  options={{
-                    tabBarBadge:
-                      controller.alertUnreadCount > 0 ? controller.alertUnreadCount : undefined,
-                  }}
-                />
-                <Tab.Screen name="Account" component={AccountScreen} />
-              </Tab.Navigator>
-            )}
+            name="Account"
+            component={AccountScreen}
+            options={{ presentation: 'modal', title: 'Settings' }}
           />
+          <RootStack.Screen name="Families" component={FamilyScreen} options={{ title: 'Families' }} />
+          <RootStack.Screen name="Splits" component={SplitsScreen} options={{ title: 'Splits' }} />
         </RootStack.Navigator>
       </NavigationContainer>
 
@@ -129,11 +165,14 @@ export function AppNavigator() {
         onDismiss={controller.clearMessage}
         duration={4000}
         style={styles.snackbar}
+        theme={{ colors: { surface: Colors.surfaceHigh, onSurface: Colors.textPrimary } }}
       >
         {controller.message}
       </Snackbar>
 
-      {controller.loading ? <ActivityIndicator style={styles.loadingOverlay} /> : null}
+      {controller.loading ? (
+        <ActivityIndicator style={styles.loadingOverlay} color={Colors.green} />
+      ) : null}
     </View>
   );
 }
@@ -141,9 +180,71 @@ export function AppNavigator() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: Colors.bg,
+  },
+  tabBarWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingHorizontal: 24,
+    backgroundColor: 'transparent',
+  },
+  tabBarPill: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surfaceHigh,
+    borderRadius: 31,
+    height: 62,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    width: '100%',
+    ...Shadows.tabBar,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 24,
+    paddingVertical: 6,
+    gap: 2,
+  },
+  tabItemActive: {
+    backgroundColor: '#32D58318',
+  },
+  tabIconWrapper: {
+    position: 'relative',
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    backgroundColor: Colors.coral,
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '700',
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+  },
+  tabLabelActive: {
+    color: Colors.green,
+    fontWeight: '600',
   },
   snackbar: {
     margin: 16,
+    marginBottom: 90,
   },
   loadingOverlay: {
     position: 'absolute',

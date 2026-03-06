@@ -1,231 +1,335 @@
-import { StyleSheet, View } from 'react-native';
-import { Button, Card, Text } from 'react-native-paper';
-import { ScreenContainer } from '../../../components/ui/screen-container';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
+import { CategoryProgress } from '../../../components/ui/category-progress';
+import { EmptyState } from '../../../components/ui/empty-state';
+import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
+
+const CATEGORY_COLORS: Record<string, string> = {
+  groceries:  Colors.catFood,
+  food:       Colors.catFood,
+  transport:  Colors.catTransport,
+  dining:     Colors.catDining,
+  shopping:   Colors.catShopping,
+  utilities:  Colors.catUtilities,
+};
+
+function getCategoryColor(cat: string): string {
+  return CATEGORY_COLORS[cat.toLowerCase()] ?? Colors.catOther;
+}
+
+const RANK_COLORS = [Colors.green, Colors.indigo, Colors.coral];
 
 export function ReportsScreen() {
   const controller = useClariFiController();
+  const insets = useSafeAreaInsets();
   const summary = controller.reportSummary;
-  const spendDeltaLabel =
+
+  const now = new Date();
+  const monthLabel = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`;
+
+  const trendColor =
+    summary?.spendDelta.direction === 'DOWN' ? Colors.green
+    : summary?.spendDelta.direction === 'UP' ? Colors.coral
+    : Colors.amber;
+
+  const trendBg =
+    summary?.spendDelta.direction === 'DOWN' ? Colors.greenDim
+    : summary?.spendDelta.direction === 'UP' ? Colors.coralDim
+    : '#FFB54720';
+
+  const trendLabel =
     summary?.spendDelta.direction === 'UP'
-      ? 'Spending increased'
+      ? `+${summary.spendDelta.percentage?.toFixed(0) ?? '0'}% vs prev`
       : summary?.spendDelta.direction === 'DOWN'
-        ? 'Spending decreased'
-        : summary?.spendDelta.direction === 'FLAT'
-          ? 'Spending stable'
-          : 'No baseline yet';
+      ? `-${Math.abs(summary.spendDelta.percentage ?? 0).toFixed(0)}% vs prev`
+      : summary?.spendDelta.direction === 'FLAT'
+      ? '~0% vs prev'
+      : 'First month';
+
+  const trendIcon =
+    summary?.spendDelta.direction === 'DOWN' ? 'trending-down'
+    : summary?.spendDelta.direction === 'UP' ? 'trending-up'
+    : 'minus';
+
+  const maxCategoryAmount = summary
+    ? Math.max(...summary.categoryBreakdown.map((c) => c.amount), 1)
+    : 1;
 
   return (
-    <ScreenContainer>
-      <Card mode="contained" style={styles.card}>
-        <Card.Title title="Monthly Report" subtitle="Cash flow and category breakdown" />
-        <Card.Content style={styles.content}>
-          <Button
-            mode="contained"
-            onPress={controller.loadReport}
-            loading={controller.loading}
-            disabled={controller.loading}
-            icon="chart-box-outline"
-            testID={TEST_IDS.reports.loadButton}
-          >
-            Load current month
-          </Button>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
 
-          {!summary ? (
-            <Text variant="bodySmall" style={styles.emptyText}>
-              Load report to view monthly cash flow and spending insights.
-            </Text>
-          ) : (
-            <>
-              <View style={styles.metricRow}>
-                <Card mode="outlined" style={styles.metricCard}>
-                  <Card.Content>
-                    <Text variant="labelSmall">Cash In</Text>
-                    <Text variant="titleMedium">{controller.formatCurrency(summary.cashIn)}</Text>
-                  </Card.Content>
-                </Card>
-                <Card mode="outlined" style={styles.metricCard}>
-                  <Card.Content>
-                    <Text variant="labelSmall">Cash Out</Text>
-                    <Text variant="titleMedium">{controller.formatCurrency(summary.cashOut)}</Text>
-                  </Card.Content>
-                </Card>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Text style={styles.title}>Reports</Text>
+          <Text style={styles.subtitle}>{monthLabel}</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.calBtn}
+          onPress={controller.loadReport}
+          disabled={controller.loading}
+          testID={TEST_IDS.reports.loadButton}
+        >
+          <MaterialCommunityIcons name="calendar-outline" size={18} color={Colors.textPrimary} />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {!summary ? (
+          <EmptyState
+            icon="chart-line"
+            message="Tap the calendar icon to load your monthly report."
+          />
+        ) : (
+          <>
+            {/* Hero card */}
+            <View style={styles.heroCard}>
+              <View style={styles.heroTopRow}>
+                <Text style={styles.heroLabel}>Total Spent</Text>
+                <View style={[styles.trendBadge, { backgroundColor: trendBg }]}>
+                  <MaterialCommunityIcons name={trendIcon as any} size={12} color={trendColor} />
+                  <Text style={[styles.trendText, { color: trendColor }]}>{trendLabel}</Text>
+                </View>
               </View>
 
-              <Card mode="outlined" style={styles.metricCard}>
-                <Card.Content>
-                  <Text variant="labelSmall">Net Cash Flow</Text>
-                  <Text variant="titleMedium">{controller.formatCurrency(summary.netCashFlow)}</Text>
-                  <Text variant="bodySmall" style={styles.meta}>
-                    {summary.year}-{String(summary.month).padStart(2, '0')}
+              <Text style={styles.heroAmount}>
+                {controller.formatCurrency(summary.cashOut)}
+              </Text>
+
+              <View style={styles.cashRow}>
+                <View style={styles.cashBlock}>
+                  <Text style={styles.cashLabel}>Cash In</Text>
+                  <Text style={[styles.cashValue, { color: Colors.green }]}>
+                    {controller.formatCurrency(summary.cashIn)}
                   </Text>
-                </Card.Content>
-              </Card>
-
-              <Card mode="outlined" style={styles.metricCard}>
-                <Card.Title title="Month-over-month" />
-                <Card.Content style={styles.listBlock}>
-                  <Text variant="bodyMedium">{spendDeltaLabel}</Text>
-                  <Text variant="titleSmall">
-                    {summary.spendDelta.percentage == null
-                      ? '-'
-                      : `${summary.spendDelta.percentage.toFixed(1)}%`}
+                </View>
+                <View style={styles.cashBlock}>
+                  <Text style={styles.cashLabel}>Cash Out</Text>
+                  <Text style={[styles.cashValue, { color: Colors.coral }]}>
+                    {controller.formatCurrency(summary.cashOut)}
                   </Text>
-                  <Text variant="bodySmall" style={styles.meta}>
-                    Change: {controller.formatCurrency(summary.spendDelta.absolute)}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.meta}>
-                    Previous cash out: {controller.formatCurrency(summary.spendDelta.previousCashOut)}
-                  </Text>
-                </Card.Content>
-              </Card>
+                </View>
+              </View>
+            </View>
 
-              <Card mode="outlined" style={styles.metricCard}>
-                <Card.Title title="Category Breakdown" />
-                <Card.Content style={styles.listBlock}>
-                  {summary.categoryBreakdown.length === 0 ? (
-                    <Text variant="bodySmall" style={styles.meta}>
-                      No category data yet.
-                    </Text>
-                  ) : (
-                    summary.categoryBreakdown.map((item) => (
-                      <View style={styles.row} key={item.category}>
-                        <Text variant="bodyMedium">{item.category}</Text>
-                        <Text variant="bodyMedium">{controller.formatCurrency(item.amount)}</Text>
+            {/* Categories card */}
+            {summary.categoryBreakdown.length > 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Categories</Text>
+                <View style={styles.categoryList}>
+                  {summary.categoryBreakdown.map((item) => {
+                    const pct = Math.round((item.amount / summary.cashOut) * 100);
+                    return (
+                      <CategoryProgress
+                        key={item.category}
+                        category={item.category}
+                        amount={`${controller.formatCurrency(item.amount)} · ${pct}%`}
+                        percentage={(item.amount / maxCategoryAmount) * 100}
+                        color={getCategoryColor(item.category)}
+                      />
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Top Merchants card */}
+            {summary.topMerchants.length > 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Top Merchants</Text>
+                <View style={styles.merchantList}>
+                  {summary.topMerchants.slice(0, 3).map((merchant, i) => (
+                    <View key={merchant.merchant} style={styles.merchantRow}>
+                      <View style={styles.merchantLeft}>
+                        <Text style={[styles.rank, { color: RANK_COLORS[i] ?? Colors.textSecondary }]}>
+                          {i + 1}
+                        </Text>
+                        <Text style={styles.merchantName}>{merchant.merchant}</Text>
                       </View>
-                    ))
-                  )}
-                </Card.Content>
-              </Card>
-
-              <Card mode="outlined" style={styles.metricCard}>
-                <Card.Title title="Top Items" />
-                <Card.Content style={styles.listBlock}>
-                  {summary.topItems.length === 0 ? (
-                    <Text variant="bodySmall" style={styles.meta}>
-                      No item data yet.
-                    </Text>
-                  ) : (
-                    summary.topItems.map((item) => (
-                      <View style={styles.row} key={item.item}>
-                        <View>
-                          <Text variant="bodyMedium">{item.item}</Text>
-                          <Text variant="bodySmall" style={styles.meta}>
-                            {item.occurrences} entries
-                          </Text>
-                        </View>
-                        <Text variant="bodyMedium">{controller.formatCurrency(item.amount)}</Text>
-                      </View>
-                    ))
-                  )}
-                </Card.Content>
-              </Card>
-
-              <Card mode="outlined" style={styles.metricCard}>
-                <Card.Title title="Top Merchants" />
-                <Card.Content style={styles.listBlock}>
-                  {summary.topMerchants.length === 0 ? (
-                    <Text variant="bodySmall" style={styles.meta}>
-                      No merchant data yet.
-                    </Text>
-                  ) : (
-                    summary.topMerchants.map((merchant) => (
-                      <View style={styles.row} key={merchant.merchant}>
-                        <View>
-                          <Text variant="bodyMedium">{merchant.merchant}</Text>
-                          <Text variant="bodySmall" style={styles.meta}>
-                            {merchant.expenseCount} expenses
-                          </Text>
-                        </View>
-                        <Text variant="bodyMedium">{controller.formatCurrency(merchant.amount)}</Text>
-                      </View>
-                    ))
-                  )}
-                </Card.Content>
-              </Card>
-
-              <Card mode="outlined" style={styles.metricCard}>
-                <Card.Title title="Spend Outliers" />
-                <Card.Content style={styles.listBlock}>
-                  {summary.anomalies.length === 0 ? (
-                    <Text variant="bodySmall" style={styles.meta}>
-                      No outliers detected this month.
-                    </Text>
-                  ) : (
-                    summary.anomalies.map((entry) => (
-                      <View style={styles.row} key={entry.expenseId}>
-                        <View style={styles.anomalyCell}>
-                          <Text variant="bodyMedium">{entry.merchantText}</Text>
-                          <Text variant="bodySmall" style={styles.meta}>
-                            z-score {entry.zScore.toFixed(2)}
-                          </Text>
-                        </View>
-                        <Text variant="bodyMedium">{controller.formatCurrency(entry.totalAmount)}</Text>
-                      </View>
-                    ))
-                  )}
-                </Card.Content>
-              </Card>
-
-              <Card mode="outlined" style={styles.metricCard}>
-                <Card.Title title="Insights" />
-                <Card.Content style={styles.listBlock}>
-                  {summary.insights.length === 0 ? (
-                    <Text variant="bodySmall" style={styles.meta}>
-                      No insights available yet.
-                    </Text>
-                  ) : (
-                    summary.insights.map((insight, index) => (
-                      <Text key={`${insight}-${index}`} variant="bodySmall" style={styles.insightText}>
-                        • {insight}
+                      <Text style={styles.merchantAmount}>
+                        {controller.formatCurrency(merchant.amount)}
                       </Text>
-                    ))
-                  )}
-                </Card.Content>
-              </Card>
-            </>
-          )}
-        </Card.Content>
-      </Card>
-    </ScreenContainer>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {/* Insights */}
+            {summary.insights.length > 0 ? (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Insights</Text>
+                <View style={styles.insightList}>
+                  {summary.insights.map((insight, i) => (
+                    <View key={`insight-${i}`} style={styles.insightRow}>
+                      <MaterialCommunityIcons name="lightbulb-outline" size={14} color={Colors.amber} />
+                      <Text style={styles.insightText}>{insight}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 16,
+  screen: {
+    flex: 1,
+    backgroundColor: Colors.bg,
   },
-  content: {
-    gap: 12,
-  },
-  emptyText: {
-    color: '#64748b',
-  },
-  metricRow: {
+  header: {
     flexDirection: 'row',
-    gap: 10,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 4,
+    paddingBottom: 12,
   },
-  metricCard: {
-    borderRadius: 12,
+  headerLeft: {
+    gap: 2,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    fontFamily: 'Georgia',
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  calBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scroll: {
     flex: 1,
   },
-  meta: {
-    color: '#64748b',
+  content: {
+    paddingHorizontal: 20,
+    paddingBottom: 100,
+    gap: 12,
   },
-  listBlock: {
-    gap: 8,
+  heroCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 20,
+    gap: 16,
   },
-  row: {
+  heroTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  insightText: {
-    color: '#334155',
+  heroLabel: {
+    fontSize: 13,
+    color: Colors.textSecondary,
   },
-  anomalyCell: {
-    flexShrink: 1,
-    paddingRight: 12,
+  trendBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 100,
+  },
+  trendText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  heroAmount: {
+    fontSize: 36,
+    fontWeight: '700',
+    letterSpacing: -1.2,
+    color: Colors.textPrimary,
+  },
+  cashRow: {
+    flexDirection: 'row',
+    gap: 20,
+  },
+  cashBlock: {
+    gap: 2,
+  },
+  cashLabel: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  cashValue: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    gap: 14,
+  },
+  cardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  categoryList: {
+    gap: 12,
+  },
+  merchantList: {
+    gap: 12,
+  },
+  merchantRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  merchantLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flex: 1,
+  },
+  rank: {
+    fontSize: 13,
+    fontWeight: '700',
+    width: 16,
+  },
+  merchantName: {
+    fontSize: 13,
+    color: Colors.textPrimary,
+    flex: 1,
+  },
+  merchantAmount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  insightList: {
+    gap: 10,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+  },
+  insightText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 19,
   },
 });
