@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Platform } from 'react-native';
 import { speechRecognitionService, type RecognitionState } from '../../features/capture/speech-recognition.service';
 import {
+  ApiRequestError,
   confirmExpense,
   createFamily,
   createFamilyInvite,
@@ -44,6 +45,8 @@ import type {
   AlertKind,
   FamilyProfile,
   FamilyRole,
+  MonthlyReportResponse,
+  MonthlySpendDeltaDirection,
   PriceAlert,
   PriceCompareResponse,
   PriceHistoryResponse,
@@ -82,6 +85,12 @@ Notifications.setNotificationHandler({
 });
 
 function errorToMessage(error: unknown): string {
+  if (error instanceof ApiRequestError) {
+    if (error.requestId) {
+      return `${error.message} (request ${error.requestId})`;
+    }
+    return error.message;
+  }
   if (error instanceof Error) {
     return error.message;
   }
@@ -230,7 +239,22 @@ export interface ReportSummary {
   cashIn: number;
   cashOut: number;
   netCashFlow: number;
+  spendDelta: {
+    previousCashOut: number;
+    absolute: number;
+    percentage: number | null;
+    direction: MonthlySpendDeltaDirection;
+  };
   categoryBreakdown: Array<{ category: string; amount: number }>;
+  topItems: Array<{ item: string; amount: number; occurrences: number }>;
+  topMerchants: Array<{ merchant: string; amount: number; expenseCount: number }>;
+  anomalies: Array<{
+    expenseId: string;
+    merchantText: string;
+    totalAmount: number;
+    transactionAt: string;
+    zScore: number;
+  }>;
   insights: string[];
 }
 
@@ -264,8 +288,8 @@ function mapLedgerItems(rawItems: unknown[]): LedgerExpense[] {
   });
 }
 
-function mapReportSummary(raw: Record<string, unknown>): ReportSummary {
-  const categoryRaw = (raw.categoryBreakdown ?? {}) as Record<string, unknown>;
+function mapReportSummary(raw: MonthlyReportResponse): ReportSummary {
+  const categoryRaw = (raw.categoryBreakdown ?? {}) as Record<string, number>;
   const categoryBreakdown = Object.entries(categoryRaw)
     .map(([category, amount]) => ({
       category,
@@ -279,7 +303,43 @@ function mapReportSummary(raw: Record<string, unknown>): ReportSummary {
     cashIn: toNumber(raw.cashIn),
     cashOut: toNumber(raw.cashOut),
     netCashFlow: toNumber(raw.netCashFlow),
+    spendDelta: {
+      previousCashOut: toNumber(raw.spendDelta?.previousCashOut),
+      absolute: toNumber(raw.spendDelta?.absolute),
+      percentage:
+        typeof raw.spendDelta?.percentage === 'number'
+          ? toNumber(raw.spendDelta.percentage)
+          : null,
+      direction: raw.spendDelta?.direction ?? 'NO_BASELINE',
+    },
     categoryBreakdown,
+    topItems: Array.isArray(raw.topItems)
+      ? raw.topItems
+          .map((item) => ({
+            item: getString(item.item, 'Unknown item'),
+            amount: toNumber(item.amount),
+            occurrences: Math.trunc(toNumber(item.occurrences)),
+          }))
+          .filter((item) => item.item)
+      : [],
+    topMerchants: Array.isArray(raw.topMerchants)
+      ? raw.topMerchants
+          .map((merchant) => ({
+            merchant: getString(merchant.merchant, 'Unknown merchant'),
+            amount: toNumber(merchant.amount),
+            expenseCount: Math.trunc(toNumber(merchant.expenseCount)),
+          }))
+          .filter((merchant) => merchant.merchant)
+      : [],
+    anomalies: Array.isArray(raw.anomalies)
+      ? raw.anomalies.map((entry) => ({
+          expenseId: getString(entry.expenseId),
+          merchantText: getString(entry.merchantText, 'Unknown merchant'),
+          totalAmount: toNumber(entry.totalAmount),
+          transactionAt: getString(entry.transactionAt),
+          zScore: toNumber(entry.zScore),
+        }))
+      : [],
     insights: Array.isArray(raw.insights)
       ? raw.insights.map((item) => getString(item)).filter(Boolean)
       : [],
