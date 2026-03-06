@@ -1,13 +1,18 @@
-import { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { DarkCard } from '../../../components/ui/dark-card';
 import { PillBadge } from '../../../components/ui/pill-badge';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { ItemSelector } from '../components/item-selector';
+import { useLocation } from '../hooks/use-location';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
+import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
 
 type Segment = 'intelligence' | 'promos';
 
@@ -17,7 +22,39 @@ const inputTheme = {
 
 export function PricesScreen() {
   const controller = useClariFiController();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [segment, setSegment] = useState<Segment>('intelligence');
+  const [compareItems, setCompareItems] = useState<string[]>([]);
+  const [compareRadius, setCompareRadius] = useState(10);
+  const { location, loading: locLoading, error: locError, requestLocation } = useLocation();
+  const pendingNav = useRef(false);
+
+  useEffect(() => {
+    if (location && pendingNav.current) {
+      pendingNav.current = false;
+      navigation.navigate('StoreMap', {
+        items: compareItems,
+        lat: location.lat,
+        lng: location.lng,
+        radiusKm: compareRadius,
+      });
+    }
+  }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleFindStores = async () => {
+    if (compareItems.length === 0) return;
+    if (location) {
+      navigation.navigate('StoreMap', {
+        items: compareItems,
+        lat: location.lat,
+        lng: location.lng,
+        radiusKm: compareRadius,
+      });
+    } else {
+      pendingNav.current = true;
+      await requestLocation();
+    }
+  };
 
   return (
     <ScrollView
@@ -48,6 +85,41 @@ export function PricesScreen() {
 
       {segment === 'intelligence' ? (
         <>
+          {/* Multi-item store comparison */}
+          <DarkCard radius={16}>
+            <Text style={styles.resultTitle}>Store comparison</Text>
+            <ItemSelector items={compareItems} onItemsChange={setCompareItems} />
+            <View style={styles.findRadiusRow}>
+              {[5, 10, 15, 25].map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.radiusChip, r === compareRadius && styles.radiusChipActive]}
+                  onPress={() => setCompareRadius(r)}
+                >
+                  <Text style={[styles.radiusChipText, r === compareRadius && styles.radiusChipTextActive]}>
+                    {r}km
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {locError ? <Text style={styles.locError}>{locError}</Text> : null}
+            <TouchableOpacity
+              style={[styles.findStoresBtn, compareItems.length === 0 && styles.findStoresBtnDisabled]}
+              onPress={handleFindStores}
+              disabled={compareItems.length === 0 || locLoading}
+            >
+              {locLoading ? (
+                <ActivityIndicator size="small" color={Colors.bg} />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="store-search-outline" size={18} color={Colors.bg} />
+                  <Text style={styles.findStoresBtnText}>Find Stores</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </DarkCard>
+
+          {/* Single-item query */}
           <DarkCard radius={16}>
             <View style={styles.inputRow}>
               <TextInput
@@ -581,5 +653,54 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textPrimary,
     marginBottom: 4,
+  },
+  findRadiusRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  radiusChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: Colors.surfaceHigh,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  radiusChipActive: {
+    backgroundColor: Colors.greenDim,
+    borderColor: Colors.green,
+  },
+  radiusChipText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '500',
+  },
+  radiusChipTextActive: {
+    color: Colors.green,
+    fontWeight: '600',
+  },
+  locError: {
+    fontSize: 11,
+    color: Colors.amber,
+    marginTop: 6,
+  },
+  findStoresBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.green,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 12,
+  },
+  findStoresBtnDisabled: {
+    opacity: 0.4,
+  },
+  findStoresBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.bg,
   },
 });

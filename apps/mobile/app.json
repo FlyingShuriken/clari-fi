@@ -19,7 +19,8 @@
         "NSSpeechRecognitionUsageDescription": "ClariFi uses speech recognition to turn your spoken expense into text.",
         "NSCameraUsageDescription": "ClariFi uses the camera to capture receipt photos.",
         "NSPhotoLibraryUsageDescription": "ClariFi uses photo library access to import receipt images.",
-        "NSUserNotificationsUsageDescription": "ClariFi sends price alert notifications when items hit your target price."
+        "NSUserNotificationsUsageDescription": "ClariFi sends price alert notifications when items hit your target price.",
+        "NSLocationWhenInUseUsageDescription": "ClariFi uses your location to find nearby store prices."
       },
       "bundleIdentifier": "com.clarifi.app"
     },
@@ -29,13 +30,16 @@
         "POST_NOTIFICATIONS",
         "CAMERA",
         "READ_MEDIA_IMAGES",
-        "READ_EXTERNAL_STORAGE"
+        "READ_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
       ]
     },
     "web": {
       "bundler": "metro"
     },
     "plugins": [
+      "expo-location",
       "expo-notifications",
       [
         "expo-speech-recognition",

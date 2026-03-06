@@ -14,6 +14,7 @@ import { LedgerScreen } from '../../features/ledger/screens/LedgerScreen';
 import { PricesScreen } from '../../features/prices/screens/PricesScreen';
 import { ReportsScreen } from '../../features/reports/screens/ReportsScreen';
 import { SplitsScreen } from '../../features/splits/screens/SplitsScreen';
+import { StoreMapScreen } from '../../features/prices/screens/StoreMapScreen';
 import { Colors, Shadows } from '../../theme';
 
 export type MainTabParamList = {
@@ -29,6 +30,7 @@ export type RootStackParamList = {
   Account: undefined;
   Families: undefined;
   Splits: undefined;
+  StoreMap: { items: string[]; lat: number; lng: number; radiusKm: number };
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -157,6 +159,7 @@ export function AppNavigator() {
           />
           <RootStack.Screen name="Families" component={FamilyScreen} options={{ title: 'Families' }} />
           <RootStack.Screen name="Splits" component={SplitsScreen} options={{ title: 'Splits' }} />
+          <RootStack.Screen name="StoreMap" component={StoreMapScreen} options={{ title: 'Store Comparison' }} />
         </RootStack.Navigator>
       </NavigationContainer>
 
