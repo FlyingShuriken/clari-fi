@@ -13,6 +13,10 @@ import { AuthScreen } from './src/features/auth/screens/AuthScreen';
 const publishableKey =
   String(Constants.expoConfig?.extra?.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '').trim() ||
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const apiBaseUrl =
+  String(Constants.expoConfig?.extra?.EXPO_PUBLIC_API_BASE_URL ?? '').trim() ||
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  '';
 
 function SignedOutRoot() {
   const [message, setMessage] = useState('');
@@ -28,11 +32,19 @@ function SignedInRoot() {
 }
 
 export default function App() {
+  const missingPublicEnv: string[] = [];
   if (!publishableKey) {
+    missingPublicEnv.push('EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY');
+  }
+  if (!apiBaseUrl) {
+    missingPublicEnv.push('EXPO_PUBLIC_API_BASE_URL');
+  }
+
+  if (missingPublicEnv.length > 0) {
     return (
       <SafeAreaView style={styles.fallbackContainer}>
         <Text variant="bodyLarge" style={styles.fallbackText}>
-          Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY. Set it in your mobile env.
+          Missing required mobile env key(s): {missingPublicEnv.join(', ')}.
         </Text>
       </SafeAreaView>
     );

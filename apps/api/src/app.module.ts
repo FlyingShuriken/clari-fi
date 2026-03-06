@@ -11,6 +11,7 @@ import { ArtifactsModule } from './modules/artifacts/artifacts.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { FamiliesModule } from './modules/families/families.module';
+import { HealthModule } from './modules/health/health.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ParseModule } from './modules/parse/parse.module';
 import { PricesModule } from './modules/prices/prices.module';
@@ -31,6 +32,7 @@ import { SplitsModule } from './modules/splits/splits.module';
     StorageModule,
     QueueModule,
     AuthModule,
+    HealthModule,
     NotificationsModule,
     ArtifactsModule,
     ParseModule,

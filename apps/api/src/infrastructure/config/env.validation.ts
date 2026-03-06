@@ -25,6 +25,11 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
     errors.push('EXPENSE_PARSER_PROVIDER must be one of: heuristic, openrouter, shadow');
   }
 
+  const openRouterApiKey = asString(config.OPENROUTER_API_KEY).trim();
+  if ((parserProvider === 'openrouter' || parserProvider === 'shadow') && !openRouterApiKey) {
+    errors.push('OPENROUTER_API_KEY is required when EXPENSE_PARSER_PROVIDER is openrouter/shadow');
+  }
+
   const parserTimeoutRaw = asString(config.OPENROUTER_PARSER_TIMEOUT_MS).trim();
   if (parserTimeoutRaw) {
     const parserTimeout = Number(parserTimeoutRaw);

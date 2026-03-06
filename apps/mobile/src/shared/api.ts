@@ -5,6 +5,7 @@ import type {
   FamilyListResponse,
   FamilyProfile,
   FamilyRole,
+  MonthlyReportResponse,
   PriceAlert,
   PriceCompareResponse,
   PriceHistoryResponse,
@@ -23,22 +24,112 @@ function sanitizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
+const API_TIMEOUT_MS = 20000;
+
+function normalizeApiMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const rawMessage = (payload as { message?: unknown }).message;
+  if (typeof rawMessage === 'string' && rawMessage.trim()) {
+    return rawMessage.trim();
+  }
+  if (Array.isArray(rawMessage)) {
+    const joined = rawMessage
+      .map((entry) => String(entry).trim())
+      .filter(Boolean)
+      .join(', ');
+    return joined || null;
+  }
+
+  const rawError = (payload as { error?: unknown }).error;
+  if (typeof rawError === 'string' && rawError.trim()) {
+    return rawError.trim();
+  }
+
+  return null;
+}
+
+function normalizeHttpErrorMessage(status: number, message: string): string {
+  if (status === 401) {
+    return 'Session expired or unauthorized. Please sign in again.';
+  }
+  if (status === 403) {
+    return 'You do not have permission for this action.';
+  }
+  if (status === 413) {
+    return 'Upload too large. Please use a smaller file.';
+  }
+  if (status >= 500) {
+    return 'Server error. Please try again in a moment.';
+  }
+  if (status >= 400 && message) {
+    return message;
+  }
+
+  return 'Unexpected API error.';
+}
+
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly requestId?: string;
+
+  constructor(status: number, message: string, requestId?: string) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.requestId = requestId;
+  }
+}
+
 export async function apiRequest<T>(
   baseUrl: string,
   path: string,
   options: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${sanitizeUrl(baseUrl)}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
-    },
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+  let response: Response;
+
+  try {
+    response = await fetch(`${sanitizeUrl(baseUrl)}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Request timed out. Please check your connection and try again.');
+    }
+    throw new Error('Network error. Please check internet connectivity and retry.');
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`${response.status}: ${text}`);
+    let payload: unknown;
+    let text: string | undefined;
+
+    try {
+      payload = await response.clone().json();
+    } catch {
+      text = await response.text();
+    }
+
+    const apiMessage =
+      normalizeApiMessage(payload) ??
+      (typeof text === 'string' && text.trim() ? text.trim() : 'Request failed');
+    const requestId = response.headers.get('x-request-id') ?? undefined;
+
+    throw new ApiRequestError(
+      response.status,
+      normalizeHttpErrorMessage(response.status, apiMessage),
+      requestId,
+    );
   }
 
   return (await response.json()) as T;
@@ -179,9 +270,9 @@ export async function listExpenses(
 export async function loadMonthlyReport(
   baseUrl: string,
   bearerToken: string,
-): Promise<Record<string, unknown>> {
+): Promise<MonthlyReportResponse> {
   const now = new Date();
-  return apiRequest<Record<string, unknown>>(
+  return apiRequest<MonthlyReportResponse>(
     baseUrl,
     `/reports/monthly?year=${now.getUTCFullYear()}&month=${now.getUTCMonth() + 1}`,
     {

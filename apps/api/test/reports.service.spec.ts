@@ -33,7 +33,11 @@ describe('ReportsService', () => {
       },
     } as any;
 
-    const service = new ReportsService(prisma);
+    const metrics = {
+      trackCounter: jest.fn(),
+      trackTiming: jest.fn(),
+    } as any;
+    const service = new ReportsService(prisma, metrics);
 
     const report = await service.getMonthlyReport(
       { id: 'u1', email: 'x@example.com', clerkUserId: 'clerk_1' },
@@ -43,7 +47,11 @@ describe('ReportsService', () => {
     expect(report.cashOut).toBe(100);
     expect(report.netCashFlow).toBe(-100);
     expect(report.categoryBreakdown.groceries).toBe(100);
+    expect(report.spendDelta.direction).toBe('UP');
+    expect(report.topItems.length).toBeGreaterThan(0);
     expect(report.insights.length).toBeGreaterThan(0);
     expect(prisma.monthlyReport.upsert).toHaveBeenCalled();
+    expect(metrics.trackCounter).toHaveBeenCalled();
+    expect(metrics.trackTiming).toHaveBeenCalled();
   });
 });

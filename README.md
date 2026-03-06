@@ -12,6 +12,7 @@ ClariFi is a React Native + NestJS product for fast expense capture (voice/recei
 ## Core API Domains (Current)
 
 - Auth (`/v1/auth/clerk`)
+- Health (`/v1/health/live`, `/v1/health/ready`)
 - Parse (`/v1/parse/voice`, `/v1/parse/receipt`)
 - Expenses + Reports (`/v1/expenses`, `/v1/reports/monthly`)
 - Prices + Signals + Alerts (`/v1/prices/*`)

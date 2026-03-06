@@ -98,6 +98,60 @@ export const ConfirmExpenseInputSchema = z.object({
 });
 export type ConfirmExpenseInput = z.infer<typeof ConfirmExpenseInputSchema>;
 
+export const MonthlySpendDeltaDirectionSchema = z.enum([
+  'UP',
+  'DOWN',
+  'FLAT',
+  'NO_BASELINE',
+]);
+export type MonthlySpendDeltaDirection = z.infer<typeof MonthlySpendDeltaDirectionSchema>;
+
+export const MonthlySpendDeltaSchema = z.object({
+  previousCashOut: z.number(),
+  absolute: z.number(),
+  percentage: z.number().nullable(),
+  direction: MonthlySpendDeltaDirectionSchema,
+});
+export type MonthlySpendDelta = z.infer<typeof MonthlySpendDeltaSchema>;
+
+export const MonthlyReportTopItemSchema = z.object({
+  item: z.string(),
+  amount: z.number().nonnegative(),
+  occurrences: z.number().int().nonnegative(),
+});
+export type MonthlyReportTopItem = z.infer<typeof MonthlyReportTopItemSchema>;
+
+export const MonthlyReportTopMerchantSchema = z.object({
+  merchant: z.string(),
+  amount: z.number().nonnegative(),
+  expenseCount: z.number().int().nonnegative(),
+});
+export type MonthlyReportTopMerchant = z.infer<typeof MonthlyReportTopMerchantSchema>;
+
+export const MonthlyReportAnomalySchema = z.object({
+  expenseId: z.string(),
+  merchantText: z.string(),
+  totalAmount: z.number().nonnegative(),
+  transactionAt: z.string().datetime(),
+  zScore: z.number(),
+});
+export type MonthlyReportAnomaly = z.infer<typeof MonthlyReportAnomalySchema>;
+
+export const MonthlyReportResponseSchema = z.object({
+  year: z.number().int().min(2000),
+  month: z.number().int().min(1).max(12),
+  cashIn: z.number(),
+  cashOut: z.number().nonnegative(),
+  netCashFlow: z.number(),
+  spendDelta: MonthlySpendDeltaSchema,
+  categoryBreakdown: z.record(z.number()),
+  topItems: z.array(MonthlyReportTopItemSchema),
+  topMerchants: z.array(MonthlyReportTopMerchantSchema),
+  anomalies: z.array(MonthlyReportAnomalySchema),
+  insights: z.array(z.string()),
+});
+export type MonthlyReportResponse = z.infer<typeof MonthlyReportResponseSchema>;
+
 export const PriceHistoryPointSchema = z.object({
   bucket: z.string(),
   minUnitPrice: z.number().nonnegative(),

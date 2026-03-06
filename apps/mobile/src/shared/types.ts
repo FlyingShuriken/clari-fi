@@ -6,6 +6,41 @@ export interface AuthVerifyResponse {
   };
 }
 
+export type MonthlySpendDeltaDirection = 'UP' | 'DOWN' | 'FLAT' | 'NO_BASELINE';
+
+export interface MonthlyReportResponse {
+  year: number;
+  month: number;
+  cashIn: number;
+  cashOut: number;
+  netCashFlow: number;
+  spendDelta: {
+    previousCashOut: number;
+    absolute: number;
+    percentage: number | null;
+    direction: MonthlySpendDeltaDirection;
+  };
+  categoryBreakdown: Record<string, number>;
+  topItems: Array<{
+    item: string;
+    amount: number;
+    occurrences: number;
+  }>;
+  topMerchants: Array<{
+    merchant: string;
+    amount: number;
+    expenseCount: number;
+  }>;
+  anomalies: Array<{
+    expenseId: string;
+    merchantText: string;
+    totalAmount: number;
+    transactionAt: string;
+    zScore: number;
+  }>;
+  insights: string[];
+}
+
 export interface VoiceParseResult {
   transcript: string;
   sttConfidence: number;

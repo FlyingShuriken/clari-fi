@@ -7,6 +7,14 @@ import { TEST_IDS } from '../../../core/testing/test-ids';
 export function ReportsScreen() {
   const controller = useClariFiController();
   const summary = controller.reportSummary;
+  const spendDeltaLabel =
+    summary?.spendDelta.direction === 'UP'
+      ? 'Spending increased'
+      : summary?.spendDelta.direction === 'DOWN'
+        ? 'Spending decreased'
+        : summary?.spendDelta.direction === 'FLAT'
+          ? 'Spending stable'
+          : 'No baseline yet';
 
   return (
     <ScreenContainer>
@@ -56,6 +64,24 @@ export function ReportsScreen() {
               </Card>
 
               <Card mode="outlined" style={styles.metricCard}>
+                <Card.Title title="Month-over-month" />
+                <Card.Content style={styles.listBlock}>
+                  <Text variant="bodyMedium">{spendDeltaLabel}</Text>
+                  <Text variant="titleSmall">
+                    {summary.spendDelta.percentage == null
+                      ? '-'
+                      : `${summary.spendDelta.percentage.toFixed(1)}%`}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.meta}>
+                    Change: {controller.formatCurrency(summary.spendDelta.absolute)}
+                  </Text>
+                  <Text variant="bodySmall" style={styles.meta}>
+                    Previous cash out: {controller.formatCurrency(summary.spendDelta.previousCashOut)}
+                  </Text>
+                </Card.Content>
+              </Card>
+
+              <Card mode="outlined" style={styles.metricCard}>
                 <Card.Title title="Category Breakdown" />
                 <Card.Content style={styles.listBlock}>
                   {summary.categoryBreakdown.length === 0 ? (
@@ -67,6 +93,75 @@ export function ReportsScreen() {
                       <View style={styles.row} key={item.category}>
                         <Text variant="bodyMedium">{item.category}</Text>
                         <Text variant="bodyMedium">{controller.formatCurrency(item.amount)}</Text>
+                      </View>
+                    ))
+                  )}
+                </Card.Content>
+              </Card>
+
+              <Card mode="outlined" style={styles.metricCard}>
+                <Card.Title title="Top Items" />
+                <Card.Content style={styles.listBlock}>
+                  {summary.topItems.length === 0 ? (
+                    <Text variant="bodySmall" style={styles.meta}>
+                      No item data yet.
+                    </Text>
+                  ) : (
+                    summary.topItems.map((item) => (
+                      <View style={styles.row} key={item.item}>
+                        <View>
+                          <Text variant="bodyMedium">{item.item}</Text>
+                          <Text variant="bodySmall" style={styles.meta}>
+                            {item.occurrences} entries
+                          </Text>
+                        </View>
+                        <Text variant="bodyMedium">{controller.formatCurrency(item.amount)}</Text>
+                      </View>
+                    ))
+                  )}
+                </Card.Content>
+              </Card>
+
+              <Card mode="outlined" style={styles.metricCard}>
+                <Card.Title title="Top Merchants" />
+                <Card.Content style={styles.listBlock}>
+                  {summary.topMerchants.length === 0 ? (
+                    <Text variant="bodySmall" style={styles.meta}>
+                      No merchant data yet.
+                    </Text>
+                  ) : (
+                    summary.topMerchants.map((merchant) => (
+                      <View style={styles.row} key={merchant.merchant}>
+                        <View>
+                          <Text variant="bodyMedium">{merchant.merchant}</Text>
+                          <Text variant="bodySmall" style={styles.meta}>
+                            {merchant.expenseCount} expenses
+                          </Text>
+                        </View>
+                        <Text variant="bodyMedium">{controller.formatCurrency(merchant.amount)}</Text>
+                      </View>
+                    ))
+                  )}
+                </Card.Content>
+              </Card>
+
+              <Card mode="outlined" style={styles.metricCard}>
+                <Card.Title title="Spend Outliers" />
+                <Card.Content style={styles.listBlock}>
+                  {summary.anomalies.length === 0 ? (
+                    <Text variant="bodySmall" style={styles.meta}>
+                      No outliers detected this month.
+                    </Text>
+                  ) : (
+                    summary.anomalies.map((entry) => (
+                      <View style={styles.row} key={entry.expenseId}>
+                        <View style={styles.anomalyCell}>
+                          <Text variant="bodyMedium">{entry.merchantText}</Text>
+                          <Text variant="bodySmall" style={styles.meta}>
+                            z-score {entry.zScore.toFixed(2)}
+                          </Text>
+                        </View>
+                        <Text variant="bodyMedium">{controller.formatCurrency(entry.totalAmount)}</Text>
                       </View>
                     ))
                   )}
@@ -124,8 +219,13 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
   },
   insightText: {
     color: '#334155',
+  },
+  anomalyCell: {
+    flexShrink: 1,
+    paddingRight: 12,
   },
 });

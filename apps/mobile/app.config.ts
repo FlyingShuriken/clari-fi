@@ -40,11 +40,7 @@ function parseEnvFile(filePath: string): EnvMap {
 }
 
 function loadLocalEnv(): EnvMap {
-  const repoRoot = path.resolve(__dirname, '../..');
-
   return {
-    ...parseEnvFile(path.join(repoRoot, '.env')),
-    ...parseEnvFile(path.join(repoRoot, '.env.local')),
     ...parseEnvFile(path.join(__dirname, '.env')),
     ...parseEnvFile(path.join(__dirname, '.env.local')),
   };
