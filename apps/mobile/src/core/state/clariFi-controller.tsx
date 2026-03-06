@@ -40,6 +40,7 @@ import {
 } from '../../shared/api';
 import type {
   AlertEvent,
+  AlertKind,
   FamilyProfile,
   FamilyRole,
   PriceAlert,
@@ -48,6 +49,7 @@ import type {
   PriceSignalResponse,
   PromoIngestionItem,
   ReceiptParseResult,
+  SignalDecisionFilter,
   SplitDetailResponse,
   SplitSummary,
   VoiceParseResult,
@@ -392,8 +394,14 @@ export interface ClariFiController {
 
   alertItem: string;
   setAlertItem: (value: string) => void;
+  alertKind: AlertKind;
+  setAlertKind: (value: AlertKind) => void;
   alertTargetUnitPrice: string;
   setAlertTargetUnitPrice: (value: string) => void;
+  alertSignalDecisionFilter: SignalDecisionFilter;
+  setAlertSignalDecisionFilter: (value: SignalDecisionFilter) => void;
+  alertSignalMinConfidence: string;
+  setAlertSignalMinConfidence: (value: string) => void;
   alertRadiusKm: string;
   setAlertRadiusKm: (value: string) => void;
   alertAreaText: string;
@@ -486,6 +494,7 @@ export interface ClariFiController {
   loadPriceSignalResult: () => Promise<void>;
 
   createAlert: () => Promise<void>;
+  createSignalAlertFromPriceQuery: () => Promise<void>;
   loadAlerts: () => Promise<void>;
   loadAlertEvents: () => Promise<void>;
   markAllEventsRead: () => Promise<void>;
@@ -532,7 +541,11 @@ function useClariFiControllerValue(): ClariFiController {
   const [priceSignalResult, setPriceSignalResult] = useState<PriceSignalResponse | null>(null);
 
   const [alertItem, setAlertItem] = useState('watermelon');
+  const [alertKind, setAlertKind] = useState<AlertKind>('THRESHOLD');
   const [alertTargetUnitPrice, setAlertTargetUnitPrice] = useState('5');
+  const [alertSignalDecisionFilter, setAlertSignalDecisionFilter] =
+    useState<SignalDecisionFilter>('BOTH');
+  const [alertSignalMinConfidence, setAlertSignalMinConfidence] = useState('0.65');
   const [alertRadiusKm, setAlertRadiusKm] = useState('10');
   const [alertAreaText, setAlertAreaText] = useState('Kota Kinabalu');
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
@@ -1446,28 +1459,82 @@ function useClariFiControllerValue(): ClariFiController {
 
   const createAlert = useCallback(async () => {
     await runTask(async () => {
-      const targetUnitPrice = parseNumberInput(alertTargetUnitPrice);
-      if (!alertItem.trim() || typeof targetUnitPrice !== 'number') {
-        throw new Error('Provide alert item and valid target unit price.');
+      if (!alertItem.trim()) {
+        throw new Error('Provide an item name first.');
+      }
+
+      const token = await getBearerTokenOrThrow();
+      const baseInput = {
+        item: alertItem.trim(),
+        radiusKm: parseNumberInput(alertRadiusKm),
+        areaText: alertAreaText.trim() || undefined,
+      };
+
+      const result =
+        alertKind === 'SIGNAL'
+          ? await createPriceAlert(normalizeBaseUrl(apiBaseUrl), token, {
+              ...baseInput,
+              kind: 'SIGNAL',
+              signalDecisionFilter: alertSignalDecisionFilter,
+              signalMinConfidence:
+                parseNumberInput(alertSignalMinConfidence) ?? 0.65,
+            })
+          : await createPriceAlert(normalizeBaseUrl(apiBaseUrl), token, {
+              ...baseInput,
+              kind: 'THRESHOLD',
+              targetUnitPrice: (() => {
+                const parsed = parseNumberInput(alertTargetUnitPrice);
+                if (typeof parsed !== 'number') {
+                  throw new Error('Provide a valid target unit price.');
+                }
+                return parsed;
+              })(),
+            });
+
+      setAlerts((previous) => [result, ...previous.filter((item) => item.id !== result.id)]);
+      setMessage(
+        alertKind === 'SIGNAL'
+          ? 'Signal alert created.'
+          : 'Price alert created.',
+      );
+    });
+  }, [
+    alertAreaText,
+    alertKind,
+    alertItem,
+    alertRadiusKm,
+    alertSignalDecisionFilter,
+    alertSignalMinConfidence,
+    alertTargetUnitPrice,
+    apiBaseUrl,
+    getBearerTokenOrThrow,
+    runTask,
+  ]);
+
+  const createSignalAlertFromPriceQuery = useCallback(async () => {
+    await runTask(async () => {
+      if (!priceQueryItem.trim()) {
+        throw new Error('Enter an item name first.');
       }
 
       const token = await getBearerTokenOrThrow();
       const result = await createPriceAlert(normalizeBaseUrl(apiBaseUrl), token, {
-        item: alertItem.trim(),
-        targetUnitPrice,
-        radiusKm: parseNumberInput(alertRadiusKm),
-        areaText: alertAreaText.trim() || undefined,
+        item: priceQueryItem.trim(),
+        kind: 'SIGNAL',
+        signalDecisionFilter: 'BOTH',
+        signalMinConfidence: 0.65,
+        radiusKm: parseNumberInput(priceQueryRadiusKm),
+        areaText: priceQueryArea.trim() || undefined,
       });
       setAlerts((previous) => [result, ...previous.filter((item) => item.id !== result.id)]);
-      setMessage('Price alert created.');
+      setMessage('Signal watch created from current query.');
     });
   }, [
-    alertAreaText,
-    alertItem,
-    alertRadiusKm,
-    alertTargetUnitPrice,
     apiBaseUrl,
     getBearerTokenOrThrow,
+    priceQueryArea,
+    priceQueryItem,
+    priceQueryRadiusKm,
     runTask,
   ]);
 
@@ -1668,8 +1735,14 @@ function useClariFiControllerValue(): ClariFiController {
 
       alertItem,
       setAlertItem,
+      alertKind,
+      setAlertKind,
       alertTargetUnitPrice,
       setAlertTargetUnitPrice,
+      alertSignalDecisionFilter,
+      setAlertSignalDecisionFilter,
+      alertSignalMinConfidence,
+      setAlertSignalMinConfidence,
       alertRadiusKm,
       setAlertRadiusKm,
       alertAreaText,
@@ -1731,6 +1804,7 @@ function useClariFiControllerValue(): ClariFiController {
       loadPriceSignalResult,
 
       createAlert,
+      createSignalAlertFromPriceQuery,
       loadAlerts,
       loadAlertEvents,
       markAllEventsRead,
@@ -1745,8 +1819,11 @@ function useClariFiControllerValue(): ClariFiController {
     [
       alertAreaText,
       alertEvents,
+      alertKind,
       alertItem,
       alertRadiusKm,
+      alertSignalDecisionFilter,
+      alertSignalMinConfidence,
       alertTargetUnitPrice,
       alertUnreadCount,
       alerts,
@@ -1758,6 +1835,7 @@ function useClariFiControllerValue(): ClariFiController {
       confirmReceiptExpense,
       confirmVoiceExpense,
       createAlert,
+      createSignalAlertFromPriceQuery,
       createActiveFamilyInvite,
       createFamilyProfile,
       createSplitSessionAction,

@@ -171,6 +171,8 @@ export interface PriceSignalResponse {
 }
 
 export type ObservationSource = 'EXPENSE' | 'PROMO';
+export type AlertKind = 'THRESHOLD' | 'SIGNAL';
+export type SignalDecisionFilter = 'BUY_NOW' | 'WAIT' | 'BOTH';
 
 export interface PriceAlert {
   id: string;
@@ -179,8 +181,12 @@ export interface PriceAlert {
     canonicalName: string;
     canonicalUnit?: string | null;
   };
-  targetUnitPrice: number;
+  kind: AlertKind;
+  targetUnitPrice?: number;
   radiusKm: number;
+  signalDecisionFilter?: SignalDecisionFilter;
+  signalMinConfidence?: number;
+  signalCooldownMinutes?: number;
   active: boolean;
   areaText?: string;
   storeId?: string;
@@ -192,14 +198,20 @@ export interface PriceAlert {
 export interface AlertEvent {
   id: string;
   alertId: string;
+  eventKind: AlertKind;
   item: string;
   source: ObservationSource;
   triggerUnitPrice: number;
-  targetUnitPrice: number;
+  targetUnitPrice?: number;
   distanceKm?: number;
   storeId?: string;
   storeName?: string;
   areaText?: string;
+  signal?: {
+    decision: PriceSignalDecision;
+    confidence?: number;
+    expectedDeltaPct?: number;
+  };
   triggeredAt: string;
   readAt: string | null;
   deliveryStatus?: 'SENT' | 'PARTIAL' | 'FAILED' | 'SKIPPED' | 'DISABLED';

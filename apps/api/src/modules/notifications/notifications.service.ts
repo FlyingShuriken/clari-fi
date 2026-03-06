@@ -29,6 +29,18 @@ export interface AlertPushDispatchInput {
   areaText?: string;
 }
 
+export interface SignalPushDispatchInput {
+  userId: string;
+  eventId: string;
+  itemName: string;
+  decision: 'BUY_NOW' | 'WAIT';
+  confidence: number;
+  expectedDeltaPct: number;
+  latestUnitPrice: number;
+  storeName?: string;
+  areaText?: string;
+}
+
 export interface AlertPushDispatchResult {
   enabled: boolean;
   provider: string;
@@ -128,6 +140,56 @@ export class NotificationsService {
   }
 
   async sendPriceAlertEvent(input: AlertPushDispatchInput): Promise<AlertPushDispatchResult> {
+    const locationText = input.storeName ?? input.areaText ?? 'nearby';
+    const title = `Price alert: ${input.itemName}`;
+    const body = `Now RM ${input.triggerUnitPrice.toFixed(2)} (target RM ${input.targetUnitPrice.toFixed(2)}) at ${locationText}`;
+
+    return this.dispatchPush({
+      userId: input.userId,
+      title,
+      body,
+      data: {
+        type: 'price_alert',
+        eventId: input.eventId,
+        item: input.itemName,
+        source: input.source,
+      },
+      sentMetric: 'alerts.push.sent.count',
+      failedMetric: 'alerts.push.failed.count',
+    });
+  }
+
+  async sendSignalAlertEvent(input: SignalPushDispatchInput): Promise<AlertPushDispatchResult> {
+    const locationText = input.storeName ?? input.areaText ?? 'nearby';
+    const title = input.decision === 'BUY_NOW' ? `Signal: Buy now (${input.itemName})` : `Signal: Wait (${input.itemName})`;
+    const direction = input.expectedDeltaPct >= 0 ? 'up' : 'down';
+    const body = `RM ${input.latestUnitPrice.toFixed(2)} now, ${Math.abs(input.expectedDeltaPct).toFixed(1)}% ${direction} (${Math.round(input.confidence * 100)}% confidence) at ${locationText}`;
+
+    return this.dispatchPush({
+      userId: input.userId,
+      title,
+      body,
+      data: {
+        type: 'signal_alert',
+        eventId: input.eventId,
+        item: input.itemName,
+        decision: input.decision,
+        confidence: input.confidence,
+        expectedDeltaPct: input.expectedDeltaPct,
+      },
+      sentMetric: 'signals.alerts.push.sent.count',
+      failedMetric: 'signals.alerts.push.failed.count',
+    });
+  }
+
+  private async dispatchPush(input: {
+    userId: string;
+    title: string;
+    body: string;
+    data: Record<string, unknown>;
+    sentMetric: string;
+    failedMetric: string;
+  }): Promise<AlertPushDispatchResult> {
     if (!this.isEnabled()) {
       return {
         enabled: false,
@@ -166,21 +228,12 @@ export class NotificationsService {
       };
     }
 
-    const locationText = input.storeName ?? input.areaText ?? 'nearby';
-    const title = `Price alert: ${input.itemName}`;
-    const body = `Now RM ${input.triggerUnitPrice.toFixed(2)} (target RM ${input.targetUnitPrice.toFixed(2)}) at ${locationText}`;
-
     const results = await this.pushSender.sendMany(
       devices.map((device) => ({
         to: device.expoPushToken,
-        title,
-        body,
-        data: {
-          type: 'price_alert',
-          eventId: input.eventId,
-          item: input.itemName,
-          source: input.source,
-        },
+        title: input.title,
+        body: input.body,
+        data: input.data,
       })),
     );
 
@@ -205,10 +258,10 @@ export class NotificationsService {
       });
     }
 
-    this.metrics.trackCounter('alerts.push.sent.count', sent, {
+    this.metrics.trackCounter(input.sentMetric, sent, {
       provider: this.pushSender.providerName,
     });
-    this.metrics.trackCounter('alerts.push.failed.count', failedResults.length, {
+    this.metrics.trackCounter(input.failedMetric, failedResults.length, {
       provider: this.pushSender.providerName,
     });
 

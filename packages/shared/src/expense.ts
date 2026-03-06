@@ -216,6 +216,12 @@ export type PriceBackfillResponse = z.infer<typeof PriceBackfillResponseSchema>;
 export const ObservationSourceSchema = z.enum(['EXPENSE', 'PROMO']);
 export type ObservationSource = z.infer<typeof ObservationSourceSchema>;
 
+export const AlertKindSchema = z.enum(['THRESHOLD', 'SIGNAL']);
+export type AlertKind = z.infer<typeof AlertKindSchema>;
+
+export const SignalDecisionFilterSchema = z.enum(['BUY_NOW', 'WAIT', 'BOTH']);
+export type SignalDecisionFilter = z.infer<typeof SignalDecisionFilterSchema>;
+
 export const PriceAlertSchema = z.object({
   id: z.string(),
   item: z.object({
@@ -223,8 +229,12 @@ export const PriceAlertSchema = z.object({
     canonicalName: z.string(),
     canonicalUnit: z.string().nullable().optional(),
   }),
-  targetUnitPrice: z.number().nonnegative(),
+  kind: AlertKindSchema,
+  targetUnitPrice: z.number().nonnegative().optional(),
   radiusKm: z.number().positive(),
+  signalDecisionFilter: SignalDecisionFilterSchema.optional(),
+  signalMinConfidence: z.number().min(0).max(1).optional(),
+  signalCooldownMinutes: z.number().int().positive().optional(),
   active: z.boolean(),
   areaText: z.string().optional(),
   storeId: z.string().optional(),
@@ -237,14 +247,22 @@ export type PriceAlert = z.infer<typeof PriceAlertSchema>;
 export const AlertEventSchema = z.object({
   id: z.string(),
   alertId: z.string(),
+  eventKind: AlertKindSchema,
   item: z.string(),
   source: ObservationSourceSchema,
   triggerUnitPrice: z.number().nonnegative(),
-  targetUnitPrice: z.number().nonnegative(),
+  targetUnitPrice: z.number().nonnegative().optional(),
   distanceKm: z.number().nonnegative().optional(),
   storeId: z.string().optional(),
   storeName: z.string().optional(),
   areaText: z.string().optional(),
+  signal: z
+    .object({
+      decision: PriceSignalDecisionSchema,
+      confidence: z.number().min(0).max(1).optional(),
+      expectedDeltaPct: z.number().optional(),
+    })
+    .optional(),
   triggeredAt: z.string().datetime(),
   readAt: z.string().datetime().nullable(),
   deliveryStatus: z.enum(['SENT', 'PARTIAL', 'FAILED', 'SKIPPED', 'DISABLED']).optional(),

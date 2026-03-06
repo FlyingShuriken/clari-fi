@@ -1,36 +1,39 @@
-# ClariFi Monorepo (Phase 0/1 Baseline)
+# ClariFi Monorepo
 
-This repository contains the cleaned Phase 0/1 baseline for ClariFi:
+ClariFi is a React Native + NestJS product for fast expense capture (voice/receipt), personal reporting, and community price intelligence.
 
-- `apps/api`: NestJS + Prisma API (`infrastructure/` + `modules/`)
-- `apps/mobile`: Expo React Native app (feature-first sections)
-- `packages/shared`: shared contracts/schemas
+## Repository Layout
 
-## Implemented Core Endpoints
+- `apps/api`: NestJS API + Prisma (`src/modules`, `prisma`, `scripts`).
+- `apps/mobile`: Expo React Native app.
+- `packages/shared`: shared contracts (Zod/TS) used by API and mobile.
+- `tasks`: execution plans and test runbooks.
 
-- `POST /v1/auth/clerk/verify`
-- `POST /v1/artifacts/upload`
-- `POST /v1/parse/voice`
-- `POST /v1/parse/receipt`
-- `POST /v1/expenses`
-- `GET /v1/expenses`
-- `GET /v1/reports/monthly?year=YYYY&month=MM`
+## Core API Domains (Current)
 
-## Test
+- Auth (`/v1/auth/clerk`)
+- Parse (`/v1/parse/voice`, `/v1/parse/receipt`)
+- Expenses + Reports (`/v1/expenses`, `/v1/reports/monthly`)
+- Prices + Signals + Alerts (`/v1/prices/*`)
+- Families + Splits (`/v1/families`, `/v1/splits`)
+
+## Commands
 
 ```bash
+pnpm install
+pnpm dev:api
+pnpm dev:mobile
 pnpm test
+pnpm build
 ```
 
-## Package Manager
+## Environment
 
-This workspace uses `pnpm`.
+- Root `.env` is private and ignored.
+- Use `.env.example` files for required keys.
+- Mobile public keys live in `apps/mobile/.env` and are exposed through `EXPO_PUBLIC_*`.
 
-## Mobile Env Setup
+## Notes
 
-Expo resolves app config from `apps/mobile`. For mobile public keys, set either:
-
-- `apps/mobile/.env` (recommended), or
-- repo root `.env` (supported by `apps/mobile/app.config.ts` fallback).
-
-Example keys are in [`apps/mobile/.env.example`](apps/mobile/.env.example).
+- `docs/` is intentionally gitignored in this baseline.
+- Native mobile folders (`apps/mobile/ios`, `apps/mobile/android`) are generated artifacts and untracked.

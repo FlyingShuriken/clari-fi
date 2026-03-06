@@ -59,6 +59,7 @@ export const TEST_IDS = {
     compareButton: 'prices.compare.button',
     historyButton: 'prices.history.button',
     signalButton: 'prices.signal.button',
+    signalNotifyButton: 'prices.signal_notify.button',
     promoCameraButton: 'prices.promo.camera.button',
     promoGalleryButton: 'prices.promo.gallery.button',
     promoIngestButton: 'prices.promo.ingest.button',

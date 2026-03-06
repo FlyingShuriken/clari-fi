@@ -105,6 +105,15 @@ export function PricesScreen() {
             >
               Buy vs Wait
             </Button>
+            <Button
+              mode="text"
+              onPress={controller.createSignalAlertFromPriceQuery}
+              disabled={controller.loading}
+              icon="bell-plus-outline"
+              testID={TEST_IDS.prices.signalNotifyButton}
+            >
+              Notify
+            </Button>
           </View>
 
           {controller.priceCompareResult ? (

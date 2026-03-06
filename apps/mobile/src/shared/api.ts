@@ -322,11 +322,15 @@ export async function createPriceAlert(
   bearerToken: string,
   input: {
     item: string;
-    targetUnitPrice: number;
+    targetUnitPrice?: number;
     radiusKm?: number;
     areaText?: string;
     storeId?: string;
     active?: boolean;
+    kind?: 'THRESHOLD' | 'SIGNAL';
+    signalDecisionFilter?: 'BUY_NOW' | 'WAIT' | 'BOTH';
+    signalMinConfidence?: number;
+    signalCooldownMinutes?: number;
   },
 ): Promise<PriceAlert> {
   return apiRequest<PriceAlert>(baseUrl, '/prices/alerts', {
@@ -353,10 +357,14 @@ export async function updatePriceAlert(
   input: Partial<{
     item: string;
     targetUnitPrice: number;
+    kind: 'THRESHOLD' | 'SIGNAL';
     radiusKm: number;
     areaText: string;
     storeId: string;
     active: boolean;
+    signalDecisionFilter: 'BUY_NOW' | 'WAIT' | 'BOTH';
+    signalMinConfidence: number;
+    signalCooldownMinutes: number;
   }>,
 ): Promise<PriceAlert> {
   return apiRequest<PriceAlert>(baseUrl, `/prices/alerts/${alertId}`, {

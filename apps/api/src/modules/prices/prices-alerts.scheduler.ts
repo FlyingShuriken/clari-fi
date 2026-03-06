@@ -50,14 +50,18 @@ export class PricesAlertsScheduler implements OnModuleInit {
     const startedAt = Date.now();
 
     try {
-      const result = await this.pricesService.runScheduledAlertChecks();
+      const thresholdResult = await this.pricesService.runScheduledAlertChecks();
+      const signalResult = await this.pricesService.runScheduledSignalChecks();
       this.metrics.trackCounter('alerts.scheduler.run.count', 1, { status: 'success' });
-      this.metrics.trackCounter('alerts.scheduler.triggered.count', result.triggeredCount);
-      this.metrics.trackCounter('alerts.push.sent.count', result.pushSent);
-      this.metrics.trackCounter('alerts.push.failed.count', result.pushFailed);
+      this.metrics.trackCounter('alerts.scheduler.triggered.count', thresholdResult.triggeredCount);
+      this.metrics.trackCounter('alerts.push.sent.count', thresholdResult.pushSent);
+      this.metrics.trackCounter('alerts.push.failed.count', thresholdResult.pushFailed);
+      this.metrics.trackCounter('signals.alerts.scheduler.triggered.count', signalResult.triggeredCount);
+      this.metrics.trackCounter('signals.alerts.scheduler.cooldown_skipped.count', signalResult.cooldownSkipped);
       this.logger.log(JSON.stringify({
         job: 'price-alerts-scheduler',
-        ...result,
+        thresholdResult,
+        signalResult,
         finishedAt: new Date().toISOString(),
       }));
     } catch (error) {

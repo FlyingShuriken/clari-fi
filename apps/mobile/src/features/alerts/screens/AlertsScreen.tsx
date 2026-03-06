@@ -12,19 +12,69 @@ export function AlertsScreen() {
       <Card mode="contained" style={styles.card}>
         <Card.Title title="Price Alerts" subtitle="Create and evaluate threshold alerts" />
         <Card.Content style={styles.content}>
+          <View style={styles.row}>
+            <Chip
+              selected={controller.alertKind === 'THRESHOLD'}
+              onPress={() => controller.setAlertKind('THRESHOLD')}
+              icon="bell-outline"
+            >
+              Threshold
+            </Chip>
+            <Chip
+              selected={controller.alertKind === 'SIGNAL'}
+              onPress={() => controller.setAlertKind('SIGNAL')}
+              icon="lightning-bolt-outline"
+            >
+              Signal
+            </Chip>
+          </View>
+
           <TextInput
             label="Item"
             value={controller.alertItem}
             onChangeText={controller.setAlertItem}
             mode="outlined"
           />
-          <TextInput
-            label="Target unit price"
-            value={controller.alertTargetUnitPrice}
-            onChangeText={controller.setAlertTargetUnitPrice}
-            keyboardType="decimal-pad"
-            mode="outlined"
-          />
+
+          {controller.alertKind === 'THRESHOLD' ? (
+            <TextInput
+              label="Target unit price"
+              value={controller.alertTargetUnitPrice}
+              onChangeText={controller.setAlertTargetUnitPrice}
+              keyboardType="decimal-pad"
+              mode="outlined"
+            />
+          ) : (
+            <>
+              <View style={styles.row}>
+                <Chip
+                  selected={controller.alertSignalDecisionFilter === 'BOTH'}
+                  onPress={() => controller.setAlertSignalDecisionFilter('BOTH')}
+                >
+                  Buy + Wait
+                </Chip>
+                <Chip
+                  selected={controller.alertSignalDecisionFilter === 'BUY_NOW'}
+                  onPress={() => controller.setAlertSignalDecisionFilter('BUY_NOW')}
+                >
+                  Buy only
+                </Chip>
+                <Chip
+                  selected={controller.alertSignalDecisionFilter === 'WAIT'}
+                  onPress={() => controller.setAlertSignalDecisionFilter('WAIT')}
+                >
+                  Wait only
+                </Chip>
+              </View>
+              <TextInput
+                label="Min confidence (0-1)"
+                value={controller.alertSignalMinConfidence}
+                onChangeText={controller.setAlertSignalMinConfidence}
+                keyboardType="decimal-pad"
+                mode="outlined"
+              />
+            </>
+          )}
 
           <View style={styles.row}>
             <TextInput
@@ -100,12 +150,21 @@ export function AlertsScreen() {
                 <Card key={alert.id} mode="outlined" style={styles.innerCard}>
                   <Card.Content style={styles.listBlock}>
                     <Text variant="bodyMedium">
-                      {alert.item.canonicalName} ≤ {controller.formatCurrency(alert.targetUnitPrice)}
+                      {alert.item.canonicalName}{' '}
+                      {alert.kind === 'THRESHOLD'
+                        ? `≤ ${controller.formatCurrency(alert.targetUnitPrice ?? 0)}`
+                        : `(${alert.signalDecisionFilter ?? 'BOTH'})`}
                     </Text>
                     <Text variant="bodySmall" style={styles.meta}>
-                      Radius {alert.radiusKm} km · {alert.areaText || 'No area'} ·{' '}
+                      {alert.kind} · Radius {alert.radiusKm} km · {alert.areaText || 'No area'} ·{' '}
                       {alert.active ? 'Active' : 'Inactive'}
                     </Text>
+                    {alert.kind === 'SIGNAL' ? (
+                      <Text variant="bodySmall" style={styles.meta}>
+                        Min confidence {(alert.signalMinConfidence ?? 0.65).toFixed(2)} · Cooldown{' '}
+                        {alert.signalCooldownMinutes ?? 360} min
+                      </Text>
+                    ) : null}
                   </Card.Content>
                 </Card>
               ))}
@@ -122,10 +181,13 @@ export function AlertsScreen() {
                       {event.item}: {controller.formatCurrency(event.triggerUnitPrice)}
                     </Text>
                     <Text variant="bodySmall" style={styles.meta}>
-                      Target {controller.formatCurrency(event.targetUnitPrice)} · {event.areaText || 'Unknown area'}
+                      {event.eventKind === 'SIGNAL'
+                        ? `${event.signal?.decision ?? 'SIGNAL'} · ${event.signal?.confidence ? `${Math.round(event.signal.confidence * 100)}%` : 'n/a'}`
+                        : `Target ${controller.formatCurrency(event.targetUnitPrice ?? 0)}`}{' '}
+                      · {event.areaText || 'Unknown area'}
                     </Text>
                     <Text variant="bodySmall" style={styles.meta}>
-                      {new Date(event.triggeredAt).toLocaleString()} ·{' '}
+                      {event.eventKind} · {new Date(event.triggeredAt).toLocaleString()} ·{' '}
                       {event.readAt ? 'Read' : 'Unread'} · {event.deliveryStatus || 'N/A'}
                     </Text>
                   </Card.Content>
