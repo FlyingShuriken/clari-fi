@@ -5,6 +5,8 @@ import type {
   FamilyListResponse,
   FamilyProfile,
   FamilyRole,
+  HealthLiveResponse,
+  HealthReadyResponse,
   MonthlyReportResponse,
   PriceAlert,
   PriceCompareResponse,
@@ -142,6 +144,18 @@ export async function verifyClerkSessionToken(
   return apiRequest<AuthVerifyResponse>(baseUrl, '/auth/clerk/verify', {
     method: 'POST',
     body: JSON.stringify({ clerkSessionToken }),
+  });
+}
+
+export async function getHealthLive(baseUrl: string): Promise<HealthLiveResponse> {
+  return apiRequest<HealthLiveResponse>(baseUrl, '/health/live', {
+    method: 'GET',
+  });
+}
+
+export async function getHealthReady(baseUrl: string): Promise<HealthReadyResponse> {
+  return apiRequest<HealthReadyResponse>(baseUrl, '/health/ready', {
+    method: 'GET',
   });
 }
 

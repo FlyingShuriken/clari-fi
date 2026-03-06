@@ -6,6 +6,20 @@ export interface AuthVerifyResponse {
   };
 }
 
+export interface HealthLiveResponse {
+  status: 'live';
+  timestamp: string;
+  uptimeSeconds: number;
+}
+
+export interface HealthReadyResponse {
+  status: 'ready';
+  timestamp: string;
+  checks: {
+    database: 'ok';
+  };
+}
+
 export type MonthlySpendDeltaDirection = 'UP' | 'DOWN' | 'FLAT' | 'NO_BASELINE';
 
 export interface MonthlyReportResponse {

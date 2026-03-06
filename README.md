@@ -26,6 +26,7 @@ pnpm dev:api
 pnpm dev:mobile
 pnpm test
 pnpm build
+pnpm verify:phase4c
 ```
 
 ## Environment
@@ -38,3 +39,12 @@ pnpm build
 
 - `docs/` is intentionally gitignored in this baseline.
 - Native mobile folders (`apps/mobile/ios`, `apps/mobile/android`) are generated artifacts and untracked.
+
+## Phase 4C Verification
+
+- Run `pnpm verify:phase4c` before cutting an internal beta baseline.
+- Use the Account tab in the mobile app to verify:
+  - backend user sync
+  - `/v1/health/live` and `/v1/health/ready`
+  - current registered push devices
+- Follow `tasks/phase4c-mobile-smoke.md` for the full iPhone smoke sequence.

@@ -13,6 +13,8 @@ import {
   createPriceAlert,
   createSplit,
   finalizeSplit,
+  getHealthLive,
+  getHealthReady,
   getSplit,
   getSplitBalances,
   ingestPromo,
@@ -20,6 +22,7 @@ import {
   listAlertEvents,
   listExpenses,
   listFamilies,
+  listPushDevices,
   listPriceAlerts,
   listPromos,
   listSplits,
@@ -45,6 +48,8 @@ import type {
   AlertKind,
   FamilyProfile,
   FamilyRole,
+  HealthLiveResponse,
+  HealthReadyResponse,
   MonthlyReportResponse,
   MonthlySpendDeltaDirection,
   PriceAlert,
@@ -52,6 +57,7 @@ import type {
   PriceHistoryResponse,
   PriceSignalResponse,
   PromoIngestionItem,
+  PushDevice,
   ReceiptParseResult,
   SignalDecisionFilter,
   SplitDetailResponse,
@@ -366,8 +372,12 @@ export interface ClariFiController {
   loading: boolean;
   signedInEmail: string;
   backendUserId: string;
+  backendLiveHealth: HealthLiveResponse | null;
+  backendReadyHealth: HealthReadyResponse | null;
+  backendHealthCheckedAt: string;
   pushStatus: string;
   pushTokenPreview: string;
+  pushDevices: PushDevice[];
 
   transcriptInput: string;
   setTranscriptInput: (value: string) => void;
@@ -488,6 +498,9 @@ export interface ClariFiController {
   promoItems: PromoIngestionItem[];
 
   syncBackendUser: () => Promise<void>;
+  checkBackendHealth: () => Promise<void>;
+  loadPushDevices: () => Promise<void>;
+  revokeCurrentPushDevice: () => Promise<void>;
   signOutUser: () => Promise<void>;
 
   startListening: () => Promise<void>;
@@ -577,6 +590,9 @@ function useClariFiControllerValue(): ClariFiController {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [backendUserId, setBackendUserId] = useState('');
+  const [backendLiveHealth, setBackendLiveHealth] = useState<HealthLiveResponse | null>(null);
+  const [backendReadyHealth, setBackendReadyHealth] = useState<HealthReadyResponse | null>(null);
+  const [backendHealthCheckedAt, setBackendHealthCheckedAt] = useState('');
 
   const [transcriptInput, setTranscriptInput] = useState('');
   const [recognitionState, setRecognitionState] = useState<RecognitionState>('idle');
@@ -630,6 +646,7 @@ function useClariFiControllerValue(): ClariFiController {
 
   const [pushStatus, setPushStatus] = useState('Not registered');
   const [pushToken, setPushToken] = useState('');
+  const [pushDevices, setPushDevices] = useState<PushDevice[]>([]);
 
   const [ledgerItems, setLedgerItems] = useState<LedgerExpense[]>([]);
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
@@ -794,6 +811,7 @@ function useClariFiControllerValue(): ClariFiController {
     if (!user?.id) {
       setPushStatus('Not registered');
       setPushToken('');
+      setPushDevices([]);
       return;
     }
 
@@ -809,6 +827,52 @@ function useClariFiControllerValue(): ClariFiController {
     });
   }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
 
+  const checkBackendHealth = useCallback(async () => {
+    await runTask(async () => {
+      const [live, ready] = await Promise.all([
+        getHealthLive(normalizeBaseUrl(apiBaseUrl)),
+        getHealthReady(normalizeBaseUrl(apiBaseUrl)),
+      ]);
+      setBackendLiveHealth(live);
+      setBackendReadyHealth(ready);
+      setBackendHealthCheckedAt(new Date().toISOString());
+      setMessage(`Backend healthy: ${live.status} / ${ready.status}.`);
+    });
+  }, [apiBaseUrl, runTask]);
+
+  const loadPushDevices = useCallback(async () => {
+    await runTask(async () => {
+      const token = await getBearerTokenOrThrow();
+      const result = await listPushDevices(normalizeBaseUrl(apiBaseUrl), token);
+      setPushDevices(result.items);
+      setMessage(`Loaded ${result.total} push device${result.total === 1 ? '' : 's'}.`);
+    });
+  }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
+
+  const revokeCurrentPushDevice = useCallback(async () => {
+    await runTask(async () => {
+      if (!pushToken) {
+        throw new Error('No registered push token for this device.');
+      }
+
+      const token = await getBearerTokenOrThrow();
+      await revokePushDevice(normalizeBaseUrl(apiBaseUrl), token, pushToken);
+      setPushStatus('Revoked current device');
+      setPushDevices((previous) =>
+        previous.map((device) =>
+          device.expoPushToken === pushToken
+            ? {
+                ...device,
+                active: false,
+                revokedAt: new Date().toISOString(),
+              }
+            : device,
+        ),
+      );
+      setMessage('Current device push token revoked.');
+    });
+  }, [apiBaseUrl, getBearerTokenOrThrow, pushToken, runTask]);
+
   const signOutUser = useCallback(async () => {
     await runTask(async () => {
       if (pushToken) {
@@ -821,7 +885,11 @@ function useClariFiControllerValue(): ClariFiController {
       }
       await signOut();
       setBackendUserId('');
+      setBackendLiveHealth(null);
+      setBackendReadyHealth(null);
+      setBackendHealthCheckedAt('');
       setPushToken('');
+      setPushDevices([]);
       setPushStatus('Not registered');
       setMessage('Signed out.');
     });
@@ -1756,8 +1824,12 @@ function useClariFiControllerValue(): ClariFiController {
       loading,
       signedInEmail,
       backendUserId,
+      backendLiveHealth,
+      backendReadyHealth,
+      backendHealthCheckedAt,
       pushStatus,
       pushTokenPreview: pushToken ? `${pushToken.slice(0, 18)}...${pushToken.slice(-6)}` : '-',
+      pushDevices,
 
       transcriptInput,
       setTranscriptInput,
@@ -1854,6 +1926,9 @@ function useClariFiControllerValue(): ClariFiController {
       promoItems,
 
       syncBackendUser,
+      checkBackendHealth,
+      loadPushDevices,
+      revokeCurrentPushDevice,
       signOutUser,
 
       startListening,
@@ -1925,6 +2000,10 @@ function useClariFiControllerValue(): ClariFiController {
       activeSplitId,
       apiBaseUrl,
       backendUserId,
+      backendHealthCheckedAt,
+      backendLiveHealth,
+      backendReadyHealth,
+      checkBackendHealth,
       clearMessage,
       confirmReceiptExpense,
       confirmVoiceExpense,
@@ -1983,8 +2062,11 @@ function useClariFiControllerValue(): ClariFiController {
       promoItems,
       promoMerchantHint,
       promoUri,
+      pushDevices,
+      loadPushDevices,
       pushStatus,
       pushToken,
+      revokeCurrentPushDevice,
       receiptParse,
       receiptParseLatencyMs,
       recognitionState,

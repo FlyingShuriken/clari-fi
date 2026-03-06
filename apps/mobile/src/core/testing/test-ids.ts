@@ -7,6 +7,9 @@ export const TEST_IDS = {
   account: {
     apiBaseInput: 'account.api_base.input',
     syncBackendButton: 'account.sync_backend.button',
+    checkHealthButton: 'account.check_health.button',
+    refreshPushDevicesButton: 'account.refresh_push_devices.button',
+    revokePushDeviceButton: 'account.revoke_push_device.button',
     signOutButton: 'account.sign_out.button',
   },
   capture: {

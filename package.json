@@ -7,6 +7,8 @@
     "build": "pnpm -r --if-present build",
     "dev:api": "pnpm --filter @clarifi/api start:dev",
     "dev:mobile": "pnpm --filter @clarifi/mobile start",
-    "test": "pnpm --filter @clarifi/api test"
+    "test": "pnpm --filter @clarifi/api test",
+    "typecheck:mobile": "pnpm --filter @clarifi/mobile exec tsc --noEmit",
+    "verify:phase4c": "pnpm test && pnpm build && pnpm typecheck:mobile"
   }
 }
