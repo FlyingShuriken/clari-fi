@@ -26,6 +26,7 @@ import {
   loadPriceCompare,
   loadPriceHistory,
   loadPriceSignal,
+  markAlertEventRead,
   markAllAlertEventsRead,
   parseReceipt,
   parseVoice,
@@ -497,6 +498,7 @@ export interface ClariFiController {
   createSignalAlertFromPriceQuery: () => Promise<void>;
   loadAlerts: () => Promise<void>;
   loadAlertEvents: () => Promise<void>;
+  markEventRead: (eventId: string) => Promise<void>;
   markAllEventsRead: () => Promise<void>;
 
   pickPromoCamera: () => Promise<void>;
@@ -1560,6 +1562,37 @@ function useClariFiControllerValue(): ClariFiController {
     });
   }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
 
+  const markEventRead = useCallback(
+    async (eventId: string) => {
+      await runTask(async () => {
+        const token = await getBearerTokenOrThrow();
+        const response = await markAlertEventRead(
+          normalizeBaseUrl(apiBaseUrl),
+          token,
+          eventId,
+        );
+
+        let decremented = false;
+        setAlertEvents((previous) =>
+          previous.map((event) => {
+            if (event.id !== eventId) {
+              return event;
+            }
+            if (event.readAt === null) {
+              decremented = true;
+            }
+            return { ...event, readAt: response.readAt ?? new Date().toISOString() };
+          }),
+        );
+        if (decremented) {
+          setAlertUnreadCount((previous) => Math.max(0, previous - 1));
+        }
+        setMessage('Alert event marked as read.');
+      });
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
   const markAllEventsRead = useCallback(async () => {
     await runTask(async () => {
       const token = await getBearerTokenOrThrow();
@@ -1807,6 +1840,7 @@ function useClariFiControllerValue(): ClariFiController {
       createSignalAlertFromPriceQuery,
       loadAlerts,
       loadAlertEvents,
+      markEventRead,
       markAllEventsRead,
 
       pickPromoCamera,
@@ -1864,6 +1898,7 @@ function useClariFiControllerValue(): ClariFiController {
       loadReport,
       loadSplitSessions,
       loading,
+      markEventRead,
       markAllEventsRead,
       message,
       parseReceiptExpense,

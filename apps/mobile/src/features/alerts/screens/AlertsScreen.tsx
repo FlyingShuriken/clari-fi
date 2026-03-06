@@ -190,6 +190,18 @@ export function AlertsScreen() {
                       {event.eventKind} · {new Date(event.triggeredAt).toLocaleString()} ·{' '}
                       {event.readAt ? 'Read' : 'Unread'} · {event.deliveryStatus || 'N/A'}
                     </Text>
+                    {event.readAt === null ? (
+                      <View style={styles.row}>
+                        <Button
+                          mode="text"
+                          compact
+                          onPress={() => controller.markEventRead(event.id)}
+                          disabled={controller.loading}
+                        >
+                          Mark read
+                        </Button>
+                      </View>
+                    ) : null}
                   </Card.Content>
                 </Card>
               ))}
