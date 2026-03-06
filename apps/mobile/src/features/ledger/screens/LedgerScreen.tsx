@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -44,6 +44,17 @@ export function LedgerScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const [selectedFilter, setSelectedFilter] = useState<FilterCategory>('All');
+  const hasLoadedOnceRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (hasLoadedOnceRef.current) {
+        return;
+      }
+      hasLoadedOnceRef.current = true;
+      void controller.loadLedger();
+    }, [controller.loadLedger]),
+  );
 
   const now = new Date();
   const monthLabel = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`;

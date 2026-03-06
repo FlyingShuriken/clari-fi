@@ -1,3 +1,5 @@
+import { useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +28,17 @@ export function ReportsScreen() {
   const controller = useClariFiController();
   const insets = useSafeAreaInsets();
   const summary = controller.reportSummary;
+  const hasLoadedOnceRef = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (hasLoadedOnceRef.current) {
+        return;
+      }
+      hasLoadedOnceRef.current = true;
+      void controller.loadReport();
+    }, [controller.loadReport]),
+  );
 
   const now = new Date();
   const monthLabel = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`;

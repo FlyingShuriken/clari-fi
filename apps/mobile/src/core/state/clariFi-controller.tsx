@@ -372,6 +372,8 @@ export interface ClariFiController {
   loading: boolean;
   signedInEmail: string;
   backendUserId: string;
+  authSyncStatus: 'idle' | 'syncing' | 'ok' | 'error';
+  authSyncError: string;
   backendLiveHealth: HealthLiveResponse | null;
   backendReadyHealth: HealthReadyResponse | null;
   backendHealthCheckedAt: string;
@@ -590,6 +592,10 @@ function useClariFiControllerValue(): ClariFiController {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [backendUserId, setBackendUserId] = useState('');
+  const [authSyncStatus, setAuthSyncStatus] = useState<'idle' | 'syncing' | 'ok' | 'error'>('idle');
+  const [authSyncError, setAuthSyncError] = useState('');
+  const [lastSyncedClerkUserId, setLastSyncedClerkUserId] = useState('');
+  const [lastAutoSyncAttemptedClerkUserId, setLastAutoSyncAttemptedClerkUserId] = useState('');
   const [backendLiveHealth, setBackendLiveHealth] = useState<HealthLiveResponse | null>(null);
   const [backendReadyHealth, setBackendReadyHealth] = useState<HealthReadyResponse | null>(null);
   const [backendHealthCheckedAt, setBackendHealthCheckedAt] = useState('');
@@ -818,14 +824,64 @@ function useClariFiControllerValue(): ClariFiController {
     void ensurePushDeviceRegistration();
   }, [ensurePushDeviceRegistration, user?.id]);
 
+  const performBackendUserSync = useCallback(
+    async (options?: { silent?: boolean }) => {
+      setAuthSyncStatus('syncing');
+      setAuthSyncError('');
+      try {
+        const token = await getBearerTokenOrThrow();
+        const result = await verifyClerkSessionToken(normalizeBaseUrl(apiBaseUrl), token);
+        setBackendUserId(result.user.id);
+        if (user?.id) {
+          setLastSyncedClerkUserId(user.id);
+        }
+        setAuthSyncStatus('ok');
+        if (!options?.silent) {
+          setMessage(`Synced backend user: ${result.user.email}`);
+        }
+      } catch (error) {
+        setAuthSyncStatus('error');
+        setAuthSyncError(errorToMessage(error));
+        throw error;
+      }
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, user?.id],
+  );
+
+  useEffect(() => {
+    if (!user?.id) {
+      setAuthSyncStatus('idle');
+      setAuthSyncError('');
+      setLastSyncedClerkUserId('');
+      setLastAutoSyncAttemptedClerkUserId('');
+      return;
+    }
+
+    if (
+      lastSyncedClerkUserId === user.id ||
+      lastAutoSyncAttemptedClerkUserId === user.id ||
+      authSyncStatus === 'syncing'
+    ) {
+      return;
+    }
+
+    setLastAutoSyncAttemptedClerkUserId(user.id);
+    void performBackendUserSync({ silent: true }).catch(() => {
+      // Keep silent for auto sync; account screen exposes status for debugging.
+    });
+  }, [
+    authSyncStatus,
+    lastAutoSyncAttemptedClerkUserId,
+    lastSyncedClerkUserId,
+    performBackendUserSync,
+    user?.id,
+  ]);
+
   const syncBackendUser = useCallback(async () => {
     await runTask(async () => {
-      const token = await getBearerTokenOrThrow();
-      const result = await verifyClerkSessionToken(normalizeBaseUrl(apiBaseUrl), token);
-      setBackendUserId(result.user.id);
-      setMessage(`Synced backend user: ${result.user.email}`);
+      await performBackendUserSync();
     });
-  }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
+  }, [performBackendUserSync, runTask]);
 
   const checkBackendHealth = useCallback(async () => {
     await runTask(async () => {
@@ -885,6 +941,10 @@ function useClariFiControllerValue(): ClariFiController {
       }
       await signOut();
       setBackendUserId('');
+      setAuthSyncStatus('idle');
+      setAuthSyncError('');
+      setLastSyncedClerkUserId('');
+      setLastAutoSyncAttemptedClerkUserId('');
       setBackendLiveHealth(null);
       setBackendReadyHealth(null);
       setBackendHealthCheckedAt('');
@@ -1824,6 +1884,8 @@ function useClariFiControllerValue(): ClariFiController {
       loading,
       signedInEmail,
       backendUserId,
+      authSyncStatus,
+      authSyncError,
       backendLiveHealth,
       backendReadyHealth,
       backendHealthCheckedAt,
@@ -1999,6 +2061,8 @@ function useClariFiControllerValue(): ClariFiController {
       activeFamilyId,
       activeSplitId,
       apiBaseUrl,
+      authSyncError,
+      authSyncStatus,
       backendUserId,
       backendHealthCheckedAt,
       backendLiveHealth,
