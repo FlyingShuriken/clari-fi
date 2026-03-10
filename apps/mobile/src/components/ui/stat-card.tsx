@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { Colors } from '../../theme';
 import { DarkCard } from './dark-card';
 

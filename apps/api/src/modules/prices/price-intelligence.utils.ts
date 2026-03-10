@@ -141,3 +141,77 @@ export function haversineDistanceKm(a: { lat: number; lng: number }, b: { lat: n
 
   return earthRadiusKm * c;
 }
+
+export function matchesAreaText(filterText?: string, candidateText?: string): boolean {
+  const filter = normalizeLooseText(filterText ?? '');
+  if (!filter) {
+    return true;
+  }
+
+  const candidate = normalizeLooseText(candidateText ?? '');
+  if (!candidate) {
+    return false;
+  }
+
+  return candidate.includes(filter) || filter.includes(candidate);
+}
+
+export function evaluatePriceCandidateLocation(input: {
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
+  areaText?: string;
+  candidate: {
+    storeLat?: number;
+    storeLng?: number;
+    areaText?: string;
+  };
+}): {
+  include: boolean;
+  distanceKm?: number;
+} {
+  const areaMatches = matchesAreaText(input.areaText, input.candidate.areaText);
+  const hasCoordinates =
+    typeof input.lat === 'number' &&
+    typeof input.lng === 'number' &&
+    Number.isFinite(input.lat) &&
+    Number.isFinite(input.lng);
+
+  if (!hasCoordinates) {
+    return { include: areaMatches };
+  }
+
+  const radiusKm = input.radiusKm ?? 15;
+  const { candidate } = input;
+
+  if (
+    typeof candidate.storeLat === 'number' &&
+    typeof candidate.storeLng === 'number' &&
+    Number.isFinite(candidate.storeLat) &&
+    Number.isFinite(candidate.storeLng)
+  ) {
+    const distanceKm = haversineDistanceKm(
+      {
+        lat: input.lat as number,
+        lng: input.lng as number,
+      },
+      {
+        lat: candidate.storeLat,
+        lng: candidate.storeLng,
+      },
+    );
+
+    return {
+      include: distanceKm <= radiusKm,
+      distanceKm,
+    };
+  }
+
+  if (!input.areaText?.trim()) {
+    return { include: true };
+  }
+
+  return {
+    include: areaMatches,
+  };
+}

@@ -12,6 +12,66 @@ interface NominatimSearchResult {
   lon?: string;
 }
 
+interface NominatimRequestInput {
+  query: string;
+  limit: number;
+}
+
+export interface PriceLocationSearchResult {
+  providerPlaceId?: string;
+  label: string;
+  address: string;
+  areaText: string;
+  lat: number;
+  lng: number;
+  distanceKm?: number;
+}
+
+interface LocalLocationSuggestion {
+  label: string;
+  address: string;
+  areaText: string;
+  lat: number;
+  lng: number;
+}
+
+function splitAddressSegments(value: string): string[] {
+  return value
+    .split(',')
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function isAdministrativeSegment(value: string): boolean {
+  const normalized = normalizeLooseText(value);
+  return (
+    normalized.length <= 2 ||
+    normalized.includes('county') ||
+    normalized.includes('province') ||
+    normalized.includes('state') ||
+    normalized.includes('region') ||
+    normalized.includes('territory') ||
+    normalized.includes('country')
+  );
+}
+
+function deriveQueryAreaText(label: string, address: string): string {
+  const normalizedLabel = normalizeLooseText(label);
+  const segments = splitAddressSegments(address);
+  for (const segment of segments) {
+    const normalizedSegment = normalizeLooseText(segment);
+    if (!normalizedSegment || normalizedSegment === normalizedLabel) {
+      continue;
+    }
+    if (isAdministrativeSegment(segment)) {
+      continue;
+    }
+    return segment;
+  }
+
+  return label.trim() || segments[0] || address.trim();
+}
+
 function asNumber(value: string | number | undefined): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -30,6 +90,16 @@ function toDecimal(value: number | null | undefined): Prisma.Decimal | undefined
     return undefined;
   }
   return new Prisma.Decimal(value);
+}
+
+function decimalToNumber(value: Prisma.Decimal | number | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  return value.toNumber();
 }
 
 @Injectable()
@@ -144,50 +214,57 @@ export class StoreResolverService {
     };
   }
 
+  async searchLocations(input: {
+    query: string;
+    lat?: number;
+    lng?: number;
+    limit?: number;
+  }): Promise<PriceLocationSearchResult[]> {
+    const query = input.query.trim();
+    if (!query) {
+      return [];
+    }
+    const limit = Math.min(Math.max(Math.trunc(input.limit ?? 5), 1), 8);
+    let externalResults: PriceLocationSearchResult[] = [];
+
+    try {
+      const payload = await this.searchNominatim({
+        query,
+        limit,
+      });
+      externalResults = this.mapLocationSearchResultsFromNominatim(payload, input);
+    } catch (error) {
+      this.logger.warn(`Nominatim autocomplete failed for query "${query}": ${String(error)}`);
+      this.metrics.trackCounter('prices.geocode.error.count', 1);
+    }
+
+    const localResults = await this.searchLocalLocations({
+      query,
+      lat: input.lat,
+      lng: input.lng,
+      limit,
+    });
+
+    return this.mergeLocationSearchResults([...externalResults, ...localResults], limit);
+  }
+
   private async lookupNominatim(input: {
     merchant: string;
     area: string;
     lat: number | null;
     lng: number | null;
   }): Promise<NominatimSearchResult | null> {
-    const baseUrl = this.config.get<string>('NOMINATIM_BASE_URL')?.trim();
-    const userAgent = this.config.get<string>('NOMINATIM_USER_AGENT')?.trim();
-
-    if (!baseUrl || !userAgent) {
-      this.metrics.trackCounter('prices.geocode.disabled.count', 1);
-      return null;
-    }
-
     const query = [input.merchant, input.area].filter(Boolean).join(' ').trim();
     if (!query) {
       return null;
     }
 
-    const url = new URL('/search', baseUrl);
-    url.searchParams.set('q', query);
-    url.searchParams.set('format', 'jsonv2');
-    url.searchParams.set('limit', '3');
-
-    const startedAt = Date.now();
-
     try {
-      const response = await fetch(url.toString(), {
-        method: 'GET',
-        headers: {
-          'User-Agent': userAgent,
-          Accept: 'application/json',
-        },
+      const payload = await this.searchNominatim({
+        query,
+        limit: 3,
       });
-
-      if (!response.ok) {
-        throw new Error(`Nominatim request failed: ${response.status}`);
-      }
-
-      const payload = (await response.json()) as NominatimSearchResult[];
-      this.metrics.trackCounter('prices.geocode.hit.count', 1);
-      this.metrics.trackTiming('prices.geocode.latency_ms', Date.now() - startedAt);
-
-      if (!Array.isArray(payload) || payload.length === 0) {
+      if (payload.length === 0) {
         return null;
       }
 
@@ -223,5 +300,222 @@ export class StoreResolverService {
       this.metrics.trackCounter('prices.geocode.error.count', 1);
       return null;
     }
+  }
+
+  private async searchNominatim(input: NominatimRequestInput): Promise<NominatimSearchResult[]> {
+    const baseUrl = this.config.get<string>('NOMINATIM_BASE_URL')?.trim();
+    const userAgent = this.config.get<string>('NOMINATIM_USER_AGENT')?.trim();
+
+    if (!baseUrl || !userAgent) {
+      this.metrics.trackCounter('prices.geocode.disabled.count', 1);
+      return [];
+    }
+
+    const url = new URL('/search', baseUrl);
+    url.searchParams.set('q', input.query);
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('limit', String(input.limit));
+
+    const startedAt = Date.now();
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'User-Agent': userAgent,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Nominatim request failed: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as NominatimSearchResult[];
+    this.metrics.trackCounter('prices.geocode.hit.count', 1);
+    this.metrics.trackTiming('prices.geocode.latency_ms', Date.now() - startedAt);
+
+    return Array.isArray(payload) ? payload : [];
+  }
+
+  private mapLocationSearchResultsFromNominatim(
+    payload: NominatimSearchResult[],
+    input: {
+      lat?: number;
+      lng?: number;
+    },
+  ): PriceLocationSearchResult[] {
+    const hasOrigin = typeof input.lat === 'number' && typeof input.lng === 'number';
+    const mapped: PriceLocationSearchResult[] = payload.flatMap((row) => {
+      const lat = asNumber(row.lat);
+      const lng = asNumber(row.lon);
+      const address = row.display_name?.trim() ?? '';
+
+      if (lat === null || lng === null || !address) {
+        return [];
+      }
+
+      const label = address.split(',')[0]?.trim() || address;
+      const distanceKm = hasOrigin
+        ? roundTo(
+            haversineDistanceKm(
+              { lat: input.lat as number, lng: input.lng as number },
+              { lat, lng },
+            ),
+            3,
+          )
+        : undefined;
+
+      return [{
+        providerPlaceId: String(row.place_id ?? '').trim() || undefined,
+        label,
+        address,
+        areaText: deriveQueryAreaText(label, address),
+        lat,
+        lng,
+        distanceKm,
+      } satisfies PriceLocationSearchResult];
+    });
+
+    if (hasOrigin) {
+      mapped.sort(
+        (left, right) =>
+          (left.distanceKm ?? Number.POSITIVE_INFINITY) -
+          (right.distanceKm ?? Number.POSITIVE_INFINITY),
+      );
+    }
+
+    return mapped;
+  }
+
+  private async searchLocalLocations(input: {
+    query: string;
+    lat?: number;
+    lng?: number;
+    limit: number;
+  }): Promise<PriceLocationSearchResult[]> {
+    const normalizedQuery = normalizeLooseText(input.query);
+    const hasOrigin = typeof input.lat === 'number' && typeof input.lng === 'number';
+    const storeWhereOr: Prisma.StoreWhereInput[] = [
+      { displayName: { contains: input.query, mode: 'insensitive' } },
+      { address: { contains: input.query, mode: 'insensitive' } },
+    ];
+
+    if (normalizedQuery) {
+      storeWhereOr.push({ normalizedName: { contains: normalizedQuery } });
+    }
+
+    const [stores, expenses] = await Promise.all([
+      this.prisma.store.findMany({
+        where: {
+          OR: storeWhereOr,
+        },
+        take: input.limit,
+        orderBy: {
+          updatedAt: 'desc',
+        },
+      }),
+      this.prisma.expense.findMany({
+        where: {
+          areaText: { contains: input.query, mode: 'insensitive' },
+          locationLat: { not: null },
+          locationLng: { not: null },
+        },
+        select: {
+          areaText: true,
+          locationLat: true,
+          locationLng: true,
+          updatedAt: true,
+        },
+        distinct: ['areaText'],
+        take: input.limit,
+        orderBy: {
+          updatedAt: 'desc',
+        },
+      }),
+    ]);
+
+    const storeSuggestions: LocalLocationSuggestion[] = stores.flatMap((store) => {
+      const lat = decimalToNumber(store.lat);
+      const lng = decimalToNumber(store.lng);
+      if (lat === null || lng === null) {
+        return [];
+      }
+
+      const address = store.address?.trim() || store.displayName.trim();
+      return [{
+        label: store.displayName.trim(),
+        address,
+        areaText: deriveQueryAreaText(store.displayName.trim(), address),
+        lat,
+        lng,
+      }];
+    });
+
+    const areaSuggestions: LocalLocationSuggestion[] = expenses.flatMap((expense) => {
+      const lat = decimalToNumber(expense.locationLat);
+      const lng = decimalToNumber(expense.locationLng);
+      const areaText = expense.areaText?.trim() ?? '';
+
+      if (!areaText || lat === null || lng === null) {
+        return [];
+      }
+
+      return [{
+        label: areaText.split(',')[0]?.trim() || areaText,
+        address: areaText,
+        areaText: deriveQueryAreaText(areaText.split(',')[0]?.trim() || areaText, areaText),
+        lat,
+        lng,
+      }];
+    });
+
+    const mapped = [...storeSuggestions, ...areaSuggestions].map((row) => ({
+      providerPlaceId: undefined,
+      label: row.label,
+      address: row.address,
+      areaText: row.areaText,
+      lat: row.lat,
+      lng: row.lng,
+      distanceKm: hasOrigin
+        ? roundTo(
+            haversineDistanceKm(
+              { lat: input.lat as number, lng: input.lng as number },
+              { lat: row.lat, lng: row.lng },
+            ),
+            3,
+          )
+        : undefined,
+    }));
+
+    if (hasOrigin) {
+      mapped.sort(
+        (left, right) =>
+          (left.distanceKm ?? Number.POSITIVE_INFINITY) -
+          (right.distanceKm ?? Number.POSITIVE_INFINITY),
+      );
+    }
+
+    return mapped.slice(0, input.limit);
+  }
+
+  private mergeLocationSearchResults(
+    items: PriceLocationSearchResult[],
+    limit: number,
+  ): PriceLocationSearchResult[] {
+    const seen = new Set<string>();
+    const deduped: PriceLocationSearchResult[] = [];
+
+    for (const item of items) {
+      const key = `${normalizeLooseText(item.address)}:${roundTo(item.lat, 4)}:${roundTo(item.lng, 4)}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      deduped.push(item);
+      if (deduped.length >= limit) {
+        break;
+      }
+    }
+
+    return deduped;
   }
 }

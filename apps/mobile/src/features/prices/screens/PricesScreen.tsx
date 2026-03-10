@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch, ActivityIndicator } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Switch } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -9,7 +9,9 @@ import { DarkCard } from '../../../components/ui/dark-card';
 import { PillBadge } from '../../../components/ui/pill-badge';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { ItemSelector } from '../components/item-selector';
+import { PriceLocationSelector } from '../components/price-location-selector';
 import { useLocation } from '../hooks/use-location';
+import { useLocationSearch } from '../hooks/use-location-search';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
@@ -20,39 +22,106 @@ const inputTheme = {
   colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary },
 };
 
+function parseCoordinateText(value: string): number | undefined {
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 export function PricesScreen() {
   const controller = useClariFiController();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [segment, setSegment] = useState<Segment>('intelligence');
   const [compareItems, setCompareItems] = useState<string[]>([]);
-  const [compareRadius, setCompareRadius] = useState(10);
-  const { location, loading: locLoading, error: locError, requestLocation } = useLocation();
-  const pendingNav = useRef(false);
+  const { loading: locLoading, error: locError, requestLocation } = useLocation();
+  const bootstrappedLocation = useRef(false);
+  const selectedLat = parseCoordinateText(controller.priceQueryLocation.latText);
+  const selectedLng = parseCoordinateText(controller.priceQueryLocation.lngText);
+  const {
+    query: locationSearchQuery,
+    setQuery: setLocationSearchQuery,
+    suggestions: locationSuggestions,
+    loading: locationSearchLoading,
+    error: locationSearchError,
+  } = useLocationSearch({
+    apiBaseUrl: controller.apiBaseUrl,
+    lat: selectedLat,
+    lng: selectedLng,
+    limit: 5,
+  });
 
   useEffect(() => {
-    if (location && pendingNav.current) {
-      pendingNav.current = false;
-      navigation.navigate('StoreMap', {
-        items: compareItems,
-        lat: location.lat,
-        lng: location.lng,
-        radiusKm: compareRadius,
-      });
+    if (bootstrappedLocation.current || controller.priceQueryLocation.source !== 'unset') {
+      return;
     }
-  }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    bootstrappedLocation.current = true;
+    void (async () => {
+      const detected = await requestLocation();
+      if (detected) {
+        controller.applyDetectedPriceQueryLocation(detected);
+        setLocationSearchQuery(detected.labelText ?? detected.areaText ?? '');
+      }
+    })();
+  }, [
+    controller.applyDetectedPriceQueryLocation,
+    controller.priceQueryLocation.source,
+    requestLocation,
+    setLocationSearchQuery,
+  ]);
+
+  const handleUseCurrentLocation = async () => {
+    const detected = await requestLocation();
+    if (detected) {
+      controller.applyDetectedPriceQueryLocation(detected);
+      setLocationSearchQuery(detected.labelText ?? detected.areaText ?? '');
+    }
+  };
+
+  const handleSelectLocation = (suggestion: {
+    label: string;
+    areaText: string;
+    lat: number;
+    lng: number;
+  }) => {
+    controller.selectPriceQueryLocation({
+      labelText: suggestion.label,
+      areaText: suggestion.areaText,
+      lat: suggestion.lat,
+      lng: suggestion.lng,
+    });
+    setLocationSearchQuery(suggestion.label);
+  };
 
   const handleFindStores = async () => {
     if (compareItems.length === 0) return;
-    if (location) {
+    const lat = selectedLat;
+    const lng = selectedLng;
+    const radiusKm = parseCoordinateText(controller.priceQueryLocation.radiusKmText) ?? 10;
+    const areaText = controller.priceQueryLocation.areaText.trim() || undefined;
+
+    if (typeof lat === 'number' && typeof lng === 'number') {
       navigation.navigate('StoreMap', {
         items: compareItems,
-        lat: location.lat,
-        lng: location.lng,
-        radiusKm: compareRadius,
+        lat,
+        lng,
+        radiusKm,
+        areaText,
       });
     } else {
-      pendingNav.current = true;
-      await requestLocation();
+      const detected = await requestLocation();
+      if (!detected) {
+        return;
+      }
+
+      controller.applyDetectedPriceQueryLocation(detected);
+      setLocationSearchQuery(detected.labelText ?? detected.areaText ?? '');
+      navigation.navigate('StoreMap', {
+        items: compareItems,
+        lat: detected.lat,
+        lng: detected.lng,
+        radiusKm,
+        areaText: detected.areaText?.trim() || areaText,
+      });
     }
   };
 
@@ -85,92 +154,57 @@ export function PricesScreen() {
 
       {segment === 'intelligence' ? (
         <>
+          <PriceLocationSelector
+            value={controller.priceQueryLocation}
+            gpsLoading={locLoading}
+            gpsError={locError}
+            searchQuery={locationSearchQuery}
+            searchLoading={locationSearchLoading}
+            searchError={locationSearchError}
+            suggestions={locationSuggestions}
+            onSearchQueryChange={setLocationSearchQuery}
+            onSelectSuggestion={handleSelectLocation}
+            onUseCurrentLocation={handleUseCurrentLocation}
+            onRadiusChange={(radiusKm) =>
+              controller.updatePriceQueryLocation({
+                radiusKmText: String(radiusKm),
+              })
+            }
+          />
+
           {/* Multi-item store comparison */}
           <DarkCard radius={16}>
             <Text style={styles.resultTitle}>Store comparison</Text>
+            <Text style={styles.sectionCopy}>
+              Build a basket, then compare nearby stores using the selected location above.
+            </Text>
             <ItemSelector items={compareItems} onItemsChange={setCompareItems} />
-            <View style={styles.findRadiusRow}>
-              {[5, 10, 15, 25].map((r) => (
-                <TouchableOpacity
-                  key={r}
-                  style={[styles.radiusChip, r === compareRadius && styles.radiusChipActive]}
-                  onPress={() => setCompareRadius(r)}
-                >
-                  <Text style={[styles.radiusChipText, r === compareRadius && styles.radiusChipTextActive]}>
-                    {r}km
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {locError ? <Text style={styles.locError}>{locError}</Text> : null}
             <TouchableOpacity
               style={[styles.findStoresBtn, compareItems.length === 0 && styles.findStoresBtnDisabled]}
               onPress={handleFindStores}
               disabled={compareItems.length === 0 || locLoading}
             >
-              {locLoading ? (
-                <ActivityIndicator size="small" color={Colors.bg} />
-              ) : (
-                <>
-                  <MaterialCommunityIcons name="store-search-outline" size={18} color={Colors.bg} />
-                  <Text style={styles.findStoresBtnText}>Find Stores</Text>
-                </>
-              )}
+              <MaterialCommunityIcons name="store-search-outline" size={18} color={Colors.bg} />
+              <Text style={styles.findStoresBtnText}>Find Stores</Text>
             </TouchableOpacity>
           </DarkCard>
 
           {/* Single-item query */}
           <DarkCard radius={16}>
-            <View style={styles.inputRow}>
-              <TextInput
-                label="Item"
-                value={controller.priceQueryItem}
-                onChangeText={controller.setPriceQueryItem}
-                mode="outlined"
-                autoCapitalize="none"
-                testID={TEST_IDS.prices.itemInput}
-                style={[styles.input, styles.flexInput]}
-                theme={inputTheme}
-              />
-              <TextInput
-                label="Area (optional)"
-                value={controller.priceQueryArea}
-                onChangeText={controller.setPriceQueryArea}
-                mode="outlined"
-                style={[styles.input, styles.flexInput]}
-                theme={inputTheme}
-              />
-            </View>
-
-            <View style={styles.coordRow}>
-              <TextInput
-                label="Lat"
-                value={controller.priceQueryLat}
-                onChangeText={controller.setPriceQueryLat}
-                mode="outlined"
-                keyboardType="decimal-pad"
-                style={[styles.input, styles.flexInput]}
-                theme={inputTheme}
-              />
-              <TextInput
-                label="Lng"
-                value={controller.priceQueryLng}
-                onChangeText={controller.setPriceQueryLng}
-                mode="outlined"
-                keyboardType="decimal-pad"
-                style={[styles.input, styles.flexInput]}
-                theme={inputTheme}
-              />
-              <TextInput
-                label="Radius"
-                value={controller.priceQueryRadiusKm}
-                onChangeText={controller.setPriceQueryRadiusKm}
-                mode="outlined"
-                keyboardType="decimal-pad"
-                style={[styles.input, styles.flexInput]}
-                theme={inputTheme}
-              />
-            </View>
+            <Text style={styles.resultTitle}>Single item intelligence</Text>
+            <Text style={styles.sectionCopy}>
+              Compare, inspect history, and generate buy/wait signals using the selected location.
+            </Text>
+            <TextInput
+              label="Item"
+              value={controller.priceQueryItem}
+              onChangeText={controller.setPriceQueryItem}
+              mode="outlined"
+              autoCapitalize="none"
+              testID={TEST_IDS.prices.itemInput}
+              style={styles.input}
+              theme={inputTheme}
+            />
 
             <View style={styles.optionRow}>
               <TouchableOpacity
@@ -457,23 +491,10 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontWeight: '600',
   },
-  inputRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 8,
-  },
-  coordRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
   input: {
     backgroundColor: Colors.surface,
     fontSize: 13,
-    marginBottom: 0,
-  },
-  flexInput: {
-    flex: 1,
+    marginBottom: 12,
   },
   optionRow: {
     flexDirection: 'row',
@@ -531,6 +552,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textPrimary,
     marginBottom: 10,
+  },
+  sectionCopy: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginBottom: 12,
+    lineHeight: 18,
   },
   emptyText: {
     fontSize: 13,
@@ -653,37 +680,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textPrimary,
     marginBottom: 4,
-  },
-  findRadiusRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  radiusChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: Colors.surfaceHigh,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  radiusChipActive: {
-    backgroundColor: Colors.greenDim,
-    borderColor: Colors.green,
-  },
-  radiusChipText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  radiusChipTextActive: {
-    color: Colors.green,
-    fontWeight: '600',
-  },
-  locError: {
-    fontSize: 11,
-    color: Colors.amber,
-    marginTop: 6,
   },
   findStoresBtn: {
     flexDirection: 'row',

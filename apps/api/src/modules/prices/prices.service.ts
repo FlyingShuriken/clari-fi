@@ -31,6 +31,7 @@ import { PriceCompareQueryDto } from './dto/price-compare-query.dto';
 import { PriceHistoryQueryDto } from './dto/price-history-query.dto';
 import { PriceSignalQueryDto } from './dto/price-signal-query.dto';
 import { ReviewPromoObservationsDto } from './dto/review-promo-observations.dto';
+import { SearchPriceLocationsQueryDto } from './dto/search-price-locations-query.dto';
 import { UpdatePriceAlertDto } from './dto/update-price-alert.dto';
 import { ItemNormalizerService } from './item-normalizer.service';
 import {
@@ -45,7 +46,7 @@ import {
   clamp01,
   computeTrustScore,
   deriveUnitPrice,
-  haversineDistanceKm,
+  evaluatePriceCandidateLocation,
   HistoryInterval,
   isOutlierByRobustZ,
   roundTo,
@@ -486,6 +487,29 @@ export class PricesService {
       generatedAt: new Date().toISOString(),
       userId: user.id,
       includePromo,
+    };
+  }
+
+  async searchLocations(user: AuthenticatedUser, query: SearchPriceLocationsQueryDto) {
+    if (!this.isEnabled()) {
+      return {
+        items: [],
+        generatedAt: new Date().toISOString(),
+        userId: user.id,
+      };
+    }
+
+    const items = await this.storeResolver.searchLocations({
+      query: query.q,
+      lat: query.lat,
+      lng: query.lng,
+      limit: query.limit ?? 5,
+    });
+
+    return {
+      items,
+      generatedAt: new Date().toISOString(),
+      userId: user.id,
     };
   }
 
@@ -1575,12 +1599,6 @@ export class PricesService {
     if (input.storeId) {
       expenseWhere.storeId = input.storeId;
     }
-    if (input.areaText) {
-      expenseWhere.areaText = {
-        contains: input.areaText.trim(),
-        mode: 'insensitive',
-      };
-    }
     if (input.from || input.to) {
       expenseWhere.observedAt = {
         gte: input.from ? new Date(input.from) : undefined,
@@ -1604,12 +1622,6 @@ export class PricesService {
 
     if (input.storeId) {
       promoWhere.storeId = input.storeId;
-    }
-    if (input.areaText) {
-      promoWhere.areaText = {
-        contains: input.areaText.trim(),
-        mode: 'insensitive',
-      };
     }
     if (input.from || input.to) {
       promoWhere.observedAt = {
@@ -1643,13 +1655,6 @@ export class PricesService {
         : Promise.resolve([]),
     ]);
 
-    const hasCoordinates =
-      typeof input.lat === 'number' &&
-      typeof input.lng === 'number' &&
-      Number.isFinite(input.lat) &&
-      Number.isFinite(input.lng);
-    const radiusKm = input.radiusKm ?? 15;
-
     const rawCandidates: PriceCandidate[] = [
       ...expenseRows.map((row) => ({
         source: ObservationSource.EXPENSE,
@@ -1679,35 +1684,28 @@ export class PricesService {
 
     const candidates: PriceCandidate[] = [];
     for (const row of rawCandidates) {
-      let distanceKm: number | undefined;
+      const locationMatch = evaluatePriceCandidateLocation({
+        lat: input.lat,
+        lng: input.lng,
+        radiusKm: input.radiusKm,
+        areaText: input.areaText,
+        candidate: {
+          storeLat: row.storeLat,
+          storeLng: row.storeLng,
+          areaText: row.areaText,
+        },
+      });
 
-      if (hasCoordinates) {
-        if (typeof row.storeLat === 'number' && typeof row.storeLng === 'number') {
-          distanceKm = haversineDistanceKm(
-            {
-              lat: input.lat as number,
-              lng: input.lng as number,
-            },
-            {
-              lat: row.storeLat,
-              lng: row.storeLng,
-            },
-          );
-
-          if (distanceKm > radiusKm) {
-            continue;
-          }
-        } else {
-          const areaFilter = input.areaText?.trim().toLowerCase();
-          if (!areaFilter || !row.areaText?.toLowerCase().includes(areaFilter)) {
-            continue;
-          }
-        }
+      if (!locationMatch.include) {
+        continue;
       }
 
       candidates.push({
         ...row,
-        distanceKm: distanceKm !== undefined ? roundTo(distanceKm, 2) : undefined,
+        distanceKm:
+          typeof locationMatch.distanceKm === 'number'
+            ? roundTo(locationMatch.distanceKm, 2)
+            : undefined,
       });
     }
 

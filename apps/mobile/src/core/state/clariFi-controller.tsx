@@ -264,6 +264,15 @@ export interface ReportSummary {
   insights: string[];
 }
 
+export interface PriceQueryLocation {
+  labelText: string;
+  areaText: string;
+  latText: string;
+  lngText: string;
+  radiusKmText: string;
+  source: 'unset' | 'gps' | 'search';
+}
+
 function mapLedgerItems(rawItems: unknown[]): LedgerExpense[] {
   return rawItems.map((item) => {
     const value = (item ?? {}) as Record<string, unknown>;
@@ -449,14 +458,20 @@ export interface ClariFiController {
 
   priceQueryItem: string;
   setPriceQueryItem: (value: string) => void;
-  priceQueryArea: string;
-  setPriceQueryArea: (value: string) => void;
-  priceQueryLat: string;
-  setPriceQueryLat: (value: string) => void;
-  priceQueryLng: string;
-  setPriceQueryLng: (value: string) => void;
-  priceQueryRadiusKm: string;
-  setPriceQueryRadiusKm: (value: string) => void;
+  priceQueryLocation: PriceQueryLocation;
+  updatePriceQueryLocation: (patch: Partial<PriceQueryLocation>) => void;
+  applyDetectedPriceQueryLocation: (input: {
+    labelText?: string;
+    areaText?: string;
+    lat: number;
+    lng: number;
+  }) => void;
+  selectPriceQueryLocation: (input: {
+    labelText: string;
+    areaText?: string;
+    lat: number;
+    lng: number;
+  }) => void;
   priceHistoryInterval: 'day' | 'week';
   setPriceHistoryInterval: (value: 'day' | 'week') => void;
   includePromo: boolean;
@@ -614,10 +629,14 @@ function useClariFiControllerValue(): ClariFiController {
   const [receiptParseLatencyMs, setReceiptParseLatencyMs] = useState<number | null>(null);
 
   const [priceQueryItem, setPriceQueryItem] = useState('watermelon');
-  const [priceQueryArea, setPriceQueryArea] = useState('');
-  const [priceQueryLat, setPriceQueryLat] = useState('5.9804');
-  const [priceQueryLng, setPriceQueryLng] = useState('116.0735');
-  const [priceQueryRadiusKm, setPriceQueryRadiusKm] = useState('10');
+  const [priceQueryLocation, setPriceQueryLocation] = useState<PriceQueryLocation>({
+    labelText: '',
+    areaText: '',
+    latText: '',
+    lngText: '',
+    radiusKmText: '10',
+    source: 'unset',
+  });
   const [priceHistoryInterval, setPriceHistoryInterval] = useState<'day' | 'week'>('day');
   const [includePromo, setIncludePromo] = useState(true);
   const [priceCompareResult, setPriceCompareResult] = useState<PriceCompareResponse | null>(null);
@@ -698,6 +717,41 @@ function useClariFiControllerValue(): ClariFiController {
   const clearMessage = useCallback(() => {
     setMessage('');
   }, []);
+
+  const updatePriceQueryLocation = useCallback((patch: Partial<PriceQueryLocation>) => {
+    setPriceQueryLocation((current) => ({
+      ...current,
+      ...patch,
+    }));
+  }, []);
+
+  const applyDetectedPriceQueryLocation = useCallback(
+    (input: { labelText?: string; areaText?: string; lat: number; lng: number }) => {
+      setPriceQueryLocation((current) => ({
+        ...current,
+        labelText: input.labelText?.trim() || input.areaText?.trim() || current.labelText,
+        areaText: input.areaText?.trim() || current.areaText,
+        latText: input.lat.toFixed(6),
+        lngText: input.lng.toFixed(6),
+        source: 'gps',
+      }));
+    },
+    [],
+  );
+
+  const selectPriceQueryLocation = useCallback(
+    (input: { labelText: string; areaText?: string; lat: number; lng: number }) => {
+      setPriceQueryLocation((current) => ({
+        ...current,
+        labelText: input.labelText.trim(),
+        areaText: input.areaText?.trim() || input.labelText.trim(),
+        latText: input.lat.toFixed(6),
+        lngText: input.lng.toFixed(6),
+        source: 'search',
+      }));
+    },
+    [],
+  );
 
   const getBearerTokenOrThrow = useCallback(async (): Promise<string> => {
     const token = await getToken();
@@ -1565,10 +1619,10 @@ function useClariFiControllerValue(): ClariFiController {
       const token = await getBearerTokenOrThrow();
       const result = await loadPriceCompare(normalizeBaseUrl(apiBaseUrl), token, {
         item: priceQueryItem.trim(),
-        area: priceQueryArea.trim() || undefined,
-        lat: parseNumberInput(priceQueryLat),
-        lng: parseNumberInput(priceQueryLng),
-        radiusKm: parseNumberInput(priceQueryRadiusKm),
+        area: priceQueryLocation.areaText.trim() || undefined,
+        lat: parseNumberInput(priceQueryLocation.latText),
+        lng: parseNumberInput(priceQueryLocation.lngText),
+        radiusKm: parseNumberInput(priceQueryLocation.radiusKmText),
         limit: 10,
         includePromo,
       });
@@ -1580,11 +1634,8 @@ function useClariFiControllerValue(): ClariFiController {
     apiBaseUrl,
     getBearerTokenOrThrow,
     includePromo,
-    priceQueryArea,
     priceQueryItem,
-    priceQueryLat,
-    priceQueryLng,
-    priceQueryRadiusKm,
+    priceQueryLocation,
     runTask,
   ]);
 
@@ -1597,7 +1648,7 @@ function useClariFiControllerValue(): ClariFiController {
       const token = await getBearerTokenOrThrow();
       const result = await loadPriceHistory(normalizeBaseUrl(apiBaseUrl), token, {
         item: priceQueryItem.trim(),
-        area: priceQueryArea.trim() || undefined,
+        area: priceQueryLocation.areaText.trim() || undefined,
         interval: priceHistoryInterval,
         includePromo,
       });
@@ -1610,8 +1661,8 @@ function useClariFiControllerValue(): ClariFiController {
     getBearerTokenOrThrow,
     includePromo,
     priceHistoryInterval,
-    priceQueryArea,
     priceQueryItem,
+    priceQueryLocation,
     runTask,
   ]);
 
@@ -1624,10 +1675,10 @@ function useClariFiControllerValue(): ClariFiController {
       const token = await getBearerTokenOrThrow();
       const result = await loadPriceSignal(normalizeBaseUrl(apiBaseUrl), token, {
         item: priceQueryItem.trim(),
-        areaText: priceQueryArea.trim() || undefined,
-        lat: parseNumberInput(priceQueryLat),
-        lng: parseNumberInput(priceQueryLng),
-        radiusKm: parseNumberInput(priceQueryRadiusKm),
+        areaText: priceQueryLocation.areaText.trim() || undefined,
+        lat: parseNumberInput(priceQueryLocation.latText),
+        lng: parseNumberInput(priceQueryLocation.lngText),
+        radiusKm: parseNumberInput(priceQueryLocation.radiusKmText),
         horizonDays: 7,
         includePromo,
       });
@@ -1639,11 +1690,8 @@ function useClariFiControllerValue(): ClariFiController {
     apiBaseUrl,
     getBearerTokenOrThrow,
     includePromo,
-    priceQueryArea,
     priceQueryItem,
-    priceQueryLat,
-    priceQueryLng,
-    priceQueryRadiusKm,
+    priceQueryLocation,
     runTask,
   ]);
 
@@ -1713,8 +1761,8 @@ function useClariFiControllerValue(): ClariFiController {
         kind: 'SIGNAL',
         signalDecisionFilter: 'BOTH',
         signalMinConfidence: 0.65,
-        radiusKm: parseNumberInput(priceQueryRadiusKm),
-        areaText: priceQueryArea.trim() || undefined,
+        radiusKm: parseNumberInput(priceQueryLocation.radiusKmText),
+        areaText: priceQueryLocation.areaText.trim() || undefined,
       });
       setAlerts((previous) => [result, ...previous.filter((item) => item.id !== result.id)]);
       setMessage('Signal watch created from current query.');
@@ -1722,9 +1770,8 @@ function useClariFiControllerValue(): ClariFiController {
   }, [
     apiBaseUrl,
     getBearerTokenOrThrow,
-    priceQueryArea,
     priceQueryItem,
-    priceQueryRadiusKm,
+    priceQueryLocation,
     runTask,
   ]);
 
@@ -1944,14 +1991,10 @@ function useClariFiControllerValue(): ClariFiController {
 
       priceQueryItem,
       setPriceQueryItem,
-      priceQueryArea,
-      setPriceQueryArea,
-      priceQueryLat,
-      setPriceQueryLat,
-      priceQueryLng,
-      setPriceQueryLng,
-      priceQueryRadiusKm,
-      setPriceQueryRadiusKm,
+      priceQueryLocation,
+      updatePriceQueryLocation,
+      applyDetectedPriceQueryLocation,
+      selectPriceQueryLocation,
       priceHistoryInterval,
       setPriceHistoryInterval,
       includePromo,
@@ -2114,11 +2157,8 @@ function useClariFiControllerValue(): ClariFiController {
       priceHistoryInterval,
       priceHistoryResult,
       priceSignalResult,
-      priceQueryArea,
       priceQueryItem,
-      priceQueryLat,
-      priceQueryLng,
-      priceQueryRadiusKm,
+      priceQueryLocation,
       promoAreaHint,
       promoBase64,
       promoFileRef,
@@ -2155,11 +2195,10 @@ function useClariFiControllerValue(): ClariFiController {
       setFamilyRoleTarget,
       setIncludePromo,
       setPriceHistoryInterval,
-      setPriceQueryArea,
       setPriceQueryItem,
-      setPriceQueryLat,
-      setPriceQueryLng,
-      setPriceQueryRadiusKm,
+      updatePriceQueryLocation,
+      applyDetectedPriceQueryLocation,
+      selectPriceQueryLocation,
       setPromoAreaHint,
       setPromoMerchantHint,
       setSplitAssignmentsInput,

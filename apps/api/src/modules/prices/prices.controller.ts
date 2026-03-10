@@ -22,6 +22,7 @@ import { PriceCompareQueryDto } from './dto/price-compare-query.dto';
 import { PriceHistoryQueryDto } from './dto/price-history-query.dto';
 import { PriceSignalQueryDto } from './dto/price-signal-query.dto';
 import { ReviewPromoObservationsDto } from './dto/review-promo-observations.dto';
+import { SearchPriceLocationsQueryDto } from './dto/search-price-locations-query.dto';
 import { UpdatePriceAlertDto } from './dto/update-price-alert.dto';
 import { PricesService } from './prices.service';
 
@@ -44,6 +45,14 @@ export class PricesController {
     @Query() query: PriceCompareQueryDto,
   ) {
     return this.pricesService.compare(user, query);
+  }
+
+  @Get('locations/search')
+  async searchLocations(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: SearchPriceLocationsQueryDto,
+  ) {
+    return this.pricesService.searchLocations(user, query);
   }
 
   @Get('signal')

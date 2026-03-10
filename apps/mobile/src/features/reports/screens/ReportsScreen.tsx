@@ -1,11 +1,12 @@
 import { useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { CategoryProgress } from '../../../components/ui/category-progress';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { RefreshScroll } from '../../../components/ui/refresh-scroll';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 
@@ -90,10 +91,10 @@ export function ReportsScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      <RefreshScroll
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+        onRefreshAsync={controller.loadReport}
       >
         {!summary ? (
           <EmptyState
@@ -191,7 +192,7 @@ export function ReportsScreen() {
             ) : null}
           </>
         )}
-      </ScrollView>
+      </RefreshScroll>
     </View>
   );
 }

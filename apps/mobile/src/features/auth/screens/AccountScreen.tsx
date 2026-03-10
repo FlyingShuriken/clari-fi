@@ -16,8 +16,8 @@ function formatTimestamp(value: string): string {
 export function AccountScreen() {
   const controller = useClariFiController();
   const activePushDeviceCount = controller.pushDevices.filter((d) => d.active).length;
-  const isLive = controller.backendLiveHealth?.status === 'ok';
-  const isReady = controller.backendReadyHealth?.status === 'ok';
+  const isLive = controller.backendLiveHealth?.status === 'live';
+  const isReady = controller.backendReadyHealth?.status === 'ready';
 
   return (
     <ScrollView

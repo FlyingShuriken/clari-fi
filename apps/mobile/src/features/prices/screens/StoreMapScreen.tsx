@@ -15,14 +15,14 @@ type Props = NativeStackScreenProps<RootStackParamList, 'StoreMap'>;
 const RADIUS_OPTIONS = [5, 10, 15, 25];
 
 export function StoreMapScreen({ route }: Props) {
-  const { items, lat, lng, radiusKm: initialRadius } = route.params;
+  const { items, lat, lng, radiusKm: initialRadius, areaText } = route.params;
   const controller = useClariFiController();
   const { stores, loading, error, refetch } = useMultiItemCompare();
   const [radiusKm, setRadiusKm] = useState(initialRadius);
   const [selectedStore, setSelectedStore] = useState<StoreAggregate | null>(null);
 
   useEffect(() => {
-    refetch(items, lat, lng, radiusKm);
+    refetch(items, lat, lng, radiusKm, areaText);
   }, [radiusKm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cheapestId = stores.length > 0

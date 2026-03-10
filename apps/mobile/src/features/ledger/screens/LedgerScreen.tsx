@@ -7,6 +7,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { ExpenseCard } from '../../../components/ui/expense-card';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { RefreshScroll } from '../../../components/ui/refresh-scroll';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
@@ -120,10 +121,10 @@ export function LedgerScreen() {
       </ScrollView>
 
       {/* Expense list */}
-      <ScrollView
+      <RefreshScroll
         style={styles.list}
         contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
+        onRefreshAsync={controller.loadLedger}
       >
         {filteredItems.length === 0 ? (
           <EmptyState
@@ -166,7 +167,7 @@ export function LedgerScreen() {
             );
           })
         )}
-      </ScrollView>
+      </RefreshScroll>
     </View>
   );
 }

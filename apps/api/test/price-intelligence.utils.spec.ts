@@ -2,7 +2,9 @@ import { ExpenseProvenance } from '@prisma/client';
 import {
   computeTrustScore,
   deriveUnitPrice,
+  evaluatePriceCandidateLocation,
   isOutlierByRobustZ,
+  matchesAreaText,
   sourceWeightForProvenance,
   toBucketKey,
 } from '../src/modules/prices/price-intelligence.utils';
@@ -36,5 +38,68 @@ describe('price-intelligence.utils', () => {
     const date = new Date('2026-03-04T10:00:00.000Z');
     expect(toBucketKey(date, 'day')).toBe('2026-03-04');
     expect(toBucketKey(date, 'week')).toBe('2026-03-02');
+  });
+
+  it('keeps area-only candidates when coordinates are present but no area filter is supplied', () => {
+    const result = evaluatePriceCandidateLocation({
+      lat: 37.785834,
+      lng: -122.406417,
+      radiusKm: 10,
+      candidate: {
+        areaText: 'mission district san francisco',
+      },
+    });
+
+    expect(result.include).toBe(true);
+    expect(result.distanceKm).toBeUndefined();
+  });
+
+  it('matches area-only candidates against selected area text when provided', () => {
+    expect(
+      evaluatePriceCandidateLocation({
+        lat: 37.785834,
+        lng: -122.406417,
+        areaText: 'San Francisco',
+        candidate: {
+          areaText: 'mission district san francisco',
+        },
+      }).include,
+    ).toBe(true);
+
+    expect(
+      evaluatePriceCandidateLocation({
+        lat: 37.785834,
+        lng: -122.406417,
+        areaText: 'Oakland',
+        candidate: {
+          areaText: 'mission district san francisco',
+        },
+      }).include,
+    ).toBe(false);
+  });
+
+  it('matches coarse area records against richer place labels', () => {
+    expect(matchesAreaText('Union Square, San Francisco, California, United States', 'San Francisco')).toBe(true);
+    expect(matchesAreaText('Bukit Bintang, Kuala Lumpur, Malaysia', 'Kuala Lumpur')).toBe(true);
+  });
+
+  it('filters by area text even when coordinates are not supplied', () => {
+    expect(
+      evaluatePriceCandidateLocation({
+        areaText: 'San Francisco',
+        candidate: {
+          areaText: 'mission district san francisco',
+        },
+      }).include,
+    ).toBe(true);
+
+    expect(
+      evaluatePriceCandidateLocation({
+        areaText: 'Oakland',
+        candidate: {
+          areaText: 'mission district san francisco',
+        },
+      }).include,
+    ).toBe(false);
   });
 });

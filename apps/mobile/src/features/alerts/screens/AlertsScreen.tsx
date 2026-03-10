@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { SectionLabel } from '../../../components/ui/section-label';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { RefreshScroll } from '../../../components/ui/refresh-scroll';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 
@@ -69,10 +70,10 @@ export function AlertsScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
+      <RefreshScroll
         style={styles.scroll}
         contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+        onRefreshAsync={controller.loadAlertEvents}
         keyboardShouldPersistTaps="handled"
       >
         {/* Inline create form */}
@@ -317,7 +318,7 @@ export function AlertsScreen() {
             message="No alert events yet. Tap Refresh or create an alert."
           />
         ) : null}
-      </ScrollView>
+      </RefreshScroll>
     </View>
   );
 }

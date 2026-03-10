@@ -8,7 +8,7 @@ interface UseMultiItemCompareResult {
   stores: StoreAggregate[];
   loading: boolean;
   error: string | null;
-  refetch: (items: string[], lat: number, lng: number, radiusKm: number) => Promise<void>;
+  refetch: (items: string[], lat: number, lng: number, radiusKm: number, areaText?: string) => Promise<void>;
 }
 
 function makeStoreKey(storeName?: string, areaText?: string, storeId?: string): string {
@@ -24,7 +24,7 @@ export function useMultiItemCompare(): UseMultiItemCompareResult {
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(
-    async (items: string[], lat: number, lng: number, radiusKm: number) => {
+    async (items: string[], lat: number, lng: number, radiusKm: number, areaText?: string) => {
       if (items.length === 0) return;
       setLoading(true);
       setError(null);
@@ -40,6 +40,7 @@ export function useMultiItemCompare(): UseMultiItemCompareResult {
           items.map((item) =>
             loadPriceCompare(controller.apiBaseUrl, token, {
               item,
+              area: areaText,
               lat,
               lng,
               radiusKm,

@@ -58,6 +58,8 @@ export const TEST_IDS = {
   },
   prices: {
     itemInput: 'prices.item.input',
+    locationRefreshButton: 'prices.location.refresh.button',
+    locationAreaInput: 'prices.location.area.input',
     includePromoSwitch: 'prices.include_promo.switch',
     compareButton: 'prices.compare.button',
     historyButton: 'prices.history.button',

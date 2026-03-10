@@ -3,7 +3,7 @@ import { DarkTheme, NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { Snackbar, ActivityIndicator } from 'react-native-paper';
+import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../state/clariFi-controller';
 import { AlertsScreen } from '../../features/alerts/screens/AlertsScreen';
@@ -30,7 +30,7 @@ export type RootStackParamList = {
   Account: undefined;
   Families: undefined;
   Splits: undefined;
-  StoreMap: { items: string[]; lat: number; lng: number; radiusKm: number };
+  StoreMap: { items: string[]; lat: number; lng: number; radiusKm: number; areaText?: string };
 };
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -159,7 +159,7 @@ export function AppNavigator() {
           />
           <RootStack.Screen name="Families" component={FamilyScreen} options={{ title: 'Families' }} />
           <RootStack.Screen name="Splits" component={SplitsScreen} options={{ title: 'Splits' }} />
-          <RootStack.Screen name="StoreMap" component={StoreMapScreen} options={{ title: 'Store Comparison' }} />
+          <RootStack.Screen name="StoreMap" component={StoreMapScreen} options={{ title: 'Store Comparison', headerBackTitle: 'Back' }} />
         </RootStack.Navigator>
       </NavigationContainer>
 
@@ -173,9 +173,6 @@ export function AppNavigator() {
         {controller.message}
       </Snackbar>
 
-      {controller.loading ? (
-        <ActivityIndicator style={styles.loadingOverlay} color={Colors.green} />
-      ) : null}
     </View>
   );
 }
@@ -248,10 +245,5 @@ const styles = StyleSheet.create({
   snackbar: {
     margin: 16,
     marginBottom: 90,
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    right: 18,
-    top: 14,
   },
 });

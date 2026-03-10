@@ -46,6 +46,7 @@ export function CaptureScreen() {
     } else {
       pulseAnim.setValue(1);
       pulseOpacity.setValue(0);
+      return undefined;
     }
   }, [isListening, pulseAnim, pulseOpacity]);
 

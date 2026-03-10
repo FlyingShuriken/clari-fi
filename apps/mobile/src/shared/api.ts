@@ -11,6 +11,7 @@ import type {
   PriceAlert,
   PriceCompareResponse,
   PriceHistoryResponse,
+  PriceLocationSearchResponse,
   PriceSignalResponse,
   PromoIngestionItem,
   PromoReviewStatus,
@@ -336,6 +337,40 @@ export async function loadPriceCompare(
     method: 'GET',
     headers: { Authorization: `Bearer ${bearerToken}` },
   });
+}
+
+export async function searchPriceLocations(
+  baseUrl: string,
+  bearerToken: string,
+  query: {
+    q: string;
+    lat?: number;
+    lng?: number;
+    limit?: number;
+  },
+): Promise<PriceLocationSearchResponse> {
+  const params = new URLSearchParams({
+    q: query.q,
+  });
+
+  if (typeof query.lat === 'number' && Number.isFinite(query.lat)) {
+    params.set('lat', String(query.lat));
+  }
+  if (typeof query.lng === 'number' && Number.isFinite(query.lng)) {
+    params.set('lng', String(query.lng));
+  }
+  if (typeof query.limit === 'number' && Number.isFinite(query.limit)) {
+    params.set('limit', String(query.limit));
+  }
+
+  return apiRequest<PriceLocationSearchResponse>(
+    baseUrl,
+    `/prices/locations/search?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    },
+  );
 }
 
 export async function loadPriceHistory(

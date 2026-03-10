@@ -167,6 +167,16 @@ export interface PriceCompareRow {
   distanceKm?: number;
 }
 
+export interface PriceLocationSuggestion {
+  providerPlaceId?: string;
+  label: string;
+  address: string;
+  areaText: string;
+  lat: number;
+  lng: number;
+  distanceKm?: number;
+}
+
 export interface PriceCompareResponse {
   item: {
     id: string;
@@ -178,6 +188,12 @@ export interface PriceCompareResponse {
   generatedAt: string;
   userId: string;
   includePromo?: boolean;
+}
+
+export interface PriceLocationSearchResponse {
+  items: PriceLocationSuggestion[];
+  generatedAt: string;
+  userId: string;
 }
 
 export type PriceSignalDecision = 'BUY_NOW' | 'WAIT' | 'NEUTRAL';
