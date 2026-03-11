@@ -1,11 +1,14 @@
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { TextInput } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { DarkCard } from '../../../components/ui/dark-card';
 import { PillBadge } from '../../../components/ui/pill-badge';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
+import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
 
 const inputTheme = {
   colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary },
@@ -13,6 +16,7 @@ const inputTheme = {
 
 export function FamilyScreen() {
   const controller = useClariFiController();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const activeFamily = controller.families.find((f) => f.id === controller.activeFamilyId);
   const canManageMembers = activeFamily?.currentUserRole === 'OWNER';
 
@@ -22,6 +26,24 @@ export function FamilyScreen() {
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled"
     >
+      {controller.subscription ? (
+        <DarkCard radius={16}>
+          <View style={styles.limitHeader}>
+            <View>
+              <Text style={styles.cardTitle}>Family sharing</Text>
+              <Text style={styles.capacityHint}>
+                Owner + {controller.subscription.family.additionalMembersAllowed} additional member{controller.subscription.family.additionalMembersAllowed === 1 ? '' : 's'}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.managePlanBtn} onPress={() => navigation.navigate('Subscription')}>
+              <Text style={styles.managePlanText}>
+                {controller.subscription.plan === 'PREMIUM' ? 'Manage' : 'Upgrade'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </DarkCard>
+      ) : null}
+
       {/* Create family card */}
       <DarkCard radius={16}>
         <Text style={styles.cardTitle}>Create family</Text>
@@ -198,6 +220,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textPrimary,
     marginBottom: 12,
+  },
+  limitHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  capacityHint: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+  },
+  managePlanBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.greenDim,
+  },
+  managePlanText: {
+    color: Colors.green,
+    fontSize: 12,
+    fontWeight: '700',
   },
   input: {
     backgroundColor: Colors.surface,

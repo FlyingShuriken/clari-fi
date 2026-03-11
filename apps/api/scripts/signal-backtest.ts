@@ -1,4 +1,4 @@
-import { PrismaClient, PromoReviewStatus } from '@prisma/client';
+import { ExpenseProvenance, PrismaClient, PromoReviewStatus } from '@prisma/client';
 import { computePriceSignal, type SignalObservation } from '../src/modules/prices/price-signal.utils';
 
 function parseArgs(argv: string[]) {
@@ -79,6 +79,7 @@ async function run() {
       prisma.priceObservation.findMany({
         where: {
           canonicalItemId: canonicalItem.id,
+          provenance: ExpenseProvenance.RECEIPT_OCR,
           observedAt: { gte: from },
           areaText: areaText
             ? {

@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import {
+  ParsedImageDocumentResult,
   ExpenseParserProvider,
   ParsedExpenseResult,
   ParsedReceiptResult,
@@ -191,5 +192,11 @@ export class HeuristicExpenseParserProvider implements ExpenseParserProvider {
         engine: 'heuristic',
       },
     };
+  }
+
+  async parseDocumentImages(): Promise<ParsedImageDocumentResult> {
+    throw new ServiceUnavailableException(
+      'Heuristic parser does not support direct image document parsing.',
+    );
   }
 }

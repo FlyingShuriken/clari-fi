@@ -14,10 +14,12 @@ import { CurrentUser, type AuthenticatedUser } from '../auth/decorators/current-
 import { AppAuthGuard } from '../auth/guards/app-auth.guard';
 import { BackfillPricesDto } from './dto/backfill-prices.dto';
 import { CheckAlertsDto } from './dto/check-alerts.dto';
+import { ConfirmPromoDto } from './dto/confirm-promo.dto';
 import { CreatePriceAlertDto } from './dto/create-price-alert.dto';
 import { IngestPromoDto } from './dto/ingest-promo.dto';
 import { ListAlertEventsDto } from './dto/list-alert-events.dto';
 import { ListPromosDto } from './dto/list-promos.dto';
+import { MultiPriceCompareDto } from './dto/multi-price-compare.dto';
 import { PriceCompareQueryDto } from './dto/price-compare-query.dto';
 import { PriceHistoryQueryDto } from './dto/price-history-query.dto';
 import { PriceSignalQueryDto } from './dto/price-signal-query.dto';
@@ -45,6 +47,14 @@ export class PricesController {
     @Query() query: PriceCompareQueryDto,
   ) {
     return this.pricesService.compare(user, query);
+  }
+
+  @Post('compare/multi')
+  async compareMulti(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: MultiPriceCompareDto,
+  ) {
+    return this.pricesService.compareMany(user, dto);
   }
 
   @Get('locations/search')
@@ -137,6 +147,14 @@ export class PricesController {
     @Body() dto: IngestPromoDto,
   ) {
     return this.pricesService.ingestPromo(user, dto);
+  }
+
+  @Post('promos/confirm')
+  async confirmPromo(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ConfirmPromoDto,
+  ) {
+    return this.pricesService.confirmPromo(user, dto);
   }
 
   @Get('promos')

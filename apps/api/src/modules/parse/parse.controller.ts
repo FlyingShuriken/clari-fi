@@ -1,6 +1,7 @@
 import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser, type AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { AppAuthGuard } from '../auth/guards/app-auth.guard';
+import { ParseDocumentDto } from './dto/parse-document.dto';
 import { ParseReceiptDto } from './dto/parse-receipt.dto';
 import { ParseVoiceDto } from './dto/parse-voice.dto';
 import { ParseService } from './parse.service';
@@ -24,5 +25,13 @@ export class ParseController {
     @Body() dto: ParseReceiptDto,
   ) {
     return this.parseService.parseReceipt(user, dto);
+  }
+
+  @Post('document')
+  async parseDocument(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ParseDocumentDto,
+  ) {
+    return this.parseService.parseDocument(user, dto);
   }
 }

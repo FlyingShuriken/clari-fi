@@ -11,14 +11,16 @@ import { RefreshScroll } from '../../../components/ui/refresh-scroll';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
+import { LedgerOverviewPanel } from '../components/LedgerOverviewPanel';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-
 type FilterCategory = 'All' | 'Food' | 'Transport' | 'Dining' | 'Shopping' | 'Utilities';
+type LedgerSegment = 'entries' | 'overview';
+
 const FILTERS: FilterCategory[] = ['All', 'Food', 'Transport', 'Dining', 'Shopping', 'Utilities'];
 
 function inferCategory(lineItems: { description: string }[]): string {
-  const text = lineItems.map((l) => l.description.toLowerCase()).join(' ');
+  const text = lineItems.map((line) => line.description.toLowerCase()).join(' ');
   if (/food|grocer|mart|market|vegeta|fruit|meat|bread|rice|nasi|makan|coffee|cafe/.test(text)) return 'groceries';
   if (/transport|grab|taxi|mrt|bus|petrol|fuel|parking|toll|tng/.test(text)) return 'transport';
   if (/dining|restaurant|mamak|hawker|meal|lunch|dinner|breakfast|kwan|madam/.test(text)) return 'dining';
@@ -30,11 +32,11 @@ function inferCategory(lineItems: { description: string }[]): string {
 function filterMatch(category: string, filter: FilterCategory): boolean {
   if (filter === 'All') return true;
   const map: Record<FilterCategory, string[]> = {
-    All:       [],
-    Food:      ['groceries', 'food'],
+    All: [],
+    Food: ['groceries', 'food'],
     Transport: ['transport'],
-    Dining:    ['dining'],
-    Shopping:  ['shopping'],
+    Dining: ['dining'],
+    Shopping: ['shopping'],
     Utilities: ['utilities'],
   };
   return map[filter].includes(category);
@@ -45,17 +47,28 @@ export function LedgerScreen() {
   const navigation = useNavigation<Nav>();
   const insets = useSafeAreaInsets();
   const [selectedFilter, setSelectedFilter] = useState<FilterCategory>('All');
-  const hasLoadedOnceRef = useRef(false);
+  const [segment, setSegment] = useState<LedgerSegment>('entries');
+  const hasLoadedLedgerRef = useRef(false);
+  const hasLoadedOverviewRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
-      if (hasLoadedOnceRef.current) {
+      if (hasLoadedLedgerRef.current) {
         return;
       }
-      hasLoadedOnceRef.current = true;
+      hasLoadedLedgerRef.current = true;
       void controller.loadLedger();
     }, [controller.loadLedger]),
   );
+
+  const openOverview = async () => {
+    setSegment('overview');
+    if (hasLoadedOverviewRef.current) {
+      return;
+    }
+    hasLoadedOverviewRef.current = true;
+    await controller.loadReport();
+  };
 
   const now = new Date();
   const monthLabel = `${now.toLocaleString('default', { month: 'long' })} ${now.getFullYear()}`;
@@ -66,106 +79,115 @@ export function LedgerScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-
-      {/* Header: title + subtitle + action icons */}
       <View style={styles.header}>
         <View style={styles.headerTextBlock}>
-          <Text style={styles.title}>Expenses</Text>
+          <Text style={styles.title}>Ledger</Text>
           <Text style={styles.subtitle}>
-            {monthLabel} · {controller.formatCurrency(controller.ledgerTotal)} total
+            {monthLabel} · {controller.formatCurrency(controller.ledgerTotal)} tracked
           </Text>
         </View>
         <View style={styles.headerIcons}>
           <TouchableOpacity
             style={styles.iconBtn}
-            onPress={controller.loadLedger}
+            onPress={segment === 'entries' ? controller.loadLedger : controller.loadReport}
             disabled={controller.loading}
             testID={TEST_IDS.ledger.refreshButton}
           >
             <MaterialCommunityIcons name="refresh" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate('Families')}
-          >
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Families')}>
             <MaterialCommunityIcons name="account-group-outline" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate('Splits')}
-          >
+          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Splits')}>
             <MaterialCommunityIcons name="call-split" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Filter chips */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filterRow}
-      >
-        {FILTERS.map((f) => {
-          const active = selectedFilter === f;
-          return (
-            <TouchableOpacity
-              key={f}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => setSelectedFilter(f)}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{f}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.segmentRow}>
+        <TouchableOpacity
+          style={[styles.segmentBtn, segment === 'entries' && styles.segmentBtnActive]}
+          onPress={() => setSegment('entries')}
+        >
+          <Text style={[styles.segmentText, segment === 'entries' && styles.segmentTextActive]}>Entries</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.segmentBtn, segment === 'overview' && styles.segmentBtnActive]}
+          onPress={() => {
+            void openOverview();
+          }}
+        >
+          <Text style={[styles.segmentText, segment === 'overview' && styles.segmentTextActive]}>Overview</Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* Expense list */}
       <RefreshScroll
         style={styles.list}
         contentContainerStyle={styles.listContent}
-        onRefreshAsync={controller.loadLedger}
+        onRefreshAsync={segment === 'entries' ? controller.loadLedger : controller.loadReport}
       >
-        {filteredItems.length === 0 ? (
-          <EmptyState
-            icon="receipt-text-outline"
-            message={
-              selectedFilter === 'All'
-                ? 'No expenses yet. Capture one first.'
-                : `No ${selectedFilter.toLowerCase()} expenses found.`
-            }
-          />
+        {segment === 'overview' ? (
+          <LedgerOverviewPanel />
         ) : (
-          filteredItems.map((item) => {
-            const category = inferCategory(item.lineItems);
-            const date = new Date(item.transactionAt);
-            const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(today.getDate() - 1);
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterScroll}
+              contentContainerStyle={styles.filterRow}
+            >
+              {FILTERS.map((filter) => {
+                const active = selectedFilter === filter;
+                return (
+                  <TouchableOpacity
+                    key={filter}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => setSelectedFilter(filter)}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{filter}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
-            let timeStr: string;
-            if (date.toDateString() === today.toDateString()) {
-              timeStr = `Today ${date.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit' })}`;
-            } else if (date.toDateString() === yesterday.toDateString()) {
-              timeStr = `Yesterday ${date.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit' })}`;
-            } else {
-              timeStr = date.toLocaleDateString('default', { month: 'short', day: 'numeric' });
-            }
-
-            const meta = [category, item.paymentMethod, timeStr]
-              .filter(Boolean)
-              .join(' · ');
-
-            return (
-              <ExpenseCard
-                key={item.id}
-                merchant={item.merchant}
-                meta={meta}
-                amount={controller.formatCurrency(item.totalAmount, item.currency)}
-                category={category}
+            {filteredItems.length === 0 ? (
+              <EmptyState
+                icon="receipt-text-outline"
+                message={
+                  selectedFilter === 'All'
+                    ? 'No expenses yet. Capture one first.'
+                    : `No ${selectedFilter.toLowerCase()} expenses found.`
+                }
               />
-            );
-          })
+            ) : (
+              filteredItems.map((item) => {
+                const category = inferCategory(item.lineItems);
+                const date = new Date(item.transactionAt);
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(today.getDate() - 1);
+
+                let timeStr: string;
+                if (date.toDateString() === today.toDateString()) {
+                  timeStr = `Today ${date.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit' })}`;
+                } else if (date.toDateString() === yesterday.toDateString()) {
+                  timeStr = `Yesterday ${date.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit' })}`;
+                } else {
+                  timeStr = date.toLocaleDateString('default', { month: 'short', day: 'numeric' });
+                }
+
+                return (
+                  <ExpenseCard
+                    key={item.id}
+                    merchant={item.merchant}
+                    meta={[category, item.paymentMethod, timeStr].filter(Boolean).join(' · ')}
+                    amount={controller.formatCurrency(item.totalAmount, item.currency)}
+                    category={category}
+                  />
+                );
+              })
+            )}
+          </>
         )}
       </RefreshScroll>
     </View>
@@ -208,6 +230,30 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 8,
   },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingBottom: 10,
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+  },
+  segmentBtnActive: {
+    backgroundColor: Colors.greenDim,
+  },
+  segmentText: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  segmentTextActive: {
+    color: Colors.green,
+  },
   filterScroll: {
     flexGrow: 0,
     flexShrink: 0,
@@ -216,7 +262,7 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: 'row',
     gap: 8,
-    paddingHorizontal: 24,
+    paddingBottom: 8,
     alignItems: 'center',
     height: 44,
   },

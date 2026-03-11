@@ -3,6 +3,7 @@ import {
   computeTrustScore,
   deriveUnitPrice,
   evaluatePriceCandidateLocation,
+  isTrustedExpensePriceProvenance,
   isOutlierByRobustZ,
   matchesAreaText,
   sourceWeightForProvenance,
@@ -26,6 +27,13 @@ describe('price-intelligence.utils', () => {
 
     expect(score).toBeGreaterThan(0.9);
     expect(score).toBeLessThanOrEqual(1);
+  });
+
+  it('treats only receipt OCR as a trusted expense price source', () => {
+    expect(isTrustedExpensePriceProvenance(ExpenseProvenance.RECEIPT_OCR)).toBe(true);
+    expect(isTrustedExpensePriceProvenance(ExpenseProvenance.VOICE_ON_DEVICE)).toBe(false);
+    expect(isTrustedExpensePriceProvenance(ExpenseProvenance.VOICE_CLOUD)).toBe(false);
+    expect(isTrustedExpensePriceProvenance(ExpenseProvenance.MANUAL)).toBe(false);
   });
 
   it('flags outlier via robust z-score', () => {

@@ -127,6 +127,60 @@ export interface ReceiptParseResult {
   };
 }
 
+export interface ParsedDocumentLineItem {
+  descriptionRaw: string;
+  quantity?: number;
+  unitRaw?: string;
+  unitPrice?: number;
+  totalPrice: number;
+  confidence?: number;
+  originalPrice?: number;
+  promoText?: string;
+}
+
+export type DocumentParseResult =
+  | {
+      documentKind: 'receipt';
+      confidence: number;
+      candidate: ReceiptParseResult['candidate'];
+      fileRefs: string[];
+      parseMeta: {
+        parsePath: string;
+        parseLatencyMs: number;
+        parserEngine?: 'heuristic' | 'openrouter';
+      };
+    }
+  | {
+      documentKind: 'flyer';
+      confidence: number;
+      candidate: {
+        merchantText?: string;
+        areaText?: string;
+        note?: string;
+        validFrom?: string;
+        validTo?: string;
+        currency: 'MYR' | 'SGD' | 'USD';
+        lineItems: ParsedDocumentLineItem[];
+      };
+      fileRefs: string[];
+      parseMeta: {
+        parsePath: string;
+        parseLatencyMs: number;
+        parserEngine?: 'heuristic' | 'openrouter';
+      };
+    }
+  | {
+      documentKind: 'unknown';
+      confidence: number;
+      reason: string;
+      fileRefs: string[];
+      parseMeta: {
+        parsePath: string;
+        parseLatencyMs: number;
+        parserEngine?: 'heuristic' | 'openrouter';
+      };
+    };
+
 export interface UploadArtifactResponse {
   fileRef: string;
   storageProvider: 'supabase' | 'local';
@@ -185,6 +239,32 @@ export interface PriceCompareResponse {
   } | null;
   radiusKm?: number;
   rows: PriceCompareRow[];
+  generatedAt: string;
+  userId: string;
+  includePromo?: boolean;
+}
+
+export interface MultiStoreCompareResponse {
+  items: Array<{
+    query: string;
+    canonicalName?: string;
+  }>;
+  radiusKm?: number;
+  stores: Array<{
+    storeId?: string;
+    storeName?: string;
+    areaText?: string;
+    distanceKm?: number;
+    totalLatestPrice: number;
+    itemCoverage: number;
+    items: Array<{
+      item: string;
+      latestUnitPrice: number;
+      averageUnitPrice: number;
+      averageTrustScore: number;
+      sampleSize: number;
+    }>;
+  }>;
   generatedAt: string;
   userId: string;
   includePromo?: boolean;
@@ -321,6 +401,34 @@ export interface PromoIngestionItem {
   errorText?: string | null;
   createdAt: string;
   observations: PromoObservation[];
+}
+
+export type SubscriptionPlan = 'FREE' | 'PREMIUM';
+
+export interface SubscriptionSnapshot {
+  userId: string;
+  plan: SubscriptionPlan;
+  addonCount: number;
+  compare: {
+    itemsPerSearch: number;
+    searchesPerMonth: number;
+    usedThisMonth: number;
+    remainingThisMonth: number;
+  };
+  alerts: {
+    activeLimit: number;
+    activeCount: number;
+    remainingActive: number;
+  };
+  family: {
+    additionalMembersAllowed: number;
+  };
+  pricing: {
+    monthlyPriceRm: number;
+    addonUnitPriceRm: number;
+  };
+  periodKey: string;
+  generatedAt: string;
 }
 
 export type FamilyRole = 'OWNER' | 'EDITOR' | 'VIEWER';

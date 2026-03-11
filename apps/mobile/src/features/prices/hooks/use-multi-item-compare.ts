@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
-import { loadPriceCompare } from '../../../shared/api';
+import { loadMultiPriceCompare } from '../../../shared/api';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import type { StoreAggregate, StoreItemPrice } from '../types/store-aggregate';
 
@@ -9,11 +9,6 @@ interface UseMultiItemCompareResult {
   loading: boolean;
   error: string | null;
   refetch: (items: string[], lat: number, lng: number, radiusKm: number, areaText?: string) => Promise<void>;
-}
-
-function makeStoreKey(storeName?: string, areaText?: string, storeId?: string): string {
-  if (storeId) return storeId;
-  return `${(storeName ?? '').toLowerCase().trim()}::${(areaText ?? '').toLowerCase().trim()}`;
 }
 
 export function useMultiItemCompare(): UseMultiItemCompareResult {
@@ -36,61 +31,33 @@ export function useMultiItemCompare(): UseMultiItemCompareResult {
           return;
         }
 
-        const results = await Promise.allSettled(
-          items.map((item) =>
-            loadPriceCompare(controller.apiBaseUrl, token, {
-              item,
-              area: areaText,
-              lat,
-              lng,
-              radiusKm,
-              includePromo: true,
-            }),
-          ),
-        );
-
-        const storeMap = new Map<
-          string,
-          {
-            storeId: string;
-            storeName: string;
-            areaText: string;
-            distanceKm: number;
-            items: StoreItemPrice[];
-          }
-        >();
-
-        results.forEach((result, idx) => {
-          if (result.status !== 'fulfilled') return;
-          const itemName = items[idx];
-          for (const row of result.value.rows) {
-            const key = makeStoreKey(row.storeName, row.areaText, row.storeId);
-            if (!storeMap.has(key)) {
-              storeMap.set(key, {
-                storeId: row.storeId ?? key,
-                storeName: row.storeName ?? 'Unknown store',
-                areaText: row.areaText ?? '',
-                distanceKm: row.distanceKm ?? 999,
-                items: [],
-              });
-            }
-            storeMap.get(key)!.items.push({
-              itemName,
-              latestUnitPrice: row.latestUnitPrice,
-              averageUnitPrice: row.averageUnitPrice,
-              averageTrustScore: row.averageTrustScore,
-              sampleSize: row.sampleSize,
-            });
-          }
+        const result = await loadMultiPriceCompare(controller.apiBaseUrl, token, {
+          items,
+          area: areaText,
+          lat,
+          lng,
+          radiusKm,
+          includePromo: true,
         });
 
-        const aggregated: StoreAggregate[] = Array.from(storeMap.values()).map((s) => ({
-          ...s,
-          totalLatestPrice: s.items.reduce((sum, i) => sum + i.latestUnitPrice, 0),
-          itemCoverage: s.items.length,
+        const aggregated: StoreAggregate[] = result.stores.map((store) => ({
+          storeId: store.storeId ?? `${store.storeName ?? 'unknown'}::${store.areaText ?? ''}`,
+          storeName: store.storeName ?? 'Unknown store',
+          areaText: store.areaText ?? '',
+          distanceKm: store.distanceKm ?? 999,
+          totalLatestPrice: store.totalLatestPrice,
+          itemCoverage: store.itemCoverage,
+          items: store.items.map(
+            (item): StoreItemPrice => ({
+              itemName: item.item,
+              latestUnitPrice: item.latestUnitPrice,
+              averageUnitPrice: item.averageUnitPrice,
+              averageTrustScore: item.averageTrustScore,
+              sampleSize: item.sampleSize,
+            }),
+          ),
         }));
 
-        aggregated.sort((a, b) => a.distanceKm - b.distanceKm);
         setStores(aggregated);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to fetch prices');

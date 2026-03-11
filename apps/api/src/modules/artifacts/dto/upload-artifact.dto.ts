@@ -3,6 +3,7 @@ import { IsBase64, IsEnum, IsString } from 'class-validator';
 export enum ArtifactKindDto {
   AUDIO = 'audio',
   RECEIPT = 'receipt',
+  DOCUMENT = 'document',
 }
 
 export class UploadArtifactDto {

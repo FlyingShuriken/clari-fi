@@ -17,6 +17,7 @@ import { ParseModule } from './modules/parse/parse.module';
 import { PricesModule } from './modules/prices/prices.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { SplitsModule } from './modules/splits/splits.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { SplitsModule } from './modules/splits/splits.module';
     PricesModule,
     ReportsModule,
     SplitsModule,
+    SubscriptionsModule,
   ],
 })
 export class AppModule {}

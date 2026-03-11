@@ -4,8 +4,10 @@ import { MetricsService } from '../metrics/metrics.service';
 import { HeuristicExpenseParserProvider } from './expense-parser.provider';
 import { OpenRouterExpenseParserProvider } from './openrouter-expense-parser.provider';
 import {
+  DocumentImageInput,
   ExpenseParserProvider,
   ParsedExpenseResult,
+  ParsedImageDocumentResult,
   ParsedReceiptResult,
 } from './provider.interfaces';
 
@@ -231,5 +233,23 @@ export class ExpenseParserRouterProvider implements ExpenseParserProvider {
     }
 
     return heuristic;
+  }
+
+  async parseDocumentImages(input: {
+    images: DocumentImageInput[];
+    preferredKind?: 'receipt' | 'flyer';
+  }): Promise<ParsedImageDocumentResult> {
+    const startedAt = Date.now();
+    try {
+      const parsed = await this.openRouterParser.parseDocumentImages(input);
+      this.metrics.trackCounter('parse.llm.success.count', 1, { kind: `document:${parsed.documentKind}` });
+      this.metrics.trackTiming('parse.llm.latency_ms', Date.now() - startedAt, {
+        kind: `document:${parsed.documentKind}`,
+      });
+      return parsed;
+    } catch (error) {
+      this.metrics.trackCounter('parse.llm.failure.count', 1, { kind: 'document' });
+      throw error;
+    }
   }
 }

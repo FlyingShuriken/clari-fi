@@ -48,6 +48,8 @@ export function PricesScreen() {
     lng: selectedLng,
     limit: 5,
   });
+  const compareLimit = controller.subscription?.compare.itemsPerSearch ?? 1;
+  const compareRemaining = controller.subscription?.compare.remainingThisMonth ?? 15;
 
   useEffect(() => {
     if (bootstrappedLocation.current || controller.priceQueryLocation.source !== 'unset') {
@@ -154,6 +156,22 @@ export function PricesScreen() {
 
       {segment === 'intelligence' ? (
         <>
+          <DarkCard radius={16}>
+            <View style={styles.subscriptionRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.resultTitle}>Compare allowance</Text>
+                <Text style={styles.sectionCopy}>
+                  {compareRemaining} searches left this month · up to {compareLimit} item{compareLimit === 1 ? '' : 's'} per basket
+                </Text>
+              </View>
+              <TouchableOpacity style={styles.upgradeBtn} onPress={() => navigation.navigate('Subscription')}>
+                <Text style={styles.upgradeBtnText}>
+                  {controller.subscription?.plan === 'PREMIUM' ? 'Manage' : 'Upgrade'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </DarkCard>
+
           <PriceLocationSelector
             value={controller.priceQueryLocation}
             gpsLoading={locLoading}
@@ -178,7 +196,7 @@ export function PricesScreen() {
             <Text style={styles.sectionCopy}>
               Build a basket, then compare nearby stores using the selected location above.
             </Text>
-            <ItemSelector items={compareItems} onItemsChange={setCompareItems} />
+            <ItemSelector items={compareItems} onItemsChange={setCompareItems} maxItems={compareLimit} />
             <TouchableOpacity
               style={[styles.findStoresBtn, compareItems.length === 0 && styles.findStoresBtnDisabled]}
               onPress={handleFindStores}
@@ -521,6 +539,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  subscriptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  upgradeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    backgroundColor: Colors.greenDim,
+  },
+  upgradeBtnText: {
+    color: Colors.green,
+    fontSize: 12,
+    fontWeight: '700',
   },
   switchLabel: {
     fontSize: 13,

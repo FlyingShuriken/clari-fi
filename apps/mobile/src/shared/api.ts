@@ -7,9 +7,11 @@ import type {
   FamilyRole,
   HealthLiveResponse,
   HealthReadyResponse,
+  MultiStoreCompareResponse,
   MonthlyReportResponse,
   PriceAlert,
   PriceCompareResponse,
+  DocumentParseResult,
   PriceHistoryResponse,
   PriceLocationSearchResponse,
   PriceSignalResponse,
@@ -19,6 +21,7 @@ import type {
   ReceiptParseResult,
   SplitDetailResponse,
   SplitSummary,
+  SubscriptionSnapshot,
   UploadArtifactResponse,
   VoiceParseResult,
 } from './types';
@@ -59,6 +62,9 @@ function normalizeHttpErrorMessage(status: number, message: string): string {
     return 'Session expired or unauthorized. Please sign in again.';
   }
   if (status === 403) {
+    if (message) {
+      return message;
+    }
     return 'You do not have permission for this action.';
   }
   if (status === 413) {
@@ -206,7 +212,7 @@ export async function uploadArtifact(
   baseUrl: string,
   bearerToken: string,
   input: {
-    kind: 'audio' | 'receipt';
+    kind: 'audio' | 'receipt' | 'document';
     mimeType: string;
     fileBase64: string;
   },
@@ -245,6 +251,23 @@ export async function parseReceipt(
   },
 ): Promise<ReceiptParseResult> {
   return apiRequest<ReceiptParseResult>(baseUrl, '/parse/receipt', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function parseDocument(
+  baseUrl: string,
+  bearerToken: string,
+  input: {
+    fileRefs?: string[];
+    imageBase64s?: string[];
+    mimeType?: string;
+    preferredKind?: 'receipt' | 'flyer';
+  },
+): Promise<DocumentParseResult> {
+  return apiRequest<DocumentParseResult>(baseUrl, '/parse/document', {
     method: 'POST',
     headers: { Authorization: `Bearer ${bearerToken}` },
     body: JSON.stringify(input),
@@ -336,6 +359,26 @@ export async function loadPriceCompare(
   return apiRequest<PriceCompareResponse>(baseUrl, `/prices/compare?${params.toString()}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function loadMultiPriceCompare(
+  baseUrl: string,
+  bearerToken: string,
+  input: {
+    items: string[];
+    area?: string;
+    lat?: number;
+    lng?: number;
+    radiusKm?: number;
+    limit?: number;
+    includePromo?: boolean;
+  },
+): Promise<MultiStoreCompareResponse> {
+  return apiRequest<MultiStoreCompareResponse>(baseUrl, '/prices/compare/multi', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
   });
 }
 
@@ -614,6 +657,49 @@ export async function ingestPromo(
   });
 }
 
+export async function confirmPromoIngestion(
+  baseUrl: string,
+  bearerToken: string,
+  input: {
+    fileRefs: string[];
+    mimeType: string;
+    merchantText?: string;
+    areaText?: string;
+    note?: string;
+    validFrom?: string;
+    validTo?: string;
+    currency: 'MYR' | 'SGD' | 'USD';
+    lineItems: Array<{
+      descriptionRaw: string;
+      quantity?: number;
+      unitRaw?: string;
+      unitPrice?: number;
+      totalPrice: number;
+      originalPrice?: number;
+      promoText?: string;
+      confidence?: number;
+    }>;
+  },
+): Promise<{
+  ingestionId: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  created: number;
+  skipped: number;
+  reviewStatus: PromoReviewStatus;
+}> {
+  return apiRequest<{
+    ingestionId: string;
+    status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+    created: number;
+    skipped: number;
+    reviewStatus: PromoReviewStatus;
+  }>(baseUrl, '/prices/promos/confirm', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
 export async function listPromos(
   baseUrl: string,
   bearerToken: string,
@@ -670,6 +756,31 @@ export async function createFamily(
 ): Promise<{ family: FamilyProfile }> {
   return apiRequest<{ family: FamilyProfile }>(baseUrl, '/families', {
     method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getSubscription(
+  baseUrl: string,
+  bearerToken: string,
+): Promise<SubscriptionSnapshot> {
+  return apiRequest<SubscriptionSnapshot>(baseUrl, '/subscription/me', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function updateMockSubscription(
+  baseUrl: string,
+  bearerToken: string,
+  input: {
+    plan: 'FREE' | 'PREMIUM';
+    addonCount: number;
+  },
+): Promise<SubscriptionSnapshot> {
+  return apiRequest<SubscriptionSnapshot>(baseUrl, '/subscription/mock', {
+    method: 'PATCH',
     headers: { Authorization: `Bearer ${bearerToken}` },
     body: JSON.stringify(input),
   });

@@ -2,12 +2,22 @@ import { useAuth, useUser } from '@clerk/clerk-expo';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import * as Notifications from 'expo-notifications';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Platform } from 'react-native';
 import { speechRecognitionService, type RecognitionState } from '../../features/capture/speech-recognition.service';
 import {
   ApiRequestError,
   confirmExpense,
+  confirmPromoIngestion,
   createFamily,
   createFamilyInvite,
   createPriceAlert,
@@ -32,13 +42,16 @@ import {
   loadPriceSignal,
   markAlertEventRead,
   markAllAlertEventsRead,
+  getSubscription,
   parseReceipt,
+  parseDocument,
   parseVoice,
   registerPushDevice,
   removeFamilyMember,
   revokePushDevice,
   uploadArtifact,
   updateFamilyMemberRole,
+  updateMockSubscription,
   updateSplitAllocations,
   updateSplitParticipants,
   verifyClerkSessionToken,
@@ -50,6 +63,7 @@ import type {
   FamilyRole,
   HealthLiveResponse,
   HealthReadyResponse,
+  DocumentParseResult,
   MonthlyReportResponse,
   MonthlySpendDeltaDirection,
   PriceAlert,
@@ -62,6 +76,7 @@ import type {
   SignalDecisionFilter,
   SplitDetailResponse,
   SplitSummary,
+  SubscriptionSnapshot,
   VoiceParseResult,
 } from '../../shared/types';
 
@@ -157,6 +172,24 @@ function getString(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
+function getExpenseDisplayMerchant(
+  merchantText: unknown,
+  areaText: unknown,
+  fallback = 'Unknown merchant',
+): string {
+  const merchant = getString(merchantText);
+  if (merchant) {
+    return merchant;
+  }
+
+  const area = getString(areaText);
+  if (area) {
+    return area;
+  }
+
+  return fallback;
+}
+
 function getExpoProjectId(): string | undefined {
   const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
   const eas = (extra.eas ?? {}) as Record<string, unknown>;
@@ -188,6 +221,16 @@ function normalizePushRegistrationError(error: unknown): string {
 }
 
 async function pickImageAsset(fromCamera: boolean): Promise<ImagePicker.ImagePickerAsset | null> {
+  const assets = await pickImageAssets(fromCamera, false);
+  return assets[0] ?? null;
+}
+
+async function pickImageAssets(
+  fromCamera: boolean,
+  allowMultiple: boolean,
+): Promise<ImagePicker.ImagePickerAsset[]> {
+  const imageMediaTypes: ImagePicker.MediaType[] = ['images'];
+
   if (fromCamera) {
     const cameraPermission = await ImagePicker.requestCameraPermissionsAsync();
     if (!cameraPermission.granted) {
@@ -202,21 +245,23 @@ async function pickImageAsset(fromCamera: boolean): Promise<ImagePicker.ImagePic
 
   const result = fromCamera
     ? await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: imageMediaTypes,
         quality: 0.8,
         base64: true,
       })
     : await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: imageMediaTypes,
         quality: 0.8,
         base64: true,
+        allowsMultipleSelection: allowMultiple,
+        selectionLimit: allowMultiple ? 8 : 1,
       });
 
-  if (result.canceled || !result.assets[0]) {
-    return null;
+  if (result.canceled || !result.assets.length) {
+    return [];
   }
 
-  return result.assets[0];
+  return result.assets;
 }
 
 export interface LedgerLineItem {
@@ -273,6 +318,13 @@ export interface PriceQueryLocation {
   source: 'unset' | 'gps' | 'search';
 }
 
+interface ExpenseConfirmOverrides {
+  merchantText?: string;
+  areaText?: string;
+  locationLat?: number;
+  locationLng?: number;
+}
+
 function mapLedgerItems(rawItems: unknown[]): LedgerExpense[] {
   return rawItems.map((item) => {
     const value = (item ?? {}) as Record<string, unknown>;
@@ -291,7 +343,7 @@ function mapLedgerItems(rawItems: unknown[]): LedgerExpense[] {
 
     return {
       id: getString(value.id, `${Math.random()}`),
-      merchant: getString(value.merchantText, 'Unknown merchant'),
+      merchant: getExpenseDisplayMerchant(value.merchantText, value.areaText),
       transactionAt: getString(value.transactionAt, new Date().toISOString()),
       currency: getString(value.currency, 'MYR'),
       totalAmount: toNumber(value.totalAmount),
@@ -401,10 +453,14 @@ export interface ClariFiController {
   receiptFileRef: string;
   receiptParseLatencyMs: number | null;
   receiptParse: ReceiptParseResult | null;
+  documentReady: boolean;
+  documentImageCount: number;
+  documentParse: DocumentParseResult | null;
 
   ledgerItems: LedgerExpense[];
   ledgerTotal: number;
   reportSummary: ReportSummary | null;
+  subscription: SubscriptionSnapshot | null;
 
   families: FamilyProfile[];
   activeFamilyId: string;
@@ -523,15 +579,22 @@ export interface ClariFiController {
   startListening: () => Promise<void>;
   stopListening: () => Promise<void>;
   parseVoiceExpense: () => Promise<void>;
-  confirmVoiceExpense: () => Promise<void>;
+  confirmVoiceExpense: (overrides?: ExpenseConfirmOverrides) => Promise<void>;
 
   pickReceiptCamera: () => Promise<void>;
   pickReceiptGallery: () => Promise<void>;
   parseReceiptExpense: () => Promise<void>;
-  confirmReceiptExpense: () => Promise<void>;
+  confirmReceiptExpense: (overrides?: ExpenseConfirmOverrides) => Promise<void>;
+  pickDocumentCamera: () => Promise<void>;
+  pickDocumentGallery: () => Promise<void>;
+  parseSelectedDocument: () => Promise<void>;
+  confirmParsedDocument: (overrides?: ExpenseConfirmOverrides) => Promise<void>;
+  clearParsedDocument: () => void;
 
   loadLedger: () => Promise<void>;
   loadReport: () => Promise<void>;
+  loadSubscription: () => Promise<void>;
+  updateSubscriptionPlan: (plan: 'FREE' | 'PREMIUM', addonCount: number) => Promise<void>;
 
   createFamilyProfile: () => Promise<void>;
   loadFamiliesList: () => Promise<void>;
@@ -602,6 +665,8 @@ export interface ClariFiController {
 function useClariFiControllerValue(): ClariFiController {
   const { getToken, signOut } = useAuth();
   const { user } = useUser();
+  const getTokenRef = useRef(getToken);
+  const subscriptionLoadInFlightRef = useRef(false);
 
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultApiBaseUrl);
   const [message, setMessage] = useState('');
@@ -627,6 +692,11 @@ function useClariFiControllerValue(): ClariFiController {
   const [selectedReceiptFileRef, setSelectedReceiptFileRef] = useState('');
   const [receiptParse, setReceiptParse] = useState<ReceiptParseResult | null>(null);
   const [receiptParseLatencyMs, setReceiptParseLatencyMs] = useState<number | null>(null);
+  const [documentUris, setDocumentUris] = useState<string[]>([]);
+  const [documentBase64s, setDocumentBase64s] = useState<string[]>([]);
+  const [documentMimeType, setDocumentMimeType] = useState('image/jpeg');
+  const [documentFileRefs, setDocumentFileRefs] = useState<string[]>([]);
+  const [documentParse, setDocumentParse] = useState<DocumentParseResult | null>(null);
 
   const [priceQueryItem, setPriceQueryItem] = useState('watermelon');
   const [priceQueryLocation, setPriceQueryLocation] = useState<PriceQueryLocation>({
@@ -675,6 +745,7 @@ function useClariFiControllerValue(): ClariFiController {
 
   const [ledgerItems, setLedgerItems] = useState<LedgerExpense[]>([]);
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
+  const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
 
   const [families, setFamilies] = useState<FamilyProfile[]>([]);
   const [activeFamilyId, setActiveFamilyId] = useState('');
@@ -713,6 +784,10 @@ function useClariFiControllerValue(): ClariFiController {
 
   const signedInEmail =
     user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress ?? '-';
+
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  }, [getToken]);
 
   const clearMessage = useCallback(() => {
     setMessage('');
@@ -754,12 +829,12 @@ function useClariFiControllerValue(): ClariFiController {
   );
 
   const getBearerTokenOrThrow = useCallback(async (): Promise<string> => {
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) {
       throw new Error('No Clerk session token available. Please sign in again.');
     }
     return token;
-  }, [getToken]);
+  }, []);
 
   const runTask = useCallback(
     async (task: () => Promise<void>, options?: { clearMessage?: boolean }) => {
@@ -908,6 +983,7 @@ function useClariFiControllerValue(): ClariFiController {
       setAuthSyncError('');
       setLastSyncedClerkUserId('');
       setLastAutoSyncAttemptedClerkUserId('');
+      setSubscription(null);
       return;
     }
 
@@ -949,6 +1025,45 @@ function useClariFiControllerValue(): ClariFiController {
       setMessage(`Backend healthy: ${live.status} / ${ready.status}.`);
     });
   }, [apiBaseUrl, runTask]);
+
+  const loadSubscription = useCallback(async () => {
+    if (subscriptionLoadInFlightRef.current) {
+      return;
+    }
+
+    subscriptionLoadInFlightRef.current = true;
+    try {
+      await runTask(async () => {
+        const token = await getBearerTokenOrThrow();
+        const result = await getSubscription(normalizeBaseUrl(apiBaseUrl), token);
+        setSubscription(result);
+      }, { clearMessage: false });
+    } finally {
+      subscriptionLoadInFlightRef.current = false;
+    }
+  }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
+
+  const updateSubscriptionPlan = useCallback(
+    async (plan: 'FREE' | 'PREMIUM', addonCount: number) => {
+      await runTask(async () => {
+        const token = await getBearerTokenOrThrow();
+        const result = await updateMockSubscription(normalizeBaseUrl(apiBaseUrl), token, {
+          plan,
+          addonCount,
+        });
+        setSubscription(result);
+        setMessage(plan === 'PREMIUM' ? 'Premium unlocked.' : 'Switched to free plan.');
+      });
+    },
+    [apiBaseUrl, getBearerTokenOrThrow, runTask],
+  );
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+    void loadSubscription();
+  }, [loadSubscription, user?.id]);
 
   const loadPushDevices = useCallback(async () => {
     await runTask(async () => {
@@ -999,6 +1114,7 @@ function useClariFiControllerValue(): ClariFiController {
       setAuthSyncError('');
       setLastSyncedClerkUserId('');
       setLastAutoSyncAttemptedClerkUserId('');
+      setSubscription(null);
       setBackendLiveHealth(null);
       setBackendReadyHealth(null);
       setBackendHealthCheckedAt('');
@@ -1085,15 +1201,21 @@ function useClariFiControllerValue(): ClariFiController {
     });
   }, [apiBaseUrl, getBearerTokenOrThrow, recognitionState, runTask, transcriptInput]);
 
-  const confirmVoiceExpense = useCallback(async () => {
+  const confirmVoiceExpense = useCallback(async (overrides?: ExpenseConfirmOverrides) => {
     if (!voiceParse) {
       return;
     }
 
     await runTask(async () => {
       const token = await getBearerTokenOrThrow();
+      const merchantText = overrides?.merchantText?.trim() || voiceParse.candidate.merchantText;
+      const areaText = overrides?.areaText?.trim() || undefined;
       await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
         ...voiceParse.candidate,
+        merchantText,
+        areaText,
+        locationLat: overrides?.locationLat,
+        locationLng: overrides?.locationLng,
         transactionAt: new Date().toISOString(),
         confidence: 0.82,
         rawPayload: {
@@ -1128,7 +1250,7 @@ function useClariFiControllerValue(): ClariFiController {
 
         const token = await getBearerTokenOrThrow();
         const uploaded = await uploadArtifact(normalizeBaseUrl(apiBaseUrl), token, {
-          kind: 'receipt',
+          kind: 'document',
           mimeType,
           fileBase64: picked.base64,
         });
@@ -1176,15 +1298,21 @@ function useClariFiControllerValue(): ClariFiController {
     selectedReceiptMimeType,
   ]);
 
-  const confirmReceiptExpense = useCallback(async () => {
+  const confirmReceiptExpense = useCallback(async (overrides?: ExpenseConfirmOverrides) => {
     if (!receiptParse) {
       return;
     }
 
     await runTask(async () => {
       const token = await getBearerTokenOrThrow();
+      const merchantText = overrides?.merchantText?.trim() || receiptParse.candidate.merchantText;
+      const areaText = overrides?.areaText?.trim() || undefined;
       await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
         ...receiptParse.candidate,
+        merchantText,
+        areaText,
+        locationLat: overrides?.locationLat,
+        locationLng: overrides?.locationLng,
         currency: receiptParse.candidate.currency,
         confidence: 0.8,
         rawPayload: {
@@ -1210,6 +1338,158 @@ function useClariFiControllerValue(): ClariFiController {
     selectedReceiptFileRef,
     selectedReceiptMimeType,
     selectedReceiptUri,
+  ]);
+
+  const chooseDocuments = useCallback(
+    async (fromCamera: boolean, allowMultiple: boolean) => {
+      clearMessage();
+      try {
+        const pickedAssets = await pickImageAssets(fromCamera, allowMultiple && !fromCamera);
+        if (pickedAssets.length === 0) {
+          return;
+        }
+
+        const invalid = pickedAssets.find((asset) => !asset.base64);
+        if (invalid) {
+          throw new Error('Could not read one or more selected images as base64.');
+        }
+
+        const token = await getBearerTokenOrThrow();
+        const uploadedRefs: string[] = [];
+
+        for (const asset of pickedAssets) {
+          const mimeType = asset.mimeType ?? 'image/jpeg';
+          const uploaded = await uploadArtifact(normalizeBaseUrl(apiBaseUrl), token, {
+            kind: 'document',
+            mimeType,
+            fileBase64: asset.base64 as string,
+          });
+          uploadedRefs.push(uploaded.fileRef);
+        }
+
+        setDocumentUris(pickedAssets.map((asset) => asset.uri));
+        setDocumentBase64s(pickedAssets.map((asset) => asset.base64 as string));
+        setDocumentMimeType(pickedAssets[0]?.mimeType ?? 'image/jpeg');
+        setDocumentFileRefs(uploadedRefs);
+        setDocumentParse(null);
+        setMessage(
+          `${pickedAssets.length} image${pickedAssets.length === 1 ? '' : 's'} selected. Parse to detect receipt or flyer.`,
+        );
+      } catch (error) {
+        setMessage(errorToMessage(error));
+      }
+    },
+    [apiBaseUrl, clearMessage, getBearerTokenOrThrow],
+  );
+
+  const pickDocumentCamera = useCallback(async () => {
+    await chooseDocuments(true, false);
+  }, [chooseDocuments]);
+
+  const pickDocumentGallery = useCallback(async () => {
+    await chooseDocuments(false, true);
+  }, [chooseDocuments]);
+
+  const parseSelectedDocument = useCallback(async () => {
+    await runTask(async () => {
+      if (documentFileRefs.length === 0 && documentBase64s.length === 0) {
+        throw new Error('Select one or more images first.');
+      }
+
+      const token = await getBearerTokenOrThrow();
+      const result = await parseDocument(normalizeBaseUrl(apiBaseUrl), token, {
+        fileRefs: documentFileRefs,
+        imageBase64s: documentBase64s,
+        mimeType: documentMimeType,
+      });
+      setDocumentParse(result);
+
+      if (result.documentKind === 'receipt') {
+        setMessage('Detected receipt. Review and confirm to save expense.');
+      } else if (result.documentKind === 'flyer') {
+        setMessage('Detected flyer/booklet. Review and confirm to save promo prices.');
+      } else {
+        setMessage(result.reason);
+      }
+    });
+  }, [apiBaseUrl, documentBase64s, documentFileRefs, documentMimeType, getBearerTokenOrThrow, runTask]);
+
+  const clearParsedDocument = useCallback(() => {
+    setDocumentUris([]);
+    setDocumentBase64s([]);
+    setDocumentFileRefs([]);
+    setDocumentParse(null);
+  }, []);
+
+  const confirmParsedDocument = useCallback(async (overrides?: ExpenseConfirmOverrides) => {
+    await runTask(async () => {
+      if (!documentParse) {
+        throw new Error('Parse a document first.');
+      }
+
+      const token = await getBearerTokenOrThrow();
+
+      if (documentParse.documentKind === 'receipt') {
+        const merchantText = overrides?.merchantText?.trim() || documentParse.candidate.merchantText;
+        const areaText = overrides?.areaText?.trim() || undefined;
+        await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
+          ...documentParse.candidate,
+          merchantText,
+          areaText,
+          locationLat: overrides?.locationLat,
+          locationLng: overrides?.locationLng,
+          currency: documentParse.candidate.currency,
+          confidence: documentParse.confidence,
+          rawPayload: {
+            parsePath: documentParse.parseMeta.parsePath,
+            parseLatencyMs: documentParse.parseMeta.parseLatencyMs,
+            localDocumentUris: documentUris,
+          },
+          receipt: {
+            fileRef: documentFileRefs[0] || 'local://receipt-not-uploaded',
+            mimeType: documentMimeType,
+            parsedPayload: documentParse.candidate,
+            ocrRaw: {
+              source: 'document_llm',
+              fileRefs: documentFileRefs,
+            },
+            confidence: documentParse.confidence,
+          },
+        });
+        setMessage('Receipt expense saved.');
+        clearParsedDocument();
+        return;
+      }
+
+      if (documentParse.documentKind === 'flyer') {
+        const result = await confirmPromoIngestion(normalizeBaseUrl(apiBaseUrl), token, {
+          fileRefs: documentFileRefs,
+          mimeType: documentMimeType,
+          merchantText: documentParse.candidate.merchantText,
+          areaText: documentParse.candidate.areaText,
+          note: documentParse.candidate.note,
+          validFrom: documentParse.candidate.validFrom,
+          validTo: documentParse.candidate.validTo,
+          currency: documentParse.candidate.currency,
+          lineItems: documentParse.candidate.lineItems,
+        });
+        setPromoIngestionResult(result);
+        setMessage('Flyer prices saved.');
+        clearParsedDocument();
+        return;
+      }
+
+      throw new Error(documentParse.reason || 'Document could not be classified.');
+    });
+  }, [
+    apiBaseUrl,
+    clearParsedDocument,
+    documentFileRefs,
+    documentMimeType,
+    documentParse,
+    documentUris,
+    getBearerTokenOrThrow,
+    runTask,
   ]);
 
   const loadLedger = useCallback(async () => {
@@ -1628,12 +1908,14 @@ function useClariFiControllerValue(): ClariFiController {
       });
 
       setPriceCompareResult(result);
+      await loadSubscription();
       setMessage('Loaded price comparison.');
     });
   }, [
     apiBaseUrl,
     getBearerTokenOrThrow,
     includePromo,
+    loadSubscription,
     priceQueryItem,
     priceQueryLocation,
     runTask,
@@ -1730,6 +2012,7 @@ function useClariFiControllerValue(): ClariFiController {
             });
 
       setAlerts((previous) => [result, ...previous.filter((item) => item.id !== result.id)]);
+      await loadSubscription();
       setMessage(
         alertKind === 'SIGNAL'
           ? 'Signal alert created.'
@@ -1746,6 +2029,7 @@ function useClariFiControllerValue(): ClariFiController {
     alertTargetUnitPrice,
     apiBaseUrl,
     getBearerTokenOrThrow,
+    loadSubscription,
     runTask,
   ]);
 
@@ -1765,11 +2049,13 @@ function useClariFiControllerValue(): ClariFiController {
         areaText: priceQueryLocation.areaText.trim() || undefined,
       });
       setAlerts((previous) => [result, ...previous.filter((item) => item.id !== result.id)]);
+      await loadSubscription();
       setMessage('Signal watch created from current query.');
     });
   }, [
     apiBaseUrl,
     getBearerTokenOrThrow,
+    loadSubscription,
     priceQueryItem,
     priceQueryLocation,
     runTask,
@@ -1862,7 +2148,7 @@ function useClariFiControllerValue(): ClariFiController {
 
         const token = await getBearerTokenOrThrow();
         const uploaded = await uploadArtifact(normalizeBaseUrl(apiBaseUrl), token, {
-          kind: 'receipt',
+          kind: 'document',
           mimeType,
           fileBase64: picked.base64,
         });
@@ -1951,10 +2237,14 @@ function useClariFiControllerValue(): ClariFiController {
       receiptFileRef: selectedReceiptFileRef,
       receiptParseLatencyMs,
       receiptParse,
+      documentReady: documentFileRefs.length > 0 || documentUris.length > 0,
+      documentImageCount: Math.max(documentFileRefs.length, documentUris.length),
+      documentParse,
 
       ledgerItems,
       ledgerTotal: ledgerItems.reduce((acc, item) => acc + item.totalAmount, 0),
       reportSummary,
+      subscription,
 
       families,
       activeFamilyId,
@@ -2032,9 +2322,11 @@ function useClariFiControllerValue(): ClariFiController {
 
       syncBackendUser,
       checkBackendHealth,
+      loadSubscription,
       loadPushDevices,
       revokeCurrentPushDevice,
       signOutUser,
+      updateSubscriptionPlan,
 
       startListening,
       stopListening,
@@ -2045,6 +2337,11 @@ function useClariFiControllerValue(): ClariFiController {
       pickReceiptGallery,
       parseReceiptExpense,
       confirmReceiptExpense,
+      pickDocumentCamera,
+      pickDocumentGallery,
+      parseSelectedDocument,
+      confirmParsedDocument,
+      clearParsedDocument,
 
       loadLedger,
       loadReport,
@@ -2112,6 +2409,8 @@ function useClariFiControllerValue(): ClariFiController {
       backendReadyHealth,
       checkBackendHealth,
       clearMessage,
+      clearParsedDocument,
+      confirmParsedDocument,
       confirmReceiptExpense,
       confirmVoiceExpense,
       createAlert,
@@ -2119,6 +2418,9 @@ function useClariFiControllerValue(): ClariFiController {
       createActiveFamilyInvite,
       createFamilyProfile,
       createSplitSessionAction,
+      documentFileRefs,
+      documentParse,
+      documentUris,
       formatCurrency,
       families,
       familyInviteCodeInput,
@@ -2142,13 +2444,17 @@ function useClariFiControllerValue(): ClariFiController {
       loadPriceSignalResult,
       loadPromos,
       loadReport,
+      loadSubscription,
       loadSplitSessions,
       loading,
       markEventRead,
       markAllEventsRead,
       message,
       parseReceiptExpense,
+      parseSelectedDocument,
       parseVoiceExpense,
+      pickDocumentCamera,
+      pickDocumentGallery,
       pickPromoCamera,
       pickPromoGallery,
       pickReceiptCamera,
@@ -2176,6 +2482,7 @@ function useClariFiControllerValue(): ClariFiController {
       recognitionState,
       recognizerAvailable,
       reportSummary,
+      subscription,
       removeFamilyMemberAction,
       saveSplitAllocationsAction,
       saveSplitParticipantsAction,
@@ -2226,6 +2533,7 @@ function useClariFiControllerValue(): ClariFiController {
       splitSummaries,
       splitTitleInput,
       updateFamilyMemberRoleAction,
+      updateSubscriptionPlan,
       voiceParse,
       voiceParseLatencyMs,
     ],

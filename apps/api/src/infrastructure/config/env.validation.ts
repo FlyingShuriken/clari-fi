@@ -10,6 +10,22 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
     errors.push('DATABASE_URL is required');
   }
 
+  const prismaConnectionLimitRaw = asString(config.PRISMA_CONNECTION_LIMIT).trim();
+  if (prismaConnectionLimitRaw) {
+    const prismaConnectionLimit = Number(prismaConnectionLimitRaw);
+    if (!Number.isInteger(prismaConnectionLimit) || prismaConnectionLimit <= 0) {
+      errors.push('PRISMA_CONNECTION_LIMIT must be a positive integer');
+    }
+  }
+
+  const prismaPoolTimeoutRaw = asString(config.PRISMA_POOL_TIMEOUT_SECONDS).trim();
+  if (prismaPoolTimeoutRaw) {
+    const prismaPoolTimeout = Number(prismaPoolTimeoutRaw);
+    if (!Number.isInteger(prismaPoolTimeout) || prismaPoolTimeout <= 0) {
+      errors.push('PRISMA_POOL_TIMEOUT_SECONDS must be a positive integer');
+    }
+  }
+
   const clerkSecretKey = asString(config.CLERK_SECRET_KEY);
   if (!clerkSecretKey) {
     errors.push('CLERK_SECRET_KEY is required');

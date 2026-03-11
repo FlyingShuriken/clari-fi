@@ -12,15 +12,14 @@ import { CaptureScreen } from '../../features/capture/screens/CaptureScreen';
 import { FamilyScreen } from '../../features/families/screens/FamilyScreen';
 import { LedgerScreen } from '../../features/ledger/screens/LedgerScreen';
 import { PricesScreen } from '../../features/prices/screens/PricesScreen';
-import { ReportsScreen } from '../../features/reports/screens/ReportsScreen';
 import { SplitsScreen } from '../../features/splits/screens/SplitsScreen';
 import { StoreMapScreen } from '../../features/prices/screens/StoreMapScreen';
+import { SubscriptionScreen } from '../../features/subscription/screens/SubscriptionScreen';
 import { Colors, Shadows } from '../../theme';
 
 export type MainTabParamList = {
   Home: undefined;
   Ledger: undefined;
-  Reports: undefined;
   Prices: undefined;
   Alerts: undefined;
 };
@@ -30,6 +29,7 @@ export type RootStackParamList = {
   Account: undefined;
   Families: undefined;
   Splits: undefined;
+  Subscription: undefined;
   StoreMap: { items: string[]; lat: number; lng: number; radiusKm: number; areaText?: string };
 };
 
@@ -55,7 +55,6 @@ function tabIcon(routeName: keyof MainTabParamList): TabIconName {
   switch (routeName) {
     case 'Home':    return 'home-outline';
     case 'Ledger':  return 'format-list-bulleted';
-    case 'Reports': return 'trending-up';
     case 'Prices':  return 'tag-outline';
     case 'Alerts':  return 'bell-outline';
     default:        return 'circle-outline';
@@ -130,7 +129,6 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={CaptureScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Ledger" component={LedgerScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="Reports" component={ReportsScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Prices" component={PricesScreen} />
       <Tab.Screen name="Alerts" component={AlertsScreen} options={{ headerShown: false }} />
     </Tab.Navigator>
@@ -156,6 +154,11 @@ export function AppNavigator() {
             name="Account"
             component={AccountScreen}
             options={{ presentation: 'modal', title: 'Settings' }}
+          />
+          <RootStack.Screen
+            name="Subscription"
+            component={SubscriptionScreen}
+            options={{ presentation: 'modal', title: 'ClariFi Premium' }}
           />
           <RootStack.Screen name="Families" component={FamilyScreen} options={{ title: 'Families' }} />
           <RootStack.Screen name="Splits" component={SplitsScreen} options={{ title: 'Splits' }} />

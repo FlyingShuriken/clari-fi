@@ -4,8 +4,6 @@ import { TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../../theme';
 
-const MAX_ITEMS = 8;
-
 const inputTheme = {
   colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary },
 };
@@ -13,14 +11,15 @@ const inputTheme = {
 interface ItemSelectorProps {
   items: string[];
   onItemsChange: (items: string[]) => void;
+  maxItems: number;
 }
 
-export function ItemSelector({ items, onItemsChange }: ItemSelectorProps) {
+export function ItemSelector({ items, onItemsChange, maxItems }: ItemSelectorProps) {
   const [text, setText] = useState('');
 
   const addItem = () => {
     const trimmed = text.trim();
-    if (!trimmed || items.length >= MAX_ITEMS) return;
+    if (!trimmed || items.length >= maxItems) return;
     if (items.some((i) => i.toLowerCase() === trimmed.toLowerCase())) return;
     onItemsChange([...items, trimmed]);
     setText('');
@@ -45,9 +44,9 @@ export function ItemSelector({ items, onItemsChange }: ItemSelectorProps) {
           returnKeyType="done"
         />
         <TouchableOpacity
-          style={[styles.addBtn, items.length >= MAX_ITEMS && styles.addBtnDisabled]}
+          style={[styles.addBtn, items.length >= maxItems && styles.addBtnDisabled]}
           onPress={addItem}
-          disabled={items.length >= MAX_ITEMS || !text.trim()}
+          disabled={items.length >= maxItems || !text.trim()}
         >
           <MaterialCommunityIcons name="plus" size={20} color={Colors.bg} />
         </TouchableOpacity>
@@ -64,7 +63,7 @@ export function ItemSelector({ items, onItemsChange }: ItemSelectorProps) {
           ))}
         </View>
       )}
-      <Text style={styles.hint}>{items.length}/{MAX_ITEMS} items</Text>
+      <Text style={styles.hint}>{items.length}/{maxItems} items</Text>
     </View>
   );
 }

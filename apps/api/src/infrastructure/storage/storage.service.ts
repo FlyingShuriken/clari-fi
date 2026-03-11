@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 
-export type ArtifactKind = 'audio' | 'receipt';
+export type ArtifactKind = 'audio' | 'receipt' | 'document';
 
 export interface UploadArtifactInput {
   kind: ArtifactKind;

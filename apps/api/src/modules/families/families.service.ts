@@ -8,6 +8,7 @@ import { FamilyInviteStatus, FamilyMemberStatus, FamilyRole } from '@prisma/clie
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { CreateFamilyInviteDto } from './dto/create-family-invite.dto';
 import { CreateFamilyDto } from './dto/create-family.dto';
 import { JoinFamilyDto } from './dto/join-family.dto';
@@ -29,7 +30,10 @@ function roleRank(role: FamilyRole): number {
 export class FamiliesService {
   private static readonly DEFAULT_INVITE_TTL_DAYS = 7;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscriptionsService: SubscriptionsService,
+  ) {}
 
   private async requireMembership(
     userId: string,
@@ -241,6 +245,24 @@ export class FamiliesService {
 
   async createInvite(user: AuthenticatedUser, familyId: string, dto: CreateFamilyInviteDto) {
     await this.requireMembership(user.id, familyId, FamilyRole.OWNER);
+    const family = await this.prisma.familyProfile.findUnique({
+      where: { id: familyId },
+      select: {
+        createdByUserId: true,
+        members: {
+          where: { status: FamilyMemberStatus.ACTIVE },
+          select: { id: true },
+        },
+      },
+    });
+    if (!family) {
+      throw new NotFoundException('Family not found.');
+    }
+    await this.subscriptionsService.assertFamilyCapacity(
+      family.createdByUserId,
+      family.members.length,
+    );
+
     const expiresInDays = dto.expiresInDays ?? FamiliesService.DEFAULT_INVITE_TTL_DAYS;
     const code = await this.generateUniqueInviteCode();
     const now = new Date();
@@ -276,6 +298,7 @@ export class FamiliesService {
         family: {
           select: {
             id: true,
+            createdByUserId: true,
           },
         },
       },
@@ -297,6 +320,17 @@ export class FamiliesService {
       }
       throw new BadRequestException('Invite code is invalid or expired.');
     }
+
+    const activeMemberCount = await this.prisma.familyMember.count({
+      where: {
+        familyId: invite.familyId,
+        status: FamilyMemberStatus.ACTIVE,
+      },
+    });
+    await this.subscriptionsService.assertFamilyCapacity(
+      invite.family.createdByUserId,
+      activeMemberCount,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.familyInvite.update({

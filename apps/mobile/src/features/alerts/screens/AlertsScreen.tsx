@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { SectionLabel } from '../../../components/ui/section-label';
@@ -9,6 +11,7 @@ import { EmptyState } from '../../../components/ui/empty-state';
 import { RefreshScroll } from '../../../components/ui/refresh-scroll';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
+import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
 
 type BadgeColor = 'green' | 'indigo' | 'coral' | 'amber';
 
@@ -44,6 +47,7 @@ const inputTheme = {
 
 export function AlertsScreen() {
   const controller = useClariFiController();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const insets = useSafeAreaInsets();
   const [showCreateForm, setShowCreateForm] = useState(false);
 
@@ -69,6 +73,19 @@ export function AlertsScreen() {
           <Text style={styles.newAlertText}>New Alert</Text>
         </TouchableOpacity>
       </View>
+
+      {controller.subscription ? (
+        <View style={styles.limitBar}>
+          <Text style={styles.limitText}>
+            Active alerts {controller.subscription.alerts.activeCount} / {controller.subscription.alerts.activeLimit}
+          </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Subscription')}>
+            <Text style={styles.limitLink}>
+              {controller.subscription.plan === 'PREMIUM' ? 'Manage plan' : 'Upgrade'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <RefreshScroll
         style={styles.scroll}
@@ -338,6 +355,26 @@ const styles = StyleSheet.create({
   },
   headerLeft: {
     gap: 2,
+  },
+  limitBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginHorizontal: 24,
+    marginBottom: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  limitText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+  },
+  limitLink: {
+    color: Colors.green,
+    fontSize: 12,
+    fontWeight: '700',
   },
   title: {
     fontSize: 24,

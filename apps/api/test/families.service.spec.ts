@@ -2,6 +2,10 @@ import { FamilyMemberStatus, FamilyRole } from '@prisma/client';
 import { FamiliesService } from '../src/modules/families/families.service';
 
 describe('FamiliesService', () => {
+  const subscriptionsService = {
+    assertFamilyCapacity: jest.fn().mockResolvedValue(undefined),
+  } as any;
+
   const user = {
     id: 'user_owner',
     email: 'owner@example.com',
@@ -25,7 +29,7 @@ describe('FamiliesService', () => {
       },
     } as any;
 
-    const service = new FamiliesService(prisma);
+    const service = new FamiliesService(prisma, subscriptionsService);
 
     await expect(service.createInvite(user, 'family-1', { expiresInDays: 7 })).rejects.toThrow(
       'Insufficient family permissions',
@@ -67,7 +71,7 @@ describe('FamiliesService', () => {
       },
     } as any;
 
-    const service = new FamiliesService(prisma);
+    const service = new FamiliesService(prisma, subscriptionsService);
 
     await expect(
       service.updateMemberRole(user, 'family-1', 'member-target', { role: FamilyRole.EDITOR }),

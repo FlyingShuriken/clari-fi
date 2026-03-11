@@ -5,8 +5,11 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  DocumentImageInput,
   ExpenseParserProvider,
   ParsedExpenseResult,
+  ParsedFlyerResult,
+  ParsedImageDocumentResult,
   ParsedLineItem,
   ParsedReceiptResult,
 } from './provider.interfaces';
@@ -25,6 +28,18 @@ interface OpenRouterCompletionResponse {
           }>;
     };
   }>;
+}
+
+interface OpenRouterMessageTextPart {
+  type: 'text';
+  text: string;
+}
+
+interface OpenRouterMessageImagePart {
+  type: 'image_url';
+  image_url: {
+    url: string;
+  };
 }
 
 const CURRENCY_VALUES: Currency[] = ['MYR', 'SGD', 'USD'];
@@ -200,6 +215,11 @@ function normalizeLineItems(
       unitRaw: unitRaw || undefined,
       unitPrice,
       confidence,
+      originalPrice: asPositiveNumber(
+        row.originalPrice ?? row.regularPrice ?? row.beforePrice ?? row.listPrice,
+      ) || undefined,
+      promoText:
+        asString(row.promoText ?? row.promoNote ?? row.promotionNote ?? row.dealText) || undefined,
     });
   }
 
@@ -331,11 +351,43 @@ export class OpenRouterExpenseParserProvider implements ExpenseParserProvider {
     return Math.round(timeout);
   }
 
-  private async completeJson(systemPrompt: string, userPrompt: string) {
+  private buildImageUrl(input: DocumentImageInput): string | null {
+    if (input.imageUrl?.trim()) {
+      return input.imageUrl.trim();
+    }
+    if (input.imageBase64?.trim()) {
+      const mimeType = input.mimeType?.trim() || 'image/jpeg';
+      return `data:${mimeType};base64,${input.imageBase64.trim()}`;
+    }
+    return null;
+  }
+
+  private async completeJson(
+    systemPrompt: string,
+    userPrompt: string,
+    images?: DocumentImageInput[],
+  ) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.getTimeoutMs());
 
     try {
+      const content: Array<OpenRouterMessageTextPart | OpenRouterMessageImagePart> | string =
+        images && images.length > 0
+          ? [
+              {
+                type: 'text',
+                text: userPrompt,
+              },
+              ...images
+                .map((image) => this.buildImageUrl(image))
+                .filter((url): url is string => Boolean(url))
+                .map((url) => ({
+                  type: 'image_url' as const,
+                  image_url: { url },
+                })),
+            ]
+          : userPrompt;
+
       const response = await fetch(`${this.getBaseUrl()}/chat/completions`, {
         method: 'POST',
         headers: this.getHeaders(),
@@ -345,7 +397,7 @@ export class OpenRouterExpenseParserProvider implements ExpenseParserProvider {
           temperature: 0,
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
+            { role: 'user', content },
           ],
         }),
       });
@@ -359,8 +411,8 @@ export class OpenRouterExpenseParserProvider implements ExpenseParserProvider {
       }
 
       const payload = (await response.json()) as OpenRouterCompletionResponse;
-      const content = extractMessageText(payload.choices);
-      return extractJsonObject(content);
+      const responseText = extractMessageText(payload.choices);
+      return extractJsonObject(responseText);
     } catch (error) {
       if (error instanceof ServiceUnavailableException) {
         throw error;
@@ -457,6 +509,40 @@ export class OpenRouterExpenseParserProvider implements ExpenseParserProvider {
     };
   }
 
+  private normalizeFlyerResult(raw: Record<string, unknown>): ParsedFlyerResult {
+    const merchantText = asString(raw.merchantText ?? raw.storeName) || undefined;
+    const areaText = asString(raw.areaText ?? raw.area ?? raw.locationText) || undefined;
+    const note = asString(raw.note ?? raw.details ?? raw.detail) || undefined;
+    const currency = normalizeCurrency(raw.currency);
+    const validFrom = normalizeDate(raw.validFrom ?? raw.startsAt ?? raw.startDate);
+    const validTo = normalizeDate(raw.validTo ?? raw.endsAt ?? raw.endDate);
+    const parsedTotal = asPositiveNumber(raw.totalAmount);
+    const lineItems = normalizeLineItems(raw.lineItems ?? raw.items ?? raw.offers, parsedTotal, 'Promo item');
+
+    const confidenceMap = buildConfidenceMap(raw.confidenceMap, {
+      merchantText: merchantText ? 0.78 : 0.35,
+      areaText: areaText ? 0.72 : 0.3,
+      validFrom: validFrom ? 0.74 : 0.32,
+      validTo: validTo ? 0.74 : 0.32,
+      currency: 0.84,
+      lineItems: lineItems.length > 0 ? 0.82 : 0.2,
+    });
+
+    return {
+      merchantText,
+      areaText,
+      note,
+      validFrom,
+      validTo,
+      currency,
+      lineItems,
+      confidenceMap,
+      parserMeta: {
+        engine: 'openrouter',
+      },
+    };
+  }
+
   async parseVoiceTranscript(transcript: string): Promise<ParsedExpenseResult> {
     const systemPrompt = [
       'You extract structured expense fields from short spoken expense text.',
@@ -488,5 +574,65 @@ export class OpenRouterExpenseParserProvider implements ExpenseParserProvider {
     const userPrompt = `OCR text:\n${rawText}`;
     const raw = await this.completeJson(systemPrompt, userPrompt);
     return this.normalizeReceiptResult(raw);
+  }
+
+  async parseDocumentImages(input: {
+    images: DocumentImageInput[];
+    preferredKind?: 'receipt' | 'flyer';
+  }): Promise<ParsedImageDocumentResult> {
+    const systemPrompt = [
+      'You classify and extract structured data from shopping documents shown in images.',
+      'Supported document kinds are receipt and flyer.',
+      'A receipt is proof of purchase with totals already paid.',
+      'A flyer is a promotion booklet, promo poster, grocery leaflet, or sale ad with advertised prices.',
+      'Return JSON only. No markdown, no commentary.',
+      'Never invent values. Use null when unknown.',
+      'Output keys exactly: documentKind,confidence,reason,receipt,flyer.',
+      'documentKind must be one of receipt,flyer,unknown.',
+      'confidence must be a number between 0 and 1.',
+      'For receipt, output keys: merchantText,note,receiptDate,totalAmount,currency,lineItems,confidenceMap.',
+      'For flyer, output keys: merchantText,areaText,note,validFrom,validTo,currency,lineItems,confidenceMap.',
+      'lineItems item keys: descriptionRaw,quantity,unitRaw,unitPrice,totalPrice,originalPrice,promoText,confidence.',
+      'For flyers, each line item should represent one promoted offer.',
+      input.preferredKind
+        ? `Prefer ${input.preferredKind} extraction if the document is ambiguous, but still classify honestly.`
+        : 'Classify honestly using the image content.',
+    ].join(' ');
+
+    const userPrompt = [
+      'Inspect the attached shopping document image(s).',
+      'If the images form multiple pages of one flyer/booklet, combine them into one flyer extraction result.',
+      'If the document is unreadable or unrelated, return documentKind unknown.',
+    ].join(' ');
+
+    const raw = await this.completeJson(systemPrompt, userPrompt, input.images);
+    const documentKind = asString(raw.documentKind).toLowerCase();
+    const confidence = clampConfidence(raw.confidence, 0.55);
+
+    if (documentKind === 'receipt') {
+      return {
+        documentKind: 'receipt',
+        confidence,
+        receipt: this.normalizeReceiptResult(
+          (raw.receipt as Record<string, unknown> | undefined) ?? raw,
+        ),
+      };
+    }
+
+    if (documentKind === 'flyer') {
+      return {
+        documentKind: 'flyer',
+        confidence,
+        flyer: this.normalizeFlyerResult(
+          (raw.flyer as Record<string, unknown> | undefined) ?? raw,
+        ),
+      };
+    }
+
+    return {
+      documentKind: 'unknown',
+      confidence,
+      reason: asString(raw.reason) || 'Could not classify the uploaded document.',
+    };
   }
 }

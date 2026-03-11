@@ -59,6 +59,10 @@ export function sourceWeightForProvenance(provenance: ExpenseProvenance): number
   return 0.65;
 }
 
+export function isTrustedExpensePriceProvenance(provenance: ExpenseProvenance): boolean {
+  return provenance === ExpenseProvenance.RECEIPT_OCR;
+}
+
 export function computeTrustScore(input: {
   sourceWeight: number;
   fieldConfidence: number;

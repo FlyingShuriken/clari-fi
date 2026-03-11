@@ -110,6 +110,11 @@ enum SettlementStatus {
   SETTLED
 }
 
+enum SubscriptionPlan {
+  FREE
+  PREMIUM
+}
+
 model User {
   id          String   @id @default(cuid())
   clerkUserId String   @unique
@@ -134,6 +139,33 @@ model User {
   familyInvitesCreated FamilyInvite[]  @relation("FamilyInviteCreatedBy")
   familyInvitesUsed    FamilyInvite[]  @relation("FamilyInviteUsedBy")
   splitSessionsCreated SplitSession[]
+  subscription         UserSubscription?
+  subscriptionUsage    SubscriptionUsageMonth[]
+}
+
+model UserSubscription {
+  id         String           @id @default(cuid())
+  userId     String           @unique
+  plan       SubscriptionPlan @default(FREE)
+  addonCount Int              @default(0)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SubscriptionUsageMonth {
+  id                 String   @id @default(cuid())
+  userId             String
+  periodKey          String
+  compareSearchCount Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, periodKey])
+  @@index([userId, periodKey])
 }
 
 model Expense {

@@ -5,7 +5,7 @@ import {
   Prisma,
   ProcessingStatus,
   PromoReviewStatus,
-  type ExpenseProvenance,
+  ExpenseProvenance,
 } from '@prisma/client';
 import { MetricsService } from '../../infrastructure/metrics/metrics.service';
 import {
@@ -21,12 +21,15 @@ import {
   NotificationsService,
   type AlertPushDispatchResult,
 } from '../notifications/notifications.service';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { BackfillPricesDto } from './dto/backfill-prices.dto';
 import { CheckAlertsDto } from './dto/check-alerts.dto';
+import { ConfirmPromoDto } from './dto/confirm-promo.dto';
 import { CreatePriceAlertDto } from './dto/create-price-alert.dto';
 import { IngestPromoDto } from './dto/ingest-promo.dto';
 import { ListAlertEventsDto } from './dto/list-alert-events.dto';
 import { ListPromosDto } from './dto/list-promos.dto';
+import { MultiPriceCompareDto } from './dto/multi-price-compare.dto';
 import { PriceCompareQueryDto } from './dto/price-compare-query.dto';
 import { PriceHistoryQueryDto } from './dto/price-history-query.dto';
 import { PriceSignalQueryDto } from './dto/price-signal-query.dto';
@@ -48,6 +51,7 @@ import {
   deriveUnitPrice,
   evaluatePriceCandidateLocation,
   HistoryInterval,
+  isTrustedExpensePriceProvenance,
   isOutlierByRobustZ,
   roundTo,
   sourceWeightForProvenance,
@@ -105,6 +109,7 @@ export class PricesService {
     private readonly itemNormalizer: ItemNormalizerService,
     private readonly storeResolver: StoreResolverService,
     private readonly notificationsService: NotificationsService,
+    private readonly subscriptionsService: SubscriptionsService,
     private readonly storage: SupabaseStorageService,
     @Inject(OCR_PROVIDER) private readonly ocrProvider: OcrProvider,
     @Inject(EXPENSE_PARSER_PROVIDER) private readonly parserProvider: ExpenseParserProvider,
@@ -165,6 +170,11 @@ export class PricesService {
       skipped: 0,
       errors: 0,
     };
+
+    if (!isTrustedExpensePriceProvenance(expense.provenance as ExpenseProvenance)) {
+      createdOrUpdated.skipped = expense.lineItems.length || 1;
+      return createdOrUpdated;
+    }
 
     const storeContext = await this.storeResolver.resolveStore({
       merchantText: expense.merchantText,
@@ -383,6 +393,7 @@ export class PricesService {
 
   async compare(user: AuthenticatedUser, query: PriceCompareQueryDto) {
     const includePromo = query.includePromo === true && this.isPromoEnabled();
+    await this.subscriptionsService.consumeCompareSearch(user.id, 1);
     const canonicalItem = await this.itemNormalizer.findCanonicalItemByQuery(query.item);
     if (!canonicalItem) {
       return {
@@ -484,6 +495,157 @@ export class PricesService {
       },
       radiusKm: includeDistance ? query.radiusKm ?? 15 : undefined,
       rows,
+      generatedAt: new Date().toISOString(),
+      userId: user.id,
+      includePromo,
+    };
+  }
+
+  async compareMany(user: AuthenticatedUser, dto: MultiPriceCompareDto) {
+    const requestedItems = dto.items.map((item) => item.trim()).filter(Boolean);
+    if (requestedItems.length === 0) {
+      throw new BadRequestException('Provide at least one item for multi compare');
+    }
+
+    await this.subscriptionsService.consumeCompareSearch(user.id, requestedItems.length);
+
+    const includePromo = dto.includePromo === true && this.isPromoEnabled();
+    const storeMap = new Map<
+      string,
+      {
+        storeId?: string;
+        storeName?: string;
+        areaText?: string;
+        distanceKm?: number;
+        totalLatestPrice: number;
+        itemCoverage: number;
+        items: Array<{
+          item: string;
+          latestUnitPrice: number;
+          averageUnitPrice: number;
+          averageTrustScore: number;
+          sampleSize: number;
+        }>;
+      }
+    >();
+
+    const matchedItems: Array<{ query: string; canonicalName?: string }> = [];
+
+    for (const item of requestedItems) {
+      const canonicalItem = await this.itemNormalizer.findCanonicalItemByQuery(item);
+      if (!canonicalItem) {
+        matchedItems.push({ query: item });
+        continue;
+      }
+
+      matchedItems.push({ query: item, canonicalName: canonicalItem.canonicalName });
+      const observations = await this.loadPriceCandidates({
+        canonicalItemId: canonicalItem.id,
+        areaText: dto.area,
+        lat: dto.lat,
+        lng: dto.lng,
+        radiusKm: dto.radiusKm ?? 15,
+        includePromo,
+      });
+
+      const grouped = new Map<
+        string,
+        {
+          storeId?: string;
+          storeName?: string;
+          areaText?: string;
+          latestUnitPrice: number;
+          latestAt: Date;
+          unitPriceSum: number;
+          trustScoreSum: number;
+          sampleSize: number;
+          distanceKm?: number;
+        }
+      >();
+
+      for (const observation of observations) {
+        const key = observation.storeId
+          ? `store:${observation.storeId}`
+          : `area:${(observation.areaText ?? 'unknown').toLowerCase()}`;
+        const current = grouped.get(key);
+        if (!current) {
+          grouped.set(key, {
+            storeId: observation.storeId,
+            storeName: observation.storeName,
+            areaText: observation.areaText,
+            latestUnitPrice: observation.unitPrice,
+            latestAt: observation.observedAt,
+            unitPriceSum: observation.unitPrice,
+            trustScoreSum: observation.trustScore,
+            sampleSize: 1,
+            distanceKm: observation.distanceKm,
+          });
+          continue;
+        }
+
+        current.sampleSize += 1;
+        current.unitPriceSum += observation.unitPrice;
+        current.trustScoreSum += observation.trustScore;
+        if (observation.observedAt > current.latestAt) {
+          current.latestAt = observation.observedAt;
+          current.latestUnitPrice = observation.unitPrice;
+          current.distanceKm = observation.distanceKm;
+        }
+      }
+
+      for (const row of grouped.values()) {
+        const key = row.storeId
+          ? `store:${row.storeId}`
+          : `area:${(row.areaText ?? 'unknown').toLowerCase()}`;
+        if (!storeMap.has(key)) {
+          storeMap.set(key, {
+            storeId: row.storeId,
+            storeName: row.storeName,
+            areaText: row.areaText,
+            distanceKm: row.distanceKm,
+            totalLatestPrice: 0,
+            itemCoverage: 0,
+            items: [],
+          });
+        }
+        const aggregate = storeMap.get(key)!;
+        aggregate.items.push({
+          item: canonicalItem.canonicalName,
+          latestUnitPrice: roundTo(row.latestUnitPrice, 2),
+          averageUnitPrice: roundTo(row.unitPriceSum / row.sampleSize, 2),
+          averageTrustScore: roundTo(row.trustScoreSum / row.sampleSize, 4),
+          sampleSize: row.sampleSize,
+        });
+        aggregate.totalLatestPrice += row.latestUnitPrice;
+        aggregate.itemCoverage += 1;
+        if (typeof row.distanceKm === 'number') {
+          aggregate.distanceKm = row.distanceKm;
+        }
+      }
+    }
+
+    const stores = [...storeMap.values()]
+      .map((store) => ({
+        ...store,
+        totalLatestPrice: roundTo(store.totalLatestPrice, 2),
+      }))
+      .sort((a, b) => {
+        const aDistance = typeof a.distanceKm === 'number' ? a.distanceKm : Number.POSITIVE_INFINITY;
+        const bDistance = typeof b.distanceKm === 'number' ? b.distanceKm : Number.POSITIVE_INFINITY;
+        if (aDistance !== bDistance) {
+          return aDistance - bDistance;
+        }
+        return a.totalLatestPrice - b.totalLatestPrice;
+      })
+      .slice(0, dto.limit ?? 20);
+
+    return {
+      items: matchedItems,
+      radiusKm:
+        typeof dto.lat === 'number' && typeof dto.lng === 'number'
+          ? dto.radiusKm ?? 15
+          : undefined,
+      stores,
       generatedAt: new Date().toISOString(),
       userId: user.id,
       includePromo,
@@ -669,6 +831,9 @@ export class PricesService {
     if (kind === 'THRESHOLD' && typeof dto.targetUnitPrice !== 'number') {
       throw new BadRequestException('targetUnitPrice is required for threshold alerts');
     }
+    if (dto.active !== false) {
+      await this.subscriptionsService.assertCanCreateActiveAlert(user.id);
+    }
 
     const canonicalItem = await this.resolveCanonicalItemForUser(user.id, dto.item);
 
@@ -759,6 +924,10 @@ export class PricesService {
 
     if (isThreshold && !nextTargetUnitPrice && !existing.targetUnitPrice) {
       throw new BadRequestException('targetUnitPrice is required for threshold alerts');
+    }
+    const nextActive = typeof dto.active === 'boolean' ? dto.active : existing.active;
+    if (!existing.active && nextActive) {
+      await this.subscriptionsService.assertCanCreateActiveAlert(user.id);
     }
 
     let canonicalItemId: string | undefined;
@@ -1362,6 +1531,130 @@ export class PricesService {
     };
   }
 
+  async confirmPromo(user: AuthenticatedUser, dto: ConfirmPromoDto) {
+    if (!this.isPromoEnabled()) {
+      throw new ForbiddenException('Promo ingestion is disabled');
+    }
+
+    const parsedPayload = {
+      source: 'document_llm',
+      fileRefs: dto.fileRefs,
+      note: dto.note ?? null,
+      validFrom: dto.validFrom ?? null,
+      validTo: dto.validTo ?? null,
+      lineItems: dto.lineItems.map((item) => ({
+        descriptionRaw: item.descriptionRaw,
+        quantity: item.quantity ?? null,
+        unitRaw: item.unitRaw ?? null,
+        unitPrice: item.unitPrice ?? null,
+        totalPrice: item.totalPrice,
+        originalPrice: item.originalPrice ?? null,
+        promoText: item.promoText ?? null,
+        confidence: item.confidence ?? null,
+      })),
+    } as Prisma.InputJsonValue;
+
+    const ingestion = await this.prisma.promoIngestion.create({
+      data: {
+        userId: user.id,
+        fileRef: dto.fileRefs[0],
+        mimeType: dto.mimeType,
+        merchantText: dto.merchantText?.trim() || undefined,
+        areaText: dto.areaText?.trim() || undefined,
+        status: ProcessingStatus.COMPLETED,
+        parsedPayload,
+      },
+    });
+
+    const storeContext = await this.storeResolver.resolveStore({
+      merchantText: dto.merchantText,
+      areaText: dto.areaText,
+      locationLat: null,
+      locationLng: null,
+    });
+
+    let created = 0;
+    let skipped = 0;
+
+    for (const lineItem of dto.lineItems) {
+      const unitPrice = deriveUnitPrice({
+        totalPrice: lineItem.totalPrice,
+        quantity: lineItem.quantity,
+        unitPrice: lineItem.unitPrice,
+      });
+
+      if (!unitPrice || !lineItem.descriptionRaw?.trim()) {
+        skipped += 1;
+        continue;
+      }
+
+      const normalizedItem = await this.itemNormalizer.resolveCanonicalItem({
+        descriptionRaw: lineItem.descriptionRaw,
+        unitRaw: lineItem.unitRaw,
+        locale: 'en-MY',
+      });
+
+      const outlierEvaluation = await this.evaluateOutlier({
+        canonicalItemId: normalizedItem.canonicalItem.id,
+        storeId: storeContext.storeId,
+        areaText: storeContext.areaText,
+        unitPrice,
+      });
+
+      const trustScore = computeTrustScore({
+        sourceWeight: 0.76,
+        fieldConfidence: clamp01(lineItem.confidence ?? 0.82),
+        locationConfidence: storeContext.locationConfidence,
+        outlierComponent: outlierEvaluation.outlierComponent,
+      });
+
+      await this.prisma.promoObservation.create({
+        data: {
+          ingestionId: ingestion.id,
+          userId: user.id,
+          canonicalItemId: normalizedItem.canonicalItem.id,
+          storeId: storeContext.storeId,
+          areaText: storeContext.areaText,
+          currency: dto.currency,
+          quantity:
+            typeof lineItem.quantity === 'number' && lineItem.quantity > 0
+              ? new Prisma.Decimal(lineItem.quantity)
+              : undefined,
+          unitRaw: lineItem.unitRaw,
+          unitPrice: new Prisma.Decimal(unitPrice),
+          totalPrice:
+            typeof lineItem.totalPrice === 'number'
+              ? new Prisma.Decimal(lineItem.totalPrice)
+              : undefined,
+          trustScore: new Prisma.Decimal(trustScore),
+          reviewStatus: PromoReviewStatus.APPROVED,
+          validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
+          validTo: dto.validTo ? new Date(dto.validTo) : undefined,
+          metadata: {
+            source: 'promo_document_llm',
+            note: dto.note ?? null,
+            promoText: lineItem.promoText ?? null,
+            originalPrice: lineItem.originalPrice ?? null,
+            confidence: lineItem.confidence ?? null,
+            canonicalization: {
+              aliasText: normalizedItem.aliasText,
+              confidence: normalizedItem.confidence,
+            },
+          } satisfies Prisma.InputJsonValue,
+        },
+      });
+      created += 1;
+    }
+
+    return {
+      ingestionId: ingestion.id,
+      status: ProcessingStatus.COMPLETED,
+      created,
+      skipped,
+      reviewStatus: PromoReviewStatus.APPROVED,
+    };
+  }
+
   async ingestPromo(user: AuthenticatedUser, dto: IngestPromoDto) {
     if (!this.isPromoEnabled()) {
       throw new ForbiddenException('Promo ingestion is disabled');
@@ -1594,6 +1887,7 @@ export class PricesService {
   }): Promise<PriceCandidate[]> {
     const expenseWhere: Prisma.PriceObservationWhereInput = {
       canonicalItemId: input.canonicalItemId,
+      provenance: ExpenseProvenance.RECEIPT_OCR,
     };
 
     if (input.storeId) {
@@ -1999,6 +2293,7 @@ export class PricesService {
     const threshold = Number(this.config.get<string>('PRICE_OUTLIER_ZSCORE_THRESHOLD') ?? '3.5');
     const where: Prisma.PriceObservationWhereInput = {
       canonicalItemId: input.canonicalItemId,
+      provenance: ExpenseProvenance.RECEIPT_OCR,
     };
 
     if (input.storeId) {

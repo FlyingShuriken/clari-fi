@@ -16,6 +16,7 @@ import {
 import { QueueService } from '../../infrastructure/queue/queue.service';
 import { SupabaseStorageService } from '../../infrastructure/storage/storage.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import { ParseDocumentDto } from './dto/parse-document.dto';
 import { ParseReceiptDto } from './dto/parse-receipt.dto';
 import { ParseVoiceDto } from './dto/parse-voice.dto';
 
@@ -30,6 +31,43 @@ export class ParseService {
     private readonly queueService: QueueService,
     private readonly metrics: MetricsService,
   ) {}
+
+  private async resolveDocumentImages(input: {
+    fileRefs?: string[];
+    imageBase64s?: string[];
+    mimeType?: string;
+  }) {
+    const images = input.imageBase64s?.map((imageBase64) => ({
+      imageBase64,
+      mimeType: input.mimeType ?? 'image/jpeg',
+    })) ?? [];
+
+    const fileRefs = input.fileRefs?.filter((value) => value.trim()) ?? [];
+    for (const fileRef of fileRefs) {
+      if (fileRef.startsWith('local://')) {
+        continue;
+      }
+      const downloaded = await this.storage.downloadAsBase64(fileRef);
+      if (!downloaded) {
+        throw new BadRequestException(`Unable to download artifact ${fileRef}`);
+      }
+      images.push({
+        imageBase64: downloaded,
+        mimeType: input.mimeType ?? 'image/jpeg',
+      });
+    }
+
+    if (images.length === 0) {
+      if (fileRefs.some((fileRef) => fileRef.startsWith('local://'))) {
+        throw new BadRequestException(
+          'Local artifact refs require inline image data. Retry from the app after reselecting the images.',
+        );
+      }
+      throw new BadRequestException('Provide fileRefs or imageBase64s for document parsing');
+    }
+
+    return images;
+  }
 
   async parseVoice(user: AuthenticatedUser, dto: ParseVoiceDto) {
     const startedAt = Date.now();
@@ -140,6 +178,83 @@ export class ParseService {
         fallbackUsed: parserMeta?.fallbackUsed ?? false,
         shadowCompared: parserMeta?.shadowCompared ?? false,
         shadowMismatchFields: parserMeta?.shadowMismatchFields ?? [],
+      },
+    };
+  }
+
+  async parseDocument(user: AuthenticatedUser, dto: ParseDocumentDto) {
+    const startedAt = Date.now();
+    const images = await this.resolveDocumentImages({
+      fileRefs: dto.fileRefs,
+      imageBase64s: dto.imageBase64s,
+      mimeType: dto.mimeType,
+    });
+
+    const parsed = await this.parserProvider.parseDocumentImages({
+      images,
+      preferredKind: dto.preferredKind,
+    });
+    const parseLatencyMs = Date.now() - startedAt;
+
+    this.metrics.trackTiming('parse.document.latency_ms', parseLatencyMs, {
+      userId: user.id,
+      documentKind: parsed.documentKind,
+    });
+
+    if (parsed.documentKind === 'receipt') {
+      return {
+        documentKind: 'receipt' as const,
+        confidence: parsed.confidence,
+        candidate: {
+          source: 'RECEIPT' as const,
+          provenance: 'RECEIPT_OCR' as const,
+          transactionAt: parsed.receipt.receiptDate ?? new Date().toISOString(),
+          merchantText: parsed.receipt.merchantText,
+          note: parsed.receipt.note,
+          totalAmount: parsed.receipt.totalAmount,
+          currency: parsed.receipt.currency,
+          lineItems: parsed.receipt.lineItems,
+        },
+        fileRefs: dto.fileRefs ?? [],
+        parseMeta: {
+          parsePath: 'DOCUMENT_LLM',
+          parseLatencyMs,
+          parserEngine: parsed.receipt.parserMeta?.engine ?? 'openrouter',
+        },
+      };
+    }
+
+    if (parsed.documentKind === 'flyer') {
+      return {
+        documentKind: 'flyer' as const,
+        confidence: parsed.confidence,
+        candidate: {
+          merchantText: parsed.flyer.merchantText,
+          areaText: parsed.flyer.areaText,
+          note: parsed.flyer.note,
+          validFrom: parsed.flyer.validFrom,
+          validTo: parsed.flyer.validTo,
+          currency: parsed.flyer.currency,
+          lineItems: parsed.flyer.lineItems,
+        },
+        fileRefs: dto.fileRefs ?? [],
+        parseMeta: {
+          parsePath: 'DOCUMENT_LLM',
+          parseLatencyMs,
+          parserEngine: parsed.flyer.parserMeta?.engine ?? 'openrouter',
+        },
+      };
+    }
+
+    return {
+      documentKind: 'unknown' as const,
+      confidence: parsed.confidence,
+      reason: parsed.reason ?? 'Could not classify the uploaded document.',
+      fileRefs: dto.fileRefs ?? [],
+      parseMeta: {
+        parsePath: 'DOCUMENT_LLM',
+        parseLatencyMs,
+        parserEngine: 'openrouter' as const,
       },
     };
   }

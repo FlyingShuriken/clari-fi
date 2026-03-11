@@ -27,6 +27,8 @@ export interface ParsedLineItem {
   unitPrice?: number;
   totalPrice: number;
   confidence?: number;
+  originalPrice?: number;
+  promoText?: string;
 }
 
 export type ExpenseParserEngine = 'heuristic' | 'openrouter';
@@ -68,6 +70,41 @@ export interface ParsedReceiptResult {
   parserMeta?: ExpenseParserMeta;
 }
 
+export interface ParsedFlyerResult {
+  merchantText?: string;
+  areaText?: string;
+  note?: string;
+  validFrom?: string;
+  validTo?: string;
+  currency: 'MYR' | 'SGD' | 'USD';
+  lineItems: ParsedLineItem[];
+  confidenceMap: Record<string, number>;
+  parserMeta?: ExpenseParserMeta;
+}
+
+export interface DocumentImageInput {
+  imageBase64?: string;
+  imageUrl?: string;
+  mimeType?: string;
+}
+
+export type ParsedImageDocumentResult =
+  | {
+      documentKind: 'receipt';
+      confidence: number;
+      receipt: ParsedReceiptResult;
+    }
+  | {
+      documentKind: 'flyer';
+      confidence: number;
+      flyer: ParsedFlyerResult;
+    }
+  | {
+      documentKind: 'unknown';
+      confidence: number;
+      reason?: string;
+    };
+
 export interface SttProvider {
   transcribe(input: SttTranscribeInput): Promise<SttTranscribeResult>;
 }
@@ -79,6 +116,10 @@ export interface OcrProvider {
 export interface ExpenseParserProvider {
   parseVoiceTranscript(transcript: string): Promise<ParsedExpenseResult>;
   parseReceipt(rawText: string): Promise<ParsedReceiptResult>;
+  parseDocumentImages(input: {
+    images: DocumentImageInput[];
+    preferredKind?: 'receipt' | 'flyer';
+  }): Promise<ParsedImageDocumentResult>;
 }
 
 export const STT_PROVIDER = Symbol('STT_PROVIDER');
