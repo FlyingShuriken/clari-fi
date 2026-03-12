@@ -48,6 +48,7 @@ import {
 import {
   clamp01,
   computeTrustScore,
+  derivePromoUnitPrice,
   deriveUnitPrice,
   evaluatePriceCandidateLocation,
   HistoryInterval,
@@ -1577,7 +1578,7 @@ export class PricesService {
     let skipped = 0;
 
     for (const lineItem of dto.lineItems) {
-      const unitPrice = deriveUnitPrice({
+      const unitPrice = derivePromoUnitPrice({
         totalPrice: lineItem.totalPrice,
         quantity: lineItem.quantity,
         unitPrice: lineItem.unitPrice,
@@ -1692,7 +1693,7 @@ export class PricesService {
       let skipped = 0;
 
       for (const lineItem of parsed.lineItems) {
-        const unitPrice = deriveUnitPrice({
+        const unitPrice = derivePromoUnitPrice({
           totalPrice: lineItem.totalPrice,
           quantity: lineItem.quantity,
           unitPrice: lineItem.unitPrice,

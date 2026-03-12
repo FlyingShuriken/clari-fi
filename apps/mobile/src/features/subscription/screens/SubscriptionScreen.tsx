@@ -7,15 +7,33 @@ import { Colors } from '../../../theme';
 
 type PlanChoice = 'FREE' | 'PREMIUM';
 
-function formatPrice(value: number) {
-  return `RM ${value.toFixed(2)}`;
-}
+const FREE_FEATURES = [
+  'STT & OCR capture',
+  'Full ledger & overview',
+  '1 item per search',
+  '15 searches / month',
+  '1 price alert',
+  '1 extra family member',
+];
+
+const PREMIUM_FEATURES = [
+  'Everything in Free',
+  '10 items per search',
+  '30 searches / month',
+  '5 active price alerts',
+  '2 extra family members',
+];
 
 export function SubscriptionScreen() {
   const controller = useClariFiController();
   const insets = useSafeAreaInsets();
-  const pulse = useRef(new Animated.Value(0)).current;
-  const [selectedPlan, setSelectedPlan] = useState<PlanChoice>(controller.subscription?.plan ?? 'PREMIUM');
+  const glowScale = useRef(new Animated.Value(1)).current;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
+  const crownScale = useRef(new Animated.Value(1)).current;
+
+  const [selectedPlan, setSelectedPlan] = useState<PlanChoice>(
+    controller.subscription?.plan ?? 'PREMIUM',
+  );
   const [addonCount, setAddonCount] = useState(controller.subscription?.addonCount ?? 0);
 
   useEffect(() => {
@@ -23,17 +41,30 @@ export function SubscriptionScreen() {
     setAddonCount(controller.subscription?.addonCount ?? 0);
   }, [controller.subscription?.addonCount, controller.subscription?.plan]);
 
+  // Gentle crown pulse
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(crownScale, {
+          toValue: 1.07,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(crownScale, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [crownScale]);
+
   const preview = useMemo(() => {
     if (selectedPlan === 'FREE') {
-      return {
-        itemsPerSearch: 1,
-        searchesPerMonth: 15,
-        activeAlerts: 1,
-        additionalMembers: 1,
-        monthlyPriceRm: 0,
-      };
+      return { itemsPerSearch: 1, searchesPerMonth: 15, activeAlerts: 1, additionalMembers: 1, monthlyPriceRm: 0 };
     }
-
     return {
       itemsPerSearch: 10 + addonCount * 5,
       searchesPerMonth: 30 + addonCount * 30,
@@ -43,166 +74,244 @@ export function SubscriptionScreen() {
     };
   }, [addonCount, selectedPlan]);
 
+  const isCurrentPlan =
+    controller.subscription?.plan === selectedPlan &&
+    (selectedPlan === 'FREE' || controller.subscription?.addonCount === addonCount);
+
   const handleUnlock = async () => {
     await controller.updateSubscriptionPlan(selectedPlan, addonCount);
-    pulse.setValue(0);
+    // Unlock burst animation
     Animated.sequence([
-      Animated.timing(pulse, {
-        toValue: 1,
-        duration: 220,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-      Animated.timing(pulse, {
-        toValue: 0,
-        duration: 320,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
-      }),
+      Animated.parallel([
+        Animated.timing(glowOpacity, { toValue: 0.4, duration: 200, useNativeDriver: true }),
+        Animated.timing(glowScale, { toValue: 1.6, duration: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      ]),
+      Animated.parallel([
+        Animated.timing(glowOpacity, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(glowScale, { toValue: 1, duration: 400, useNativeDriver: true }),
+      ]),
+    ]).start();
+    Animated.sequence([
+      Animated.timing(crownScale, { toValue: 1.35, duration: 180, useNativeDriver: true }),
+      Animated.spring(crownScale, { toValue: 1, friction: 4, useNativeDriver: true }),
     ]).start();
   };
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 28 }]}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.hero}>
-        <View style={styles.heroBadge}>
-          <MaterialCommunityIcons name="star-four-points-outline" size={14} color={Colors.green} />
-          <Text style={styles.heroBadgeText}>Mock subscription</Text>
-        </View>
-        <Text style={styles.title}>Choose your ClariFi plan</Text>
-        <Text style={styles.subtitle}>
-          Unlock more compare capacity, more alerts, and larger family sharing without changing your core expense flow.
-        </Text>
-      </View>
-
+    <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
+      {/* Unlock glow burst */}
       <Animated.View
         pointerEvents="none"
-        style={[
-          styles.successGlow,
-          {
-            opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0, 0.32] }),
-            transform: [
-              {
-                scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1.12] }),
-              },
-            ],
-          },
-        ]}
+        style={[styles.glowBurst, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]}
       />
 
-      <View style={styles.planGrid}>
-        {(['FREE', 'PREMIUM'] as const).map((plan) => {
-          const active = selectedPlan === plan;
-          const current = controller.subscription?.plan === plan;
-          return (
-            <TouchableOpacity
-              key={plan}
-              style={[styles.planCard, active && styles.planCardActive]}
-              onPress={() => setSelectedPlan(plan)}
-              activeOpacity={0.9}
-            >
-              <View style={styles.planHeader}>
-                <Text style={styles.planName}>{plan === 'FREE' ? 'Free' : 'Premium'}</Text>
-                {current ? (
-                  <View style={styles.currentPill}>
-                    <Text style={styles.currentPillText}>Current</Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text style={styles.planPrice}>
-                {plan === 'FREE' ? 'RM 0' : 'RM 5.99'}
-                <Text style={styles.planPriceSuffix}> / month</Text>
-              </Text>
-              <Text style={styles.planCopy}>
-                {plan === 'FREE'
-                  ? 'Core capture and a light price-intelligence allowance.'
-                  : 'Best for active shoppers and shared households.'}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scroll, { paddingTop: insets.top > 0 ? 8 : 16 }]}
+      >
+        {/* Hero */}
+        <View style={styles.hero}>
+          <View style={styles.heroGlowAccent} />
+          <Animated.View style={[styles.crownBadge, { transform: [{ scale: crownScale }] }]}>
+            <MaterialCommunityIcons name="crown" size={30} color="#fff" />
+          </Animated.View>
+          <Text style={styles.heroTitle}>ClariFi Premium</Text>
+          <Text style={styles.heroSub}>Unlock more capacity, smarter price tracking{'\n'}and expanded family sharing</Text>
+          <View style={styles.starsRow}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <MaterialCommunityIcons key={i} name="star" size={14} color={Colors.amber} />
+            ))}
+          </View>
+        </View>
 
-      {selectedPlan === 'PREMIUM' ? (
-        <View style={styles.addonCard}>
-          <View style={styles.addonHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Capacity add-ons</Text>
-              <Text style={styles.sectionHint}>RM 1.99 each</Text>
+        {/* Plan cards side by side */}
+        <View style={styles.planRow}>
+          {(['FREE', 'PREMIUM'] as const).map((plan) => {
+            const active = selectedPlan === plan;
+            const isCurrent = controller.subscription?.plan === plan;
+            return (
+              <TouchableOpacity
+                key={plan}
+                onPress={() => setSelectedPlan(plan)}
+                activeOpacity={0.85}
+                style={[styles.planCard, active && (plan === 'PREMIUM' ? styles.planCardPremiumActive : styles.planCardFreeActive)]}
+              >
+                {/* Badge row */}
+                <View style={styles.planBadgeRow}>
+                  <View style={[styles.planBadge, plan === 'PREMIUM' && active && styles.planBadgePremium]}>
+                    <Text style={[styles.planBadgeText, plan === 'PREMIUM' && active && styles.planBadgeTextPremium]}>
+                      {isCurrent ? 'CURRENT' : plan === 'PREMIUM' ? 'POPULAR' : 'FREE'}
+                    </Text>
+                  </View>
+                  {active && (
+                    <MaterialCommunityIcons
+                      name="check-circle"
+                      size={15}
+                      color={plan === 'PREMIUM' ? Colors.green : Colors.textSecondary}
+                    />
+                  )}
+                </View>
+
+                <Text style={[styles.planName, plan === 'PREMIUM' && active && styles.planNamePremium]}>
+                  {plan === 'FREE' ? 'Free' : 'Premium'}
+                </Text>
+
+                <View style={styles.priceRow}>
+                  <Text style={[styles.priceAmt, plan === 'PREMIUM' && active && styles.priceAmtPremium]}>
+                    {plan === 'FREE' ? 'RM 0' : 'RM 5.99'}
+                  </Text>
+                  <Text style={styles.pricePer}>/mo</Text>
+                </View>
+
+                <View style={styles.cardDivider} />
+
+                {(plan === 'FREE' ? FREE_FEATURES : PREMIUM_FEATURES).map((f, i) => (
+                  <View key={i} style={styles.featureRow}>
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={10}
+                      color={plan === 'PREMIUM' && i === PREMIUM_FEATURES.length - 1 ? Colors.amber : Colors.green}
+                    />
+                    <Text
+                      style={[
+                        styles.featureText,
+                        plan === 'PREMIUM' && i === PREMIUM_FEATURES.length - 1 && styles.featureTextAmber,
+                      ]}
+                    >
+                      {f}
+                    </Text>
+                  </View>
+                ))}
+
+                {plan === 'PREMIUM' && (
+                  <View style={styles.addonHint}>
+                    <MaterialCommunityIcons name="lightning-bolt" size={10} color={Colors.amber} />
+                    <Text style={styles.addonHintText}>Add-on packs available</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Add-on packs */}
+        {selectedPlan === 'PREMIUM' && (
+          <View style={styles.addonCard}>
+            <View style={styles.addonTop}>
+              <View>
+                <Text style={styles.addonTitle}>Add-on Pack</Text>
+                <Text style={styles.addonPrice}>RM 1.99 / pack / month</Text>
+              </View>
+              <View style={styles.stepper}>
+                <TouchableOpacity
+                  style={styles.stepperBtn}
+                  onPress={() => setAddonCount((n) => Math.max(0, n - 1))}
+                >
+                  <MaterialCommunityIcons name="minus" size={16} color={Colors.textSecondary} />
+                </TouchableOpacity>
+                <Text style={styles.stepperVal}>{addonCount}</Text>
+                <TouchableOpacity
+                  style={styles.stepperBtnGreen}
+                  onPress={() => setAddonCount((n) => Math.min(8, n + 1))}
+                >
+                  <MaterialCommunityIcons name="plus" size={16} color={Colors.green} />
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.stepper}>
-              <TouchableOpacity
-                style={styles.stepperBtn}
-                onPress={() => setAddonCount((count) => Math.max(0, count - 1))}
-              >
-                <MaterialCommunityIcons name="minus" size={16} color={Colors.textPrimary} />
-              </TouchableOpacity>
-              <Text style={styles.stepperValue}>{addonCount}</Text>
-              <TouchableOpacity
-                style={styles.stepperBtn}
-                onPress={() => setAddonCount((count) => Math.min(8, count + 1))}
-              >
-                <MaterialCommunityIcons name="plus" size={16} color={Colors.textPrimary} />
-              </TouchableOpacity>
+
+            <View style={styles.addonDivider} />
+
+            <View style={styles.addonBenefitRow}>
+              <MaterialCommunityIcons name="lightning-bolt" size={12} color={Colors.amber} />
+              <Text style={styles.addonBenefitText}>+5 items/search · +30 searches/month</Text>
+            </View>
+            <View style={styles.addonBenefitRow}>
+              <MaterialCommunityIcons name="lightning-bolt" size={12} color={Colors.amber} />
+              <Text style={styles.addonBenefitText}>+5 active alerts · +1 family member</Text>
+            </View>
+
+            {addonCount > 0 && (
+              <View style={styles.addonSummary}>
+                <Text style={styles.addonSumLabel}>
+                  {addonCount} pack{addonCount > 1 ? 's' : ''} selected
+                </Text>
+                <Text style={styles.addonSumPrice}>= RM {preview.monthlyPriceRm.toFixed(2)}/mo</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Limits preview */}
+        <View style={styles.limitsCard}>
+          <Text style={styles.sectionTitle}>Your limits with this plan</Text>
+          {[
+            { label: 'Items per compare', value: String(preview.itemsPerSearch) },
+            { label: 'Monthly searches', value: String(preview.searchesPerMonth) },
+            { label: 'Active price alerts', value: String(preview.activeAlerts) },
+            { label: 'Extra family members', value: String(preview.additionalMembers) },
+          ].map((row) => (
+            <View key={row.label} style={styles.limitRow}>
+              <Text style={styles.limitLabel}>{row.label}</Text>
+              <Text style={styles.limitVal}>{row.value}</Text>
+            </View>
+          ))}
+          <View style={styles.limitRowTotal}>
+            <Text style={styles.limitLabel}>Monthly total</Text>
+            <Text style={styles.limitValAccent}>
+              {selectedPlan === 'FREE' ? 'RM 0.00' : `RM ${preview.monthlyPriceRm.toFixed(2)}`}
+            </Text>
+          </View>
+        </View>
+
+        {/* Current usage */}
+        {controller.subscription && (
+          <View style={styles.usageCard}>
+            <Text style={styles.sectionTitle}>This month's usage</Text>
+            <View style={styles.limitRow}>
+              <Text style={styles.limitLabel}>Compare searches</Text>
+              <Text style={styles.limitVal}>
+                {controller.subscription.compare.usedThisMonth} / {controller.subscription.compare.searchesPerMonth}
+              </Text>
+            </View>
+            <View style={styles.limitRow}>
+              <Text style={styles.limitLabel}>Active alerts</Text>
+              <Text style={styles.limitVal}>
+                {controller.subscription.alerts.activeCount} / {controller.subscription.alerts.activeLimit}
+              </Text>
+            </View>
+            <View style={styles.limitRow}>
+              <Text style={styles.limitLabel}>Family capacity</Text>
+              <Text style={styles.limitVal}>owner + {controller.subscription.family.additionalMembersAllowed}</Text>
             </View>
           </View>
-          <Text style={styles.addonCopy}>
-            Each add-on adds 5 more basket items, 30 more monthly compare searches, 5 more active alerts, and 1 more family member.
-          </Text>
-        </View>
-      ) : null}
+        )}
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.sectionTitle}>Your active limits</Text>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Items per compare</Text>
-          <Text style={styles.metricValue}>{preview.itemsPerSearch}</Text>
-        </View>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Monthly compare searches</Text>
-          <Text style={styles.metricValue}>{preview.searchesPerMonth}</Text>
-        </View>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Active price alerts</Text>
-          <Text style={styles.metricValue}>{preview.activeAlerts}</Text>
-        </View>
-        <View style={styles.metricRow}>
-          <Text style={styles.metricLabel}>Additional family members</Text>
-          <Text style={styles.metricValue}>{preview.additionalMembers}</Text>
-        </View>
-        <View style={[styles.metricRow, styles.metricRowTotal]}>
-          <Text style={styles.metricLabel}>Preview total</Text>
-          <Text style={styles.metricValueAccent}>
-            {selectedPlan === 'FREE' ? 'RM 0.00' : formatPrice(preview.monthlyPriceRm)}
+        {/* CTA */}
+        <TouchableOpacity
+          style={[styles.ctaBtn, isCurrentPlan && styles.ctaBtnDisabled]}
+          onPress={handleUnlock}
+          disabled={controller.loading || isCurrentPlan}
+          activeOpacity={0.88}
+        >
+          <MaterialCommunityIcons
+            name="crown"
+            size={18}
+            color={isCurrentPlan ? Colors.textSecondary : Colors.bg}
+          />
+          <Text style={[styles.ctaBtnText, isCurrentPlan && styles.ctaBtnTextDisabled]}>
+            {isCurrentPlan
+              ? 'This is your current plan'
+              : selectedPlan === 'FREE'
+              ? 'Switch to Free'
+              : `Unlock Premium · RM ${preview.monthlyPriceRm.toFixed(2)}/mo`}
           </Text>
-        </View>
-      </View>
+        </TouchableOpacity>
 
-      {controller.subscription ? (
-        <View style={styles.usageCard}>
-          <Text style={styles.sectionTitle}>Current usage</Text>
-          <Text style={styles.usageLine}>
-            Compare searches: {controller.subscription.compare.usedThisMonth} / {controller.subscription.compare.searchesPerMonth}
-          </Text>
-          <Text style={styles.usageLine}>
-            Active alerts: {controller.subscription.alerts.activeCount} / {controller.subscription.alerts.activeLimit}
-          </Text>
-          <Text style={styles.usageLine}>
-            Family capacity: owner + {controller.subscription.family.additionalMembersAllowed}
-          </Text>
-        </View>
-      ) : null}
-
-      <TouchableOpacity style={styles.ctaBtn} onPress={handleUnlock} disabled={controller.loading}>
-        <Text style={styles.ctaBtnText}>
-          {selectedPlan === 'FREE' ? 'Use free plan' : 'Unlock premium mock'}
+        <Text style={styles.terms}>
+          Cancel anytime · Auto-renews monthly · Mock payment only
         </Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -211,194 +320,342 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bg,
   },
-  content: {
-    paddingHorizontal: 20,
-    gap: 16,
+  glowBurst: {
+    position: 'absolute',
+    top: 120,
+    alignSelf: 'center',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: Colors.green,
+    zIndex: 0,
   },
+  scroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 36,
+    gap: 14,
+  },
+
+  // Hero
   hero: {
+    backgroundColor: '#0A0A18',
+    borderRadius: 28,
+    padding: 28,
+    alignItems: 'center',
+    gap: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#1E1040',
+  },
+  heroGlowAccent: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#6366F128',
+  },
+  crownBadge: {
+    width: 70,
+    height: 70,
+    borderRadius: 20,
+    backgroundColor: '#1A0A3E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#8B5CF6',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  heroTitle: {
+    color: Colors.textPrimary,
+    fontSize: 26,
+    fontWeight: '700',
+    fontFamily: 'Georgia',
+    letterSpacing: -0.5,
+  },
+  heroSub: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  starsRow: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+
+  // Plan cards
+  planRow: {
+    flexDirection: 'row',
     gap: 10,
   },
-  heroBadge: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.greenDim,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  heroBadgeText: {
-    color: Colors.green,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  title: {
-    color: Colors.textPrimary,
-    fontSize: 32,
-    fontWeight: '700',
-    letterSpacing: -1,
-  },
-  subtitle: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  successGlow: {
-    position: 'absolute',
-    top: 110,
-    right: 24,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: Colors.green,
-  },
-  planGrid: {
-    gap: 12,
-  },
   planCard: {
-    borderRadius: 24,
-    padding: 18,
+    flex: 1,
     backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 14,
+    gap: 6,
     borderWidth: 1,
     borderColor: Colors.border,
-    gap: 8,
   },
-  planCardActive: {
+  planCardFreeActive: {
+    borderColor: Colors.textSecondary,
+  },
+  planCardPremiumActive: {
+    backgroundColor: '#091610',
     borderColor: Colors.green,
-    backgroundColor: Colors.surfaceHigh,
   },
-  planHeader: {
+  planBadgeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  planBadge: {
+    backgroundColor: Colors.surfaceHigh,
+    borderRadius: 99,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  planBadgePremium: {
+    backgroundColor: Colors.greenDim,
+  },
+  planBadgeText: {
+    color: Colors.textSecondary,
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  planBadgeTextPremium: {
+    color: Colors.green,
+  },
   planName: {
     color: Colors.textPrimary,
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
+    marginTop: 2,
   },
-  currentPill: {
-    backgroundColor: Colors.greenDim,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-  },
-  currentPillText: {
+  planNamePremium: {
     color: Colors.green,
-    fontSize: 11,
-    fontWeight: '700',
   },
-  planPrice: {
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
+  },
+  priceAmt: {
     color: Colors.textPrimary,
-    fontSize: 26,
+    fontSize: 21,
     fontWeight: '700',
   },
-  planPriceSuffix: {
+  priceAmtPremium: {
+    color: Colors.green,
+  },
+  pricePer: {
     color: Colors.textSecondary,
-    fontSize: 13,
+    fontSize: 11,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
+    marginVertical: 4,
+  },
+  featureRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 5,
+  },
+  featureText: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    flex: 1,
+    lineHeight: 16,
+  },
+  featureTextAmber: {
+    color: Colors.amber,
+  },
+  addonHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  addonHintText: {
+    color: Colors.amber,
+    fontSize: 11,
     fontWeight: '500',
   },
-  planCopy: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
-  },
+
+  // Add-on card
   addonCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 18,
-    gap: 12,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: `${Colors.amber}50`,
   },
-  addonHeader: {
+  addonTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  sectionTitle: {
+  addonTitle: {
     color: Colors.textPrimary,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
   },
-  sectionHint: {
-    color: Colors.textSecondary,
-    fontSize: 12,
+  addonPrice: {
+    color: Colors.amber,
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 2,
   },
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
+    backgroundColor: Colors.surfaceHigh,
+    borderRadius: 99,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
   },
   stepperBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.surfaceHigh,
+    width: 22,
+    height: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepperValue: {
+  stepperBtnGreen: {
+    width: 22,
+    height: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperVal: {
     color: Colors.textPrimary,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    minWidth: 18,
+    minWidth: 16,
     textAlign: 'center',
   },
-  addonCopy: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
+  addonDivider: {
+    height: 1,
+    backgroundColor: Colors.border,
   },
-  summaryCard: {
+  addonBenefitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  addonBenefitText: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+  },
+  addonSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: `${Colors.amber}14`,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 2,
+  },
+  addonSumLabel: {
+    color: Colors.amber,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  addonSumPrice: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // Limits + Usage
+  limitsCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 18,
     gap: 10,
-  },
-  metricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  metricRowTotal: {
-    marginTop: 6,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-  },
-  metricLabel: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-  metricValue: {
-    color: Colors.textPrimary,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  metricValueAccent: {
-    color: Colors.green,
-    fontSize: 16,
-    fontWeight: '700',
   },
   usageCard: {
     backgroundColor: Colors.surface,
     borderRadius: 20,
     padding: 18,
-    gap: 8,
+    gap: 10,
   },
-  usageLine: {
+  sectionTitle: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  limitRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  limitRowTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    paddingTop: 10,
+    marginTop: 2,
+  },
+  limitLabel: {
     color: Colors.textSecondary,
     fontSize: 13,
   },
+  limitVal: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  limitValAccent: {
+    color: Colors.green,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // CTA
   ctaBtn: {
-    backgroundColor: Colors.green,
-    borderRadius: 20,
-    paddingVertical: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.green,
+    borderRadius: 99,
+    height: 56,
+    shadowColor: Colors.green,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  ctaBtnDisabled: {
+    backgroundColor: Colors.surfaceHigh,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   ctaBtnText: {
     color: Colors.bg,
     fontSize: 15,
     fontWeight: '700',
+  },
+  ctaBtnTextDisabled: {
+    color: Colors.textSecondary,
+  },
+  terms: {
+    color: Colors.textMuted,
+    fontSize: 11,
+    textAlign: 'center',
+    lineHeight: 17,
   },
 });

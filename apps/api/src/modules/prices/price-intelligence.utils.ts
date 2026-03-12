@@ -46,6 +46,23 @@ export function deriveUnitPrice(input: {
   return null;
 }
 
+export function derivePromoUnitPrice(input: {
+  totalPrice: number;
+  quantity?: number | null;
+  unitPrice?: number | null;
+}): number | null {
+  const derived = deriveUnitPrice(input);
+  if (derived !== null) {
+    return derived;
+  }
+
+  if (Number.isFinite(input.totalPrice) && input.totalPrice > 0) {
+    return roundTo(input.totalPrice, 2);
+  }
+
+  return null;
+}
+
 export function sourceWeightForProvenance(provenance: ExpenseProvenance): number {
   if (provenance === ExpenseProvenance.RECEIPT_OCR) {
     return 0.95;

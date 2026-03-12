@@ -1,19 +1,26 @@
 import { useEffect, useRef } from 'react';
 import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
   Animated,
   Dimensions,
+  Linking,
   Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../../theme';
 import type { StoreAggregate } from '../types/store-aggregate';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const SHEET_HEIGHT = SCREEN_HEIGHT * 0.55;
+const SHEET_HEIGHT = SCREEN_HEIGHT * 0.62;
+
+function pctChange(latest: number, avg: number): number {
+  if (avg === 0) return 0;
+  return ((latest - avg) / avg) * 100;
+}
 
 interface StoreBottomSheetProps {
   store: StoreAggregate | null;
@@ -29,85 +36,127 @@ export function StoreBottomSheet({ store, visible, onDismiss, formatCurrency }: 
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
+        Animated.timing(translateY, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: SHEET_HEIGHT,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
+        Animated.timing(translateY, { toValue: SHEET_HEIGHT, duration: 250, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0, duration: 250, useNativeDriver: true }),
       ]).start();
     }
   }, [visible, translateY, opacity]);
 
   if (!store) return null;
 
+  const totalAvg = store.items.reduce((s, i) => s + i.averageUnitPrice, 0);
+  const save = totalAvg - store.totalLatestPrice;
+  const totalPct = pctChange(store.totalLatestPrice, totalAvg);
+
+  const handleDirections = () => {
+    const q = encodeURIComponent(`${store.storeName} ${store.areaText ?? ''}`.trim());
+    void Linking.openURL(`https://maps.google.com/?q=${q}`);
+  };
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
       <Animated.View style={[styles.backdrop, { opacity }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
       </Animated.View>
+
       <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
         <View style={styles.handle} />
-        <View style={styles.header}>
-          <View style={styles.headerInfo}>
+
+        {/* Store header */}
+        <View style={styles.storeHeader}>
+          <View style={styles.storeIconWrap}>
+            <MaterialCommunityIcons name="cart-outline" size={22} color={Colors.bg} />
+          </View>
+          <View style={styles.storeInfo}>
             <Text style={styles.storeName}>{store.storeName}</Text>
-            {store.areaText ? <Text style={styles.areaText}>{store.areaText}</Text> : null}
-            <Text style={styles.distance}>
+            <Text style={styles.storeMeta}>
               {store.distanceKm < 1
-                ? `${(store.distanceKm * 1000).toFixed(0)}m away`
-                : `${store.distanceKm.toFixed(1)}km away`}
+                ? `${(store.distanceKm * 1000).toFixed(0)}m`
+                : `${store.distanceKm.toFixed(1)} km`}
+              {store.areaText ? ` · ${store.areaText}` : ''}
             </Text>
           </View>
-          <TouchableOpacity onPress={onDismiss} hitSlop={12}>
-            <MaterialCommunityIcons name="close" size={24} color={Colors.textSecondary} />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.body}>
-          <View style={styles.tableHeader}>
-            <Text style={[styles.colLabel, styles.colItem]}>Item</Text>
-            <Text style={[styles.colLabel, styles.colPrice]}>Latest</Text>
-            <Text style={[styles.colLabel, styles.colPrice]}>Avg</Text>
-          </View>
-          {store.items.map((item) => (
-            <View key={item.itemName} style={styles.tableRow}>
-              <Text style={[styles.cellItem, styles.colItem]} numberOfLines={1}>
-                {item.itemName}
-              </Text>
-              <Text style={[styles.cellPrice, styles.colPrice]}>
-                {formatCurrency(item.latestUnitPrice)}
-              </Text>
-              <Text style={[styles.cellAvg, styles.colPrice]}>
-                {formatCurrency(item.averageUnitPrice)}
+          {totalPct !== 0 && (
+            <View style={[styles.vsAvgBadge, save >= 0 ? styles.vsAvgGood : styles.vsAvgBad]}>
+              <Text style={[styles.vsAvgBadgeText, save >= 0 ? styles.vsAvgGoodText : styles.vsAvgBadText]}>
+                {save >= 0 ? '↓' : '↑'}{Math.abs(totalPct).toFixed(0)}% vs avg
               </Text>
             </View>
-          ))}
-          <View style={styles.totalRow}>
-            <Text style={[styles.totalLabel, styles.colItem]}>Total</Text>
-            <Text style={[styles.totalValue, styles.colPrice]}>
-              {formatCurrency(store.totalLatestPrice)}
-            </Text>
-            <Text style={[styles.totalAvg, styles.colPrice]}>
-              {formatCurrency(store.items.reduce((s, i) => s + i.averageUnitPrice, 0))}
-            </Text>
+          )}
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Items label row */}
+        <View style={styles.itemsHeader}>
+          <Text style={styles.sectionLabel}>ITEM / PRICES AVG</Text>
+        </View>
+
+        <ScrollView style={styles.itemsList} showsVerticalScrollIndicator={false}>
+          {store.items.map((item) => {
+            const pct = pctChange(item.latestUnitPrice, item.averageUnitPrice);
+            const isAbove = pct > 1;
+            const isBelow = pct < -1;
+            return (
+              <View key={item.itemName} style={styles.itemRow}>
+                <Text style={styles.itemName} numberOfLines={1}>{item.itemName}</Text>
+                <Text style={styles.itemPrice}>{formatCurrency(item.latestUnitPrice)}</Text>
+                <View style={[
+                  styles.pctBadge,
+                  isBelow ? styles.pctGood : isAbove ? styles.pctBad : styles.pctNeutral,
+                ]}>
+                  <Text style={[
+                    styles.pctText,
+                    isBelow ? styles.pctGoodText : isAbove ? styles.pctBadText : styles.pctNeutralText,
+                  ]}>
+                    {isBelow
+                      ? `↓${Math.abs(pct).toFixed(0)}%`
+                      : isAbove
+                      ? `↑${pct.toFixed(0)}%`
+                      : 'avg'}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+
+          <View style={styles.divider} />
+
+          {/* Total section */}
+          <View style={styles.totalSection}>
+            <Text style={styles.totalLabel}>Total at this store</Text>
+            <Text style={styles.totalValue}>{formatCurrency(store.totalLatestPrice)}</Text>
+            {totalAvg > 0 && (
+              <Text style={[styles.totalVsAvg, save >= 0 ? styles.totalSaveGood : styles.totalSaveBad]}>
+                {'vs market avg '}
+                {formatCurrency(totalAvg)}
+                {save > 0
+                  ? ` · Save ${formatCurrency(save)} · ↓${Math.abs(totalPct).toFixed(0)}%`
+                  : save < 0
+                  ? ` · +${formatCurrency(Math.abs(save))} · ↑${Math.abs(totalPct).toFixed(0)}%`
+                  : ''}
+              </Text>
+            )}
           </View>
+        </ScrollView>
+
+        {/* Action row */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity style={styles.directionsBtn} onPress={handleDirections}>
+            <MaterialCommunityIcons name="directions" size={18} color={Colors.bg} />
+            <Text style={styles.directionsBtnText}>Get Directions</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={onDismiss}>
+            <MaterialCommunityIcons name="share-variant-outline" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn}>
+            <MaterialCommunityIcons name="bookmark-outline" size={20} color={Colors.textSecondary} />
+          </TouchableOpacity>
         </View>
       </Animated.View>
     </View>
@@ -117,7 +166,7 @@ export function StoreBottomSheet({ store, visible, onDismiss, formatCurrency }: 
 const styles = StyleSheet.create({
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheet: {
     position: 'absolute',
@@ -126,10 +175,12 @@ const styles = StyleSheet.create({
     right: 0,
     height: SHEET_HEIGHT,
     backgroundColor: Colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 20,
     paddingTop: 8,
+    paddingBottom: 20,
+    gap: 0,
   },
   handle: {
     width: 36,
@@ -137,104 +188,193 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: Colors.border,
     alignSelf: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  header: {
+
+  // Store header
+  storeHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
   },
-  headerInfo: {
+  storeIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: Colors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeInfo: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   storeName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     color: Colors.textPrimary,
   },
-  areaText: {
-    fontSize: 13,
+  storeMeta: {
+    fontSize: 12,
     color: Colors.textSecondary,
   },
-  distance: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: 2,
+  vsAvgBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
   },
+  vsAvgGood: {
+    backgroundColor: Colors.greenDim,
+    borderWidth: 1,
+    borderColor: `${Colors.green}50`,
+  },
+  vsAvgBad: {
+    backgroundColor: 'rgba(232,90,79,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,90,79,0.3)',
+  },
+  vsAvgBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  vsAvgGoodText: {
+    color: Colors.green,
+  },
+  vsAvgBadText: {
+    color: Colors.coral,
+  },
+
   divider: {
     height: 1,
     backgroundColor: Colors.border,
-    marginVertical: 12,
+    marginBottom: 12,
   },
-  body: {
+
+  // Items section
+  itemsHeader: {
+    marginBottom: 8,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 1,
+  },
+  itemsList: {
     flex: 1,
   },
-  tableHeader: {
+  itemRow: {
     flexDirection: 'row',
-    paddingBottom: 8,
+    alignItems: 'center',
+    paddingVertical: 9,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+    gap: 8,
   },
-  colLabel: {
+  itemName: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.textPrimary,
+  },
+  itemPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  pctBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    minWidth: 44,
+    alignItems: 'center',
+  },
+  pctGood: {
+    backgroundColor: Colors.greenDim,
+  },
+  pctBad: {
+    backgroundColor: 'rgba(232,90,79,0.12)',
+  },
+  pctNeutral: {
+    backgroundColor: Colors.surfaceHigh,
+  },
+  pctText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  pctGoodText: {
+    color: Colors.green,
+  },
+  pctBadText: {
+    color: Colors.coral,
+  },
+  pctNeutralText: {
+    color: Colors.textMuted,
+  },
+
+  // Total section
+  totalSection: {
+    paddingTop: 14,
+    paddingBottom: 8,
+    gap: 4,
+  },
+  totalLabel: {
     fontSize: 11,
     fontWeight: '600',
     color: Colors.textMuted,
     textTransform: 'uppercase',
-  },
-  colItem: {
-    flex: 1,
-  },
-  colPrice: {
-    width: 80,
-    textAlign: 'right',
-  },
-  tableRow: {
-    flexDirection: 'row',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  cellItem: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.textPrimary,
-  },
-  cellPrice: {
-    width: 80,
-    textAlign: 'right',
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  cellAvg: {
-    width: 80,
-    textAlign: 'right',
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  totalRow: {
-    flexDirection: 'row',
-    paddingVertical: 10,
-    marginTop: 4,
-  },
-  totalLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
+    letterSpacing: 0.5,
   },
   totalValue: {
-    width: 80,
-    textAlign: 'right',
-    fontSize: 14,
+    fontSize: 28,
     fontWeight: '700',
+    color: Colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  totalVsAvg: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  totalSaveGood: {
     color: Colors.green,
   },
-  totalAvg: {
-    width: 80,
-    textAlign: 'right',
-    fontSize: 13,
-    color: Colors.textSecondary,
+  totalSaveBad: {
+    color: Colors.coral,
+  },
+
+  // Action row
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  directionsBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 48,
+    backgroundColor: Colors.green,
+    borderRadius: 14,
+  },
+  directionsBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.bg,
+  },
+  iconBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: Colors.surfaceHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
 });

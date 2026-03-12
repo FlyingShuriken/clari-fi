@@ -667,6 +667,7 @@ function useClariFiControllerValue(): ClariFiController {
   const { user } = useUser();
   const getTokenRef = useRef(getToken);
   const subscriptionLoadInFlightRef = useRef(false);
+  const parseVoiceTranscriptRef = useRef<(transcript: string) => Promise<void>>(async () => undefined);
 
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultApiBaseUrl);
   const [message, setMessage] = useState('');
@@ -886,61 +887,6 @@ function useClariFiControllerValue(): ClariFiController {
       setPushStatus(normalizePushRegistrationError(error));
     }
   }, [apiBaseUrl, getBearerTokenOrThrow]);
-
-  useEffect(() => {
-    let mounted = true;
-
-    speechRecognitionService.configure({
-      onStart: () => {
-        setRecognitionState('listening');
-      },
-      onEnd: () => {
-        setRecognitionState((previousState) =>
-          previousState === 'listening' ? 'processing' : previousState,
-        );
-      },
-      onPartialResults: (transcript) => {
-        if (transcript) {
-          setTranscriptInput(transcript);
-        }
-      },
-      onFinalResults: (transcript) => {
-        if (!transcript.trim()) {
-          setRecognitionState('error');
-          setMessage('No speech recognized. Please try again or use keyboard dictation.');
-          return;
-        }
-
-        setTranscriptInput(transcript);
-        setRecognitionState('ready');
-        setMessage('Speech recognized on device. You can parse now.');
-      },
-      onError: (errorMessage) => {
-        setRecognitionState('error');
-        setMessage(errorMessage);
-      },
-    });
-
-    void speechRecognitionService
-      .isAvailable()
-      .then((available) => {
-        if (!mounted) {
-          return;
-        }
-        setRecognizerAvailable(available);
-      })
-      .catch(() => {
-        if (!mounted) {
-          return;
-        }
-        setRecognizerAvailable(false);
-      });
-
-    return () => {
-      mounted = false;
-      void speechRecognitionService.destroy();
-    };
-  }, []);
 
   useEffect(() => {
     if (!user?.id) {
@@ -1176,30 +1122,119 @@ function useClariFiControllerValue(): ClariFiController {
     }
   }, [clearMessage, recognitionState]);
 
+  const parseVoiceTranscript = useCallback(async (inputTranscript: string) => {
+    const parseTranscript = inputTranscript.trim();
+    if (!parseTranscript) {
+      setRecognitionState('error');
+      setMessage('Provide transcript first (on-device STT or keyboard dictation).');
+      return;
+    }
+
+    await runTask(
+      async () => {
+        if (recognitionState === 'listening') {
+          throw new Error('Stop listening first before parsing.');
+        }
+
+        setTranscriptInput(parseTranscript);
+        setVoiceParse(null);
+        setVoiceParseLatencyMs(null);
+        setRecognitionState('processing');
+        setMessage('Parsing voice expense...');
+
+        const token = await getBearerTokenOrThrow();
+        const startedAt = Date.now();
+
+        try {
+          const result = await parseVoice(normalizeBaseUrl(apiBaseUrl), token, {
+            transcript: parseTranscript,
+            locale: defaultSttLocale,
+            deviceConfidence: 0.96,
+          });
+
+          setVoiceParse(result);
+          setRecognitionState('ready');
+          setVoiceParseLatencyMs(Date.now() - startedAt);
+          setMessage(`Voice parsed via ${result.parseMeta.parsePath}. Review and confirm.`);
+        } catch (error) {
+          setRecognitionState('error');
+          throw error;
+        }
+      },
+      { clearMessage: false },
+    );
+  }, [apiBaseUrl, defaultSttLocale, getBearerTokenOrThrow, recognitionState, runTask]);
+
   const parseVoiceExpense = useCallback(async () => {
-    await runTask(async () => {
-      if (recognitionState === 'listening' || recognitionState === 'processing') {
-        throw new Error('Stop listening first before parsing.');
-      }
+    await parseVoiceTranscript(transcriptInput);
+  }, [parseVoiceTranscript, transcriptInput]);
 
-      if (!transcriptInput.trim()) {
-        throw new Error('Provide transcript first (on-device STT or keyboard dictation).');
-      }
+  useEffect(() => {
+    parseVoiceTranscriptRef.current = parseVoiceTranscript;
+  }, [parseVoiceTranscript]);
 
-      const token = await getBearerTokenOrThrow();
-      const startedAt = Date.now();
-      const result = await parseVoice(normalizeBaseUrl(apiBaseUrl), token, {
-        transcript: transcriptInput.trim(),
-        locale: defaultSttLocale,
-        deviceConfidence: 0.96,
+  const clearVoiceDraft = useCallback(() => {
+    setVoiceParse(null);
+    setVoiceParseLatencyMs(null);
+    setTranscriptInput('');
+    setRecognitionState('idle');
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    speechRecognitionService.configure({
+      onStart: () => {
+        setRecognitionState('listening');
+      },
+      onEnd: () => {
+        setRecognitionState((previousState) =>
+          previousState === 'listening' ? 'processing' : previousState,
+        );
+      },
+      onPartialResults: (transcript) => {
+        if (transcript) {
+          setTranscriptInput(transcript);
+        }
+      },
+      onFinalResults: (transcript) => {
+        const normalizedTranscript = transcript.trim();
+        if (!normalizedTranscript) {
+          setRecognitionState('error');
+          setMessage('No speech recognized. Please try again or use keyboard dictation.');
+          return;
+        }
+
+        setTranscriptInput(normalizedTranscript);
+        setMessage('Speech recognized on device. Parsing expense...');
+        void parseVoiceTranscriptRef.current(normalizedTranscript);
+      },
+      onError: (errorMessage) => {
+        setRecognitionState('error');
+        setMessage(errorMessage);
+      },
+    });
+
+    void speechRecognitionService
+      .isAvailable()
+      .then((available) => {
+        if (!mounted) {
+          return;
+        }
+        setRecognizerAvailable(available);
+      })
+      .catch(() => {
+        if (!mounted) {
+          return;
+        }
+        setRecognizerAvailable(false);
       });
 
-      setVoiceParse(result);
-      setRecognitionState('ready');
-      setVoiceParseLatencyMs(Date.now() - startedAt);
-      setMessage(`Voice parsed via ${result.parseMeta.parsePath}. Review and confirm.`);
-    });
-  }, [apiBaseUrl, getBearerTokenOrThrow, recognitionState, runTask, transcriptInput]);
+    return () => {
+      mounted = false;
+      void speechRecognitionService.destroy();
+    };
+  }, []);
 
   const confirmVoiceExpense = useCallback(async (overrides?: ExpenseConfirmOverrides) => {
     if (!voiceParse) {
@@ -1225,9 +1260,10 @@ function useClariFiControllerValue(): ClariFiController {
           parseLatencyMs: voiceParse.parseMeta.parseLatencyMs,
         },
       });
+      clearVoiceDraft();
       setMessage('Voice expense saved.');
     });
-  }, [apiBaseUrl, getBearerTokenOrThrow, runTask, voiceParse]);
+  }, [apiBaseUrl, clearVoiceDraft, getBearerTokenOrThrow, runTask, voiceParse]);
 
   const chooseReceipt = useCallback(
     async (fromCamera: boolean) => {

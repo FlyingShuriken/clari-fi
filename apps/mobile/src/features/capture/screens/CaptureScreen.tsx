@@ -6,40 +6,16 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
-import {
-  ExpenseConfirmEditor,
-  type ExpenseConfirmLocation,
-} from '../components/expense-confirm-editor';
+import { ExpenseConfirmModal, type ConfirmKind } from '../components/expense-confirm-modal';
+import type { ExpenseConfirmLocation } from '../components/expense-confirm-editor';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-function currencyLabel(currency: string, amount: number): string {
-  return `${currency} ${amount.toFixed(2)}`;
-}
-
-function displayMerchantTitle(primary: string | undefined, secondary: string | undefined, fallback: string): string {
-  const merchant = primary?.trim();
-  if (merchant) {
-    return merchant;
-  }
-
-  const location = secondary?.trim();
-  if (location) {
-    return location;
-  }
-
-  return fallback;
-}
-
 function emptyConfirmLocation(): ExpenseConfirmLocation {
-  return {
-    labelText: '',
-    areaText: '',
-    source: 'unset',
-  };
+  return { labelText: '', areaText: '', source: 'unset' };
 }
 
 export function CaptureScreen() {
@@ -55,18 +31,22 @@ export function CaptureScreen() {
   const voiceCandidate = controller.voiceParse?.candidate;
   const documentParse = controller.documentParse;
   const lastCapture = controller.ledgerItems[0] ?? null;
+
   const [voiceMerchantInput, setVoiceMerchantInput] = useState('');
   const [voiceLocationInput, setVoiceLocationInput] = useState<ExpenseConfirmLocation>(emptyConfirmLocation);
   const [receiptMerchantInput, setReceiptMerchantInput] = useState('');
   const [receiptLocationInput, setReceiptLocationInput] = useState<ExpenseConfirmLocation>(emptyConfirmLocation);
 
+  const [voiceModalOpen, setVoiceModalOpen] = useState(false);
+  const [docModalOpen, setDocModalOpen] = useState(false);
+
+  // Pulse animation while listening
   useEffect(() => {
     if (!isListening) {
       pulseAnim.setValue(1);
       pulseOpacity.setValue(0);
       return;
     }
-
     const loop = Animated.loop(
       Animated.sequence([
         Animated.parallel([
@@ -83,18 +63,25 @@ export function CaptureScreen() {
     return () => loop.stop();
   }, [isListening, pulseAnim, pulseOpacity]);
 
+  // Reset + auto-open modal when voice parse completes
   useEffect(() => {
     setVoiceMerchantInput(voiceCandidate?.merchantText ?? '');
     setVoiceLocationInput(emptyConfirmLocation());
+    if (voiceCandidate) setVoiceModalOpen(true);
   }, [voiceCandidate?.merchantText]);
 
+  // Reset + auto-open modal when document parse completes
   useEffect(() => {
     if (documentParse?.documentKind === 'receipt') {
       setReceiptMerchantInput(documentParse.candidate.merchantText ?? '');
       setReceiptLocationInput(emptyConfirmLocation());
+      setDocModalOpen(true);
       return;
     }
-
+    if (documentParse?.documentKind === 'flyer') {
+      setDocModalOpen(true);
+      return;
+    }
     setReceiptMerchantInput('');
     setReceiptLocationInput(emptyConfirmLocation());
   }, [documentParse]);
@@ -102,8 +89,37 @@ export function CaptureScreen() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
+  // ── Confirm handlers ──────────────────────────────────────────────
+  const handleVoiceConfirm = () => {
+    controller.confirmVoiceExpense({
+      merchantText: voiceMerchantInput,
+      areaText: voiceLocationInput.areaText,
+      locationLat: voiceLocationInput.lat,
+      locationLng: voiceLocationInput.lng,
+    });
+    setVoiceModalOpen(false);
+  };
+
+  const handleDocConfirm = () => {
+    if (documentParse?.documentKind === 'receipt') {
+      controller.confirmParsedDocument({
+        merchantText: receiptMerchantInput,
+        areaText: receiptLocationInput.areaText,
+        locationLat: receiptLocationInput.lat,
+        locationLng: receiptLocationInput.lng,
+      });
+    } else {
+      controller.confirmParsedDocument();
+    }
+    setDocModalOpen(false);
+  };
+
+  // ── Derived display values ────────────────────────────────────────
+  const voiceDocKind: ConfirmKind = 'voice';
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
+      {/* ── Header ── */}
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>{greeting}</Text>
@@ -128,6 +144,7 @@ export function CaptureScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* ── Voice hero card ── */}
         <View style={styles.heroCard}>
           <View style={styles.labelRow}>
             <View style={styles.greenDot} />
@@ -162,10 +179,38 @@ export function CaptureScreen() {
           <Text style={styles.heroSubtitle}>
             {controller.recognizerAvailable === false
               ? 'Voice recognizer unavailable on this device'
-              : 'Quick entry for ledger only. Voice no longer feeds market prices.'}
+              : voiceCandidate
+                ? 'Parsed and ready for your review.'
+                : controller.transcriptInput && controller.recognitionState === 'error'
+                  ? 'Parsing failed. Retry parse.'
+                : controller.transcriptInput
+                  ? 'Recognized on device. Parsing automatically...'
+                  : 'Quick entry for ledger only.'}
           </Text>
 
-          {(controller.transcriptInput || voiceCandidate) ? (
+          {/* Photo buttons — only shown when idle and no parsed result */}
+          {!isListening && !isProcessing && !voiceCandidate && !controller.transcriptInput && (
+            <>
+              <View style={styles.orRow}>
+                <View style={styles.orLine} />
+                <Text style={styles.orText}>or</Text>
+                <View style={styles.orLine} />
+              </View>
+              <View style={styles.photoRow}>
+                <TouchableOpacity style={styles.takePhotoBtn} onPress={controller.pickDocumentCamera}>
+                  <MaterialCommunityIcons name="camera-outline" size={18} color={Colors.bg} />
+                  <Text style={styles.takePhotoBtnText}>Take Photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.libraryBtn} onPress={controller.pickDocumentGallery}>
+                  <MaterialCommunityIcons name="image-outline" size={18} color={Colors.textPrimary} />
+                  <Text style={styles.libraryBtnText}>From Library</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* Retry parse button for fallback/error recovery only */}
+          {controller.transcriptInput && !voiceCandidate && controller.recognitionState === 'error' ? (
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={styles.primaryBtn}
@@ -173,160 +218,128 @@ export function CaptureScreen() {
                 disabled={controller.loading}
                 testID={TEST_IDS.capture.parseVoiceButton}
               >
-                <Text style={styles.primaryBtnText}>Parse voice</Text>
+                <Text style={styles.primaryBtnText}>Retry parse</Text>
               </TouchableOpacity>
             </View>
           ) : null}
 
+          {/* Voice parsed preview — tap to re-open modal */}
           {voiceCandidate ? (
-            <View style={styles.resultCard}>
-              <Text style={styles.resultMeta}>Voice expense</Text>
-              <Text style={styles.resultTitle}>
-                {displayMerchantTitle(
-                  voiceMerchantInput || voiceCandidate.merchantText,
-                  voiceLocationInput.labelText || voiceLocationInput.areaText,
-                  'Unknown merchant',
-                )}
-              </Text>
-              <Text style={styles.resultAmount}>{currencyLabel(voiceCandidate.currency, voiceCandidate.totalAmount)}</Text>
-              <ExpenseConfirmEditor
-                apiBaseUrl={controller.apiBaseUrl}
-                merchantValue={voiceMerchantInput}
-                onMerchantChange={setVoiceMerchantInput}
-                locationValue={voiceLocationInput}
-                onLocationChange={setVoiceLocationInput}
-              />
-              <TouchableOpacity
-                style={styles.primaryBtnFull}
-                onPress={() =>
-                  controller.confirmVoiceExpense({
-                    merchantText: voiceMerchantInput,
-                    areaText: voiceLocationInput.areaText,
-                    locationLat: voiceLocationInput.lat,
-                    locationLng: voiceLocationInput.lng,
-                  })
-                }
-                disabled={controller.loading}
-                testID={TEST_IDS.capture.confirmVoiceButton}
-              >
-                <Text style={styles.primaryBtnText}>Confirm voice expense</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
-
-        <View style={styles.documentCard}>
-          <View style={styles.labelRow}>
-            <MaterialCommunityIcons name="image-multiple-outline" size={14} color={Colors.indigo} />
-            <Text style={styles.labelText}>DOCUMENT INTELLIGENCE</Text>
-          </View>
-          <Text style={styles.sectionTitle}>Scan or upload a receipt or booklet</Text>
-          <Text style={styles.sectionCopy}>
-            The app auto-detects whether your image is a paid receipt or a promo flyer. Receipts save expenses. Flyers save promotion prices only.
-          </Text>
-
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.primaryBtn} onPress={controller.pickDocumentCamera}>
-              <MaterialCommunityIcons name="camera-outline" size={16} color={Colors.bg} />
-              <Text style={styles.primaryBtnText}>Scan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={controller.pickDocumentGallery}>
-              <MaterialCommunityIcons name="image-outline" size={16} color={Colors.textPrimary} />
-              <Text style={styles.secondaryBtnText}>Upload images</Text>
-            </TouchableOpacity>
-          </View>
-
-          {controller.documentReady ? (
-            <View style={styles.selectedCard}>
-              <Text style={styles.selectedTitle}>
-                {controller.documentImageCount} image{controller.documentImageCount === 1 ? '' : 's'} ready
-              </Text>
-              <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.primaryBtn} onPress={controller.parseSelectedDocument}>
-                  <Text style={styles.primaryBtnText}>Detect & parse</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={controller.clearParsedDocument}>
-                  <Text style={styles.secondaryBtnText}>Clear</Text>
-                </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.previewCard}
+              onPress={() => setVoiceModalOpen(true)}
+              testID={TEST_IDS.capture.confirmVoiceButton}
+            >
+              <View style={styles.previewLeft}>
+                <View style={[styles.previewIcon, { backgroundColor: Colors.greenDim }]}>
+                  <MaterialCommunityIcons name="microphone" size={15} color={Colors.green} />
+                </View>
+                <View style={styles.previewInfo}>
+                  <Text style={styles.previewMerchant} numberOfLines={1}>
+                    {voiceMerchantInput || voiceCandidate.merchantText || 'Unknown merchant'}
+                  </Text>
+                  <Text style={styles.previewMeta}>Voice · Tap to review & confirm</Text>
+                </View>
               </View>
-            </View>
-          ) : null}
-
-          {documentParse?.documentKind === 'receipt' ? (
-            <View style={styles.resultCard}>
-              <Text style={styles.resultMeta}>Detected receipt</Text>
-              <Text style={styles.resultTitle}>
-                {displayMerchantTitle(
-                  receiptMerchantInput || documentParse.candidate.merchantText,
-                  receiptLocationInput.labelText || receiptLocationInput.areaText,
-                  'Unknown merchant',
-                )}
-              </Text>
-              <Text style={styles.resultAmount}>
-                {currencyLabel(documentParse.candidate.currency, documentParse.candidate.totalAmount)}
-              </Text>
-              <ExpenseConfirmEditor
-                apiBaseUrl={controller.apiBaseUrl}
-                merchantValue={receiptMerchantInput}
-                onMerchantChange={setReceiptMerchantInput}
-                locationValue={receiptLocationInput}
-                onLocationChange={setReceiptLocationInput}
-              />
-              {documentParse.candidate.lineItems.slice(0, 4).map((item, index) => (
-                <Text key={`${item.descriptionRaw}-${index}`} style={styles.resultLine}>
-                  {item.descriptionRaw} · {currencyLabel(documentParse.candidate.currency, item.totalPrice)}
+              <View style={styles.previewRight}>
+                <Text style={styles.previewAmount}>
+                  {controller.formatCurrency(voiceCandidate.totalAmount, voiceCandidate.currency)}
                 </Text>
-              ))}
-              <TouchableOpacity
-                style={styles.primaryBtnFull}
-                onPress={() =>
-                  controller.confirmParsedDocument({
-                    merchantText: receiptMerchantInput,
-                    areaText: receiptLocationInput.areaText,
-                    locationLat: receiptLocationInput.lat,
-                    locationLng: receiptLocationInput.lng,
-                  })
-                }
-                disabled={controller.loading}
-              >
-                <Text style={styles.primaryBtnText}>Confirm receipt expense</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {documentParse?.documentKind === 'flyer' ? (
-            <View style={styles.resultCard}>
-              <Text style={styles.resultMeta}>Detected flyer / booklet</Text>
-              <Text style={styles.resultTitle}>{documentParse.candidate.merchantText || 'Unknown store'}</Text>
-              <Text style={styles.sectionCopy}>
-                {documentParse.candidate.validFrom || documentParse.candidate.validTo
-                  ? `Valid ${documentParse.candidate.validFrom ?? '?'} → ${documentParse.candidate.validTo ?? '?'}`
-                  : 'No validity dates detected'}
-              </Text>
-              {documentParse.candidate.lineItems.slice(0, 4).map((item, index) => (
-                <Text key={`${item.descriptionRaw}-${index}`} style={styles.resultLine}>
-                  {item.descriptionRaw} · {currencyLabel(documentParse.candidate.currency, item.totalPrice)}
-                </Text>
-              ))}
-              <TouchableOpacity style={styles.primaryBtnFull} onPress={() => controller.confirmParsedDocument()}>
-                <Text style={styles.primaryBtnText}>Save promo prices</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          {documentParse?.documentKind === 'unknown' ? (
-            <View style={styles.resultCard}>
-              <Text style={styles.resultMeta}>Could not classify</Text>
-              <Text style={styles.sectionCopy}>{documentParse.reason}</Text>
-            </View>
+                <MaterialCommunityIcons name="chevron-right" size={16} color={Colors.textMuted} />
+              </View>
+            </TouchableOpacity>
           ) : null}
         </View>
 
+        {/* ── Document card ── */}
+        {(controller.documentReady || documentParse) ? (
+          <View style={styles.documentCard}>
+            <View style={styles.labelRow}>
+              <MaterialCommunityIcons name="image-multiple-outline" size={14} color={Colors.indigo} />
+              <Text style={styles.labelText}>DOCUMENT INTELLIGENCE</Text>
+            </View>
+
+            {/* Images ready — parse action */}
+            {controller.documentReady ? (
+              <View style={styles.selectedCard}>
+                <Text style={styles.selectedTitle}>
+                  {controller.documentImageCount} image{controller.documentImageCount === 1 ? '' : 's'} ready
+                </Text>
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={styles.primaryBtn} onPress={controller.parseSelectedDocument}>
+                    <Text style={styles.primaryBtnText}>Detect & parse</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={controller.clearParsedDocument}>
+                    <Text style={styles.secondaryBtnText}>Clear</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : null}
+
+            {/* Receipt preview — tap to re-open modal */}
+            {documentParse?.documentKind === 'receipt' ? (
+              <TouchableOpacity style={styles.previewCard} onPress={() => setDocModalOpen(true)}>
+                <View style={styles.previewLeft}>
+                  <View style={[styles.previewIcon, { backgroundColor: `${Colors.indigo}20` }]}>
+                    <MaterialCommunityIcons name="receipt" size={15} color={Colors.indigo} />
+                  </View>
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewMerchant} numberOfLines={1}>
+                      {receiptMerchantInput || documentParse.candidate.merchantText || 'Unknown merchant'}
+                    </Text>
+                    <Text style={styles.previewMeta}>
+                      Receipt · {documentParse.candidate.lineItems.length} items · Tap to confirm
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.previewRight}>
+                  <Text style={[styles.previewAmount, { color: Colors.indigo }]}>
+                    {controller.formatCurrency(
+                      documentParse.candidate.totalAmount,
+                      documentParse.candidate.currency,
+                    )}
+                  </Text>
+                  <MaterialCommunityIcons name="chevron-right" size={16} color={Colors.textMuted} />
+                </View>
+              </TouchableOpacity>
+            ) : null}
+
+            {/* Flyer preview */}
+            {documentParse?.documentKind === 'flyer' ? (
+              <TouchableOpacity style={styles.previewCard} onPress={() => setDocModalOpen(true)}>
+                <View style={styles.previewLeft}>
+                  <View style={[styles.previewIcon, { backgroundColor: `${Colors.amber}20` }]}>
+                    <MaterialCommunityIcons name="tag-multiple-outline" size={15} color={Colors.amber} />
+                  </View>
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewMerchant} numberOfLines={1}>
+                      {documentParse.candidate.merchantText || 'Unknown store'}
+                    </Text>
+                    <Text style={styles.previewMeta}>
+                      Flyer · {documentParse.candidate.lineItems.length} promo prices · Tap to save
+                    </Text>
+                  </View>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={16} color={Colors.textMuted} />
+              </TouchableOpacity>
+            ) : null}
+
+            {/* Unknown */}
+            {documentParse?.documentKind === 'unknown' ? (
+              <View style={styles.unknownCard}>
+                <MaterialCommunityIcons name="help-circle-outline" size={18} color={Colors.textSecondary} />
+                <Text style={styles.unknownText}>{documentParse.reason}</Text>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
+        {/* ── Last capture ── */}
         {lastCapture ? (
           <View style={styles.recentCard}>
             <Text style={styles.resultMeta}>Last capture</Text>
             <View style={styles.recentRow}>
-              <View>
+              <View style={styles.recentInfo}>
                 <Text style={styles.resultTitle}>{lastCapture.merchant}</Text>
                 <Text style={styles.sectionCopy}>{lastCapture.paymentMethod}</Text>
               </View>
@@ -337,6 +350,84 @@ export function CaptureScreen() {
           </View>
         ) : null}
       </ScrollView>
+
+      {/* ── Modals ── */}
+      {voiceCandidate ? (
+        <ExpenseConfirmModal
+          visible={voiceModalOpen}
+          onDismiss={() => setVoiceModalOpen(false)}
+          kind={voiceDocKind}
+          merchantText={voiceCandidate.merchantText ?? ''}
+          amount={voiceCandidate.totalAmount}
+          currency={voiceCandidate.currency}
+          lineItems={voiceCandidate.lineItems.map((l) => ({
+            descriptionRaw: l.descriptionRaw,
+            totalPrice: l.totalPrice,
+            currency: voiceCandidate.currency,
+          }))}
+          merchantValue={voiceMerchantInput}
+          onMerchantChange={setVoiceMerchantInput}
+          locationValue={voiceLocationInput}
+          onLocationChange={setVoiceLocationInput}
+          onConfirm={handleVoiceConfirm}
+          loading={controller.loading}
+          confirmLabel="Confirm voice expense"
+          apiBaseUrl={controller.apiBaseUrl}
+          formatCurrency={controller.formatCurrency}
+        />
+      ) : null}
+
+      {documentParse?.documentKind === 'receipt' ? (
+        <ExpenseConfirmModal
+          visible={docModalOpen}
+          onDismiss={() => setDocModalOpen(false)}
+          kind="receipt"
+          merchantText={documentParse.candidate.merchantText ?? ''}
+          amount={documentParse.candidate.totalAmount}
+          currency={documentParse.candidate.currency}
+          lineItems={documentParse.candidate.lineItems.map((l) => ({
+            descriptionRaw: l.descriptionRaw,
+            totalPrice: l.totalPrice,
+            currency: documentParse.candidate.currency,
+          }))}
+          merchantValue={receiptMerchantInput}
+          onMerchantChange={setReceiptMerchantInput}
+          locationValue={receiptLocationInput}
+          onLocationChange={setReceiptLocationInput}
+          onConfirm={handleDocConfirm}
+          loading={controller.loading}
+          confirmLabel="Confirm receipt"
+          apiBaseUrl={controller.apiBaseUrl}
+          formatCurrency={controller.formatCurrency}
+        />
+      ) : null}
+
+      {documentParse?.documentKind === 'flyer' ? (
+        <ExpenseConfirmModal
+          visible={docModalOpen}
+          onDismiss={() => setDocModalOpen(false)}
+          kind="flyer"
+          merchantText={documentParse.candidate.merchantText ?? ''}
+          amount={documentParse.candidate.lineItems.reduce((s, l) => s + l.totalPrice, 0)}
+          currency={documentParse.candidate.currency}
+          lineItems={documentParse.candidate.lineItems.map((l) => ({
+            descriptionRaw: l.descriptionRaw,
+            totalPrice: l.totalPrice,
+            currency: documentParse.candidate.currency,
+          }))}
+          validFrom={documentParse.candidate.validFrom}
+          validTo={documentParse.candidate.validTo}
+          merchantValue=""
+          onMerchantChange={() => undefined}
+          locationValue={emptyConfirmLocation()}
+          onLocationChange={() => undefined}
+          onConfirm={handleDocConfirm}
+          loading={controller.loading}
+          confirmLabel="Save promo prices"
+          apiBaseUrl={controller.apiBaseUrl}
+          formatCurrency={controller.formatCurrency}
+        />
+      ) : null}
     </View>
   );
 }
@@ -398,6 +489,8 @@ const styles = StyleSheet.create({
     paddingBottom: 110,
     gap: 14,
   },
+
+  // Hero voice card
   heroCard: {
     backgroundColor: Colors.surface,
     borderRadius: 26,
@@ -456,6 +549,56 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     textAlign: 'center',
   },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  orLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  orText: {
+    color: Colors.textMuted,
+    fontSize: 13,
+  },
+  photoRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  takePhotoBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.green,
+    paddingVertical: 13,
+    borderRadius: 99,
+  },
+  takePhotoBtnText: {
+    color: Colors.bg,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  libraryBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.surfaceHigh,
+    paddingVertical: 13,
+    borderRadius: 99,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  libraryBtnText: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   actionRow: {
     flexDirection: 'row',
     gap: 10,
@@ -471,13 +614,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 14,
     minWidth: 120,
-  },
-  primaryBtnFull: {
-    backgroundColor: Colors.green,
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginTop: 8,
   },
   primaryBtnText: {
     color: Colors.bg,
@@ -495,29 +631,67 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     minWidth: 120,
   },
-  secondaryBtnDisabled: {
-    opacity: 0.45,
-  },
   secondaryBtnText: {
     color: Colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
   },
+
+  // Compact preview card (tap to open modal)
+  previewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.bg,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    padding: 12,
+    gap: 10,
+  },
+  previewLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  previewIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  previewMerchant: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  previewMeta: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  previewRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  previewAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.green,
+  },
+
+  // Document card
   documentCard: {
     backgroundColor: Colors.surface,
     borderRadius: 24,
     padding: 20,
     gap: 12,
-  },
-  sectionTitle: {
-    color: Colors.textPrimary,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  sectionCopy: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 19,
   },
   selectedCard: {
     backgroundColor: Colors.surfaceHigh,
@@ -530,11 +704,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  resultCard: {
+  unknownCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
     backgroundColor: Colors.surfaceHigh,
-    borderRadius: 18,
-    padding: 14,
-    gap: 6,
+    borderRadius: 14,
+    padding: 12,
+  },
+  unknownText: {
+    flex: 1,
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+
+  // Recent capture
+  recentCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 18,
+    gap: 10,
   },
   resultMeta: {
     color: Colors.textSecondary,
@@ -543,30 +733,28 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
-  resultTitle: {
-    color: Colors.textPrimary,
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  resultAmount: {
-    color: Colors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  resultLine: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-  },
-  recentCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 20,
-    padding: 18,
-    gap: 10,
-  },
   recentRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 12,
+  },
+  recentInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  resultTitle: {
+    color: Colors.textPrimary,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  sectionCopy: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+  },
+  resultAmount: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

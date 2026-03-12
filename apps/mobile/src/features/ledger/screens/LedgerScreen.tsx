@@ -15,7 +15,7 @@ import { LedgerOverviewPanel } from '../components/LedgerOverviewPanel';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type FilterCategory = 'All' | 'Food' | 'Transport' | 'Dining' | 'Shopping' | 'Utilities';
-type LedgerSegment = 'entries' | 'overview';
+type LedgerSegment = 'entries' | 'reports';
 
 const FILTERS: FilterCategory[] = ['All', 'Food', 'Transport', 'Dining', 'Shopping', 'Utilities'];
 
@@ -61,8 +61,8 @@ export function LedgerScreen() {
     }, [controller.loadLedger]),
   );
 
-  const openOverview = async () => {
-    setSegment('overview');
+  const openReports = async () => {
+    setSegment('reports');
     if (hasLoadedOverviewRef.current) {
       return;
     }
@@ -109,15 +109,23 @@ export function LedgerScreen() {
           style={[styles.segmentBtn, segment === 'entries' && styles.segmentBtnActive]}
           onPress={() => setSegment('entries')}
         >
-          <Text style={[styles.segmentText, segment === 'entries' && styles.segmentTextActive]}>Entries</Text>
+          <MaterialCommunityIcons
+            name="format-list-bulleted"
+            size={14}
+            color={segment === 'entries' ? Colors.green : Colors.textSecondary}
+          />
+          <Text style={[styles.segmentText, segment === 'entries' && styles.segmentTextActive]}>Expenses</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.segmentBtn, segment === 'overview' && styles.segmentBtnActive]}
-          onPress={() => {
-            void openOverview();
-          }}
+          style={[styles.segmentBtn, segment === 'reports' && styles.segmentBtnActive]}
+          onPress={() => { void openReports(); }}
         >
-          <Text style={[styles.segmentText, segment === 'overview' && styles.segmentTextActive]}>Overview</Text>
+          <MaterialCommunityIcons
+            name="trending-up"
+            size={14}
+            color={segment === 'reports' ? Colors.green : Colors.textSecondary}
+          />
+          <Text style={[styles.segmentText, segment === 'reports' && styles.segmentTextActive]}>Reports</Text>
         </TouchableOpacity>
       </View>
 
@@ -126,7 +134,7 @@ export function LedgerScreen() {
         contentContainerStyle={styles.listContent}
         onRefreshAsync={segment === 'entries' ? controller.loadLedger : controller.loadReport}
       >
-        {segment === 'overview' ? (
+        {segment === 'reports' ? (
           <LedgerOverviewPanel />
         ) : (
           <>
@@ -238,13 +246,19 @@ const styles = StyleSheet.create({
   },
   segmentBtn: {
     flex: 1,
+    flexDirection: 'row',
+    gap: 6,
     paddingVertical: 10,
     borderRadius: 14,
     backgroundColor: Colors.surface,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   segmentBtnActive: {
-    backgroundColor: Colors.greenDim,
+    backgroundColor: Colors.surfaceHigh,
+    borderColor: Colors.green,
   },
   segmentText: {
     color: Colors.textSecondary,

@@ -1,6 +1,7 @@
 import { ExpenseProvenance } from '@prisma/client';
 import {
   computeTrustScore,
+  derivePromoUnitPrice,
   deriveUnitPrice,
   evaluatePriceCandidateLocation,
   isTrustedExpensePriceProvenance,
@@ -15,6 +16,12 @@ describe('price-intelligence.utils', () => {
     expect(deriveUnitPrice({ totalPrice: 10, unitPrice: 2.5, quantity: 4 })).toBe(2.5);
     expect(deriveUnitPrice({ totalPrice: 10, quantity: 4 })).toBe(2.5);
     expect(deriveUnitPrice({ totalPrice: 10 })).toBeNull();
+  });
+
+  it('treats flyer display price as unit price when quantity is absent', () => {
+    expect(derivePromoUnitPrice({ totalPrice: 12.9 })).toBe(12.9);
+    expect(derivePromoUnitPrice({ totalPrice: 10, quantity: 2 })).toBe(5);
+    expect(derivePromoUnitPrice({ totalPrice: 8, unitPrice: 4, quantity: 2 })).toBe(4);
   });
 
   it('computes bounded trust score using weighted formula', () => {

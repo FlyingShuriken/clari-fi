@@ -129,7 +129,7 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={CaptureScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Ledger" component={LedgerScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="Prices" component={PricesScreen} />
+      <Tab.Screen name="Prices" component={PricesScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Alerts" component={AlertsScreen} options={{ headerShown: false }} />
     </Tab.Navigator>
   );

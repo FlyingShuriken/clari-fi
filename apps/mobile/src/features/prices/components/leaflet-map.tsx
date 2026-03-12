@@ -55,8 +55,7 @@ export function LeafletMap({ lat, lng, radiusKm }: LeafletMapProps) {
 
 const styles = StyleSheet.create({
   container: {
-    height: 250,
-    borderRadius: 16,
+    flex: 1,
     overflow: 'hidden',
     backgroundColor: Colors.surface,
   },

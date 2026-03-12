@@ -16,7 +16,7 @@ const inputTheme = {
   },
 };
 
-const RADIUS_OPTIONS = [5, 10, 15, 25];
+const RADIUS_OPTIONS = [1, 2, 5, 10];
 
 interface Props {
   value: PriceQueryLocation;
