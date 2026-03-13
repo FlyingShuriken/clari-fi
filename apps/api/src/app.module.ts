@@ -9,6 +9,7 @@ import { QueueModule } from './infrastructure/queue/queue.module';
 import { StorageModule } from './infrastructure/storage/storage.module';
 import { ArtifactsModule } from './modules/artifacts/artifacts.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ContributionsModule } from './modules/contributions/contributions.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { FamiliesModule } from './modules/families/families.module';
 import { HealthModule } from './modules/health/health.module';
@@ -16,6 +17,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ParseModule } from './modules/parse/parse.module';
 import { PricesModule } from './modules/prices/prices.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { RewardsModule } from './modules/rewards/rewards.module';
 import { SplitsModule } from './modules/splits/splits.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 
@@ -36,11 +38,13 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     HealthModule,
     NotificationsModule,
     ArtifactsModule,
+    ContributionsModule,
     ParseModule,
     ExpensesModule,
     FamiliesModule,
     PricesModule,
     ReportsModule,
+    RewardsModule,
     SplitsModule,
     SubscriptionsModule,
   ],

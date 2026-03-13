@@ -9,6 +9,7 @@ import {
 import { MetricsService } from '../../infrastructure/metrics/metrics.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import { ContributionsService } from '../contributions/contributions.service';
 import { PricesService } from '../prices/prices.service';
 import { ConfirmExpenseDto } from './dto/confirm-expense.dto';
 import { ListExpensesDto } from './dto/list-expenses.dto';
@@ -28,6 +29,7 @@ export class ExpensesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
+    private readonly contributionsService: ContributionsService,
     private readonly pricesService: PricesService,
   ) {}
 
@@ -106,13 +108,14 @@ export class ExpensesService {
         },
       });
 
+      let receiptId: string | undefined;
       if (dto.receipt) {
         const ocrRaw = dto.receipt.ocrRaw as Prisma.InputJsonValue | undefined;
         const parsedPayload = dto.receipt.parsedPayload as
           | Prisma.InputJsonValue
           | undefined;
 
-        await tx.receipt.create({
+        const receipt = await tx.receipt.create({
           data: {
             userId: user.id,
             expenseId: expense.id,
@@ -127,9 +130,13 @@ export class ExpensesService {
                 : undefined,
           },
         });
+        receiptId = receipt.id;
       }
 
-      return expense;
+      return {
+        expense,
+        receiptId,
+      };
     });
 
     this.metrics.trackCounter('expenses.confirmed.count', 1, {
@@ -145,7 +152,7 @@ export class ExpensesService {
     }
 
     try {
-      const ingestResult = await this.pricesService.ingestExpense(created.id);
+      const ingestResult = await this.pricesService.ingestExpense(created.expense.id);
       this.metrics.trackCounter('prices.ingest.expense_processed.count', 1, {
         userId: user.id,
         created: String(ingestResult.created),
@@ -159,10 +166,38 @@ export class ExpensesService {
       });
     }
 
+    let contributionReward:
+      | Awaited<ReturnType<ContributionsService['recordAcceptedReceiptContribution']>>
+      | undefined;
+
+    if (
+      (dto.provenance ?? defaultProvenanceForSource(dto.source)) === ExpenseProvenance.RECEIPT_OCR &&
+      dto.receipt
+    ) {
+      try {
+        contributionReward = await this.contributionsService.recordAcceptedReceiptContribution({
+          userId: user.id,
+          expenseId: created.expense.id,
+          receiptId: created.receiptId,
+          fileRef: dto.receipt.fileRef,
+          merchantText: dto.merchantText,
+          transactionAt: new Date(dto.transactionAt),
+          totalAmount: dto.totalAmount,
+          currency: dto.currency,
+          lineItems: dto.lineItems,
+        });
+      } catch {
+        this.metrics.trackCounter('contributions.receipt_award_failed.count', 1, {
+          userId: user.id,
+        });
+      }
+    }
+
     return {
-      expenseId: created.id,
+      expenseId: created.expense.id,
       lineItemCount: dto.lineItems.length,
-      createdAt: created.createdAt,
+      createdAt: created.expense.createdAt,
+      contributionReward,
     };
   }
 

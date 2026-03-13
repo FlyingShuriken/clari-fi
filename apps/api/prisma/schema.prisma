@@ -115,6 +115,38 @@ enum SubscriptionPlan {
   PREMIUM
 }
 
+enum ContributionKind {
+  RECEIPT
+  FLYER
+}
+
+enum ContributionAcceptanceStatus {
+  ACCEPTED
+  REJECTED
+  DUPLICATE
+  CAPPED
+}
+
+enum PointLedgerEntryType {
+  RECEIPT_ACCEPTED
+  FLYER_ACCEPTED
+  STREAK_BONUS
+  REDEMPTION
+}
+
+enum RewardType {
+  VOUCHER
+  PARTNER_DISCOUNT
+  EXCLUSIVE_PROMOTION
+}
+
+enum RewardRedemptionStatus {
+  PENDING
+  FULFILLED
+  CANCELLED
+  EXPIRED
+}
+
 model User {
   id          String   @id @default(cuid())
   clerkUserId String   @unique
@@ -141,6 +173,10 @@ model User {
   splitSessionsCreated SplitSession[]
   subscription         UserSubscription?
   subscriptionUsage    SubscriptionUsageMonth[]
+  contributionSubmissions ContributionSubmission[]
+  contributionAcceptances ContributionAcceptance[]
+  pointLedgerEntries      PointLedgerEntry[]
+  rewardRedemptions       RewardRedemption[]
 }
 
 model UserSubscription {
@@ -166,6 +202,109 @@ model SubscriptionUsageMonth {
 
   @@unique([userId, periodKey])
   @@index([userId, periodKey])
+}
+
+model ContributionSubmission {
+  id               String           @id @default(cuid())
+  userId           String
+  kind             ContributionKind
+  sourceRef        String
+  fingerprint      String
+  receiptId        String?          @unique
+  promoIngestionId String?          @unique
+  structuredItemCount Int           @default(0)
+  metadata         Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  user          User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receipt       Receipt?               @relation(fields: [receiptId], references: [id], onDelete: SetNull)
+  promoIngestion PromoIngestion?       @relation(fields: [promoIngestionId], references: [id], onDelete: SetNull)
+  acceptance    ContributionAcceptance?
+
+  @@unique([kind, sourceRef])
+  @@index([userId, createdAt])
+  @@index([kind, fingerprint])
+}
+
+model ContributionAcceptance {
+  id             String                       @id @default(cuid())
+  submissionId   String                       @unique
+  userId         String
+  status         ContributionAcceptanceStatus
+  reasonCode     String?
+  basePoints     Int                          @default(0)
+  bonusPoints    Int                          @default(0)
+  totalPoints    Int                          @default(0)
+  streakDays     Int                          @default(0)
+  acceptedAt     DateTime?
+  metadata       Json?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
+
+  submission ContributionSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pointLedgerEntries PointLedgerEntry[]
+
+  @@index([userId, createdAt])
+  @@index([userId, status, acceptedAt])
+}
+
+model PointLedgerEntry {
+  id           String               @id @default(cuid())
+  userId       String
+  acceptanceId String?
+  redemptionId String?
+  type         PointLedgerEntryType
+  pointsDelta  Int
+  description  String?
+  metadata     Json?
+  createdAt    DateTime             @default(now())
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  acceptance ContributionAcceptance? @relation(fields: [acceptanceId], references: [id], onDelete: SetNull)
+  redemption RewardRedemption?      @relation(fields: [redemptionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([acceptanceId])
+  @@index([redemptionId])
+}
+
+model RewardCatalogItem {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  title       String
+  description String?
+  type        RewardType
+  pointsCost  Int
+  active      Boolean    @default(true)
+  metadata    Json?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  redemptions RewardRedemption[]
+
+  @@index([active, type])
+}
+
+model RewardRedemption {
+  id          String                 @id @default(cuid())
+  userId      String
+  rewardId    String
+  status      RewardRedemptionStatus @default(PENDING)
+  pointsCost  Int
+  metadata    Json?
+  fulfilledAt DateTime?
+  cancelledAt DateTime?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reward      RewardCatalogItem @relation(fields: [rewardId], references: [id], onDelete: Restrict)
+  ledgerEntries PointLedgerEntry[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Expense {
@@ -238,6 +377,7 @@ model Receipt {
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   expense Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  contributionSubmission ContributionSubmission?
 
   @@index([userId, capturedAt])
 }
@@ -560,6 +700,7 @@ model PromoIngestion {
 
   user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   observations PromoObservation[]
+  contributionSubmission ContributionSubmission?
 
   @@index([userId, createdAt])
   @@index([status, createdAt])

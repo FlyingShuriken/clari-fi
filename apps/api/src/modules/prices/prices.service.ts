@@ -17,6 +17,7 @@ import {
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { SupabaseStorageService } from '../../infrastructure/storage/storage.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
+import { ContributionsService } from '../contributions/contributions.service';
 import {
   NotificationsService,
   type AlertPushDispatchResult,
@@ -110,6 +111,7 @@ export class PricesService {
     private readonly itemNormalizer: ItemNormalizerService,
     private readonly storeResolver: StoreResolverService,
     private readonly notificationsService: NotificationsService,
+    private readonly contributionsService: ContributionsService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly storage: SupabaseStorageService,
     @Inject(OCR_PROVIDER) private readonly ocrProvider: OcrProvider,
@@ -1647,12 +1649,34 @@ export class PricesService {
       created += 1;
     }
 
+    let contributionReward:
+      | Awaited<ReturnType<ContributionsService['recordAcceptedFlyerContribution']>>
+      | undefined;
+
+    try {
+      contributionReward = await this.contributionsService.recordAcceptedFlyerContribution({
+        userId: user.id,
+        promoIngestionId: ingestion.id,
+        fileRefs: dto.fileRefs,
+        merchantText: dto.merchantText,
+        validFrom: dto.validFrom ? new Date(dto.validFrom) : null,
+        validTo: dto.validTo ? new Date(dto.validTo) : null,
+        currency: dto.currency,
+        lineItems: dto.lineItems,
+      });
+    } catch {
+      this.metrics.trackCounter('contributions.flyer_award_failed.count', 1, {
+        userId: user.id,
+      });
+    }
+
     return {
       ingestionId: ingestion.id,
       status: ProcessingStatus.COMPLETED,
       created,
       skipped,
       reviewStatus: PromoReviewStatus.APPROVED,
+      contributionReward,
     };
   }
 
@@ -1770,6 +1794,25 @@ export class PricesService {
           parsedPayload: parsed as unknown as Prisma.InputJsonValue,
         },
       });
+
+      if (dto.autoApprove) {
+        try {
+          await this.contributionsService.recordAcceptedFlyerContribution({
+            userId: user.id,
+            promoIngestionId: ingestion.id,
+            fileRefs: [dto.fileRef],
+            merchantText: dto.merchantText ?? parsed.merchantText,
+            validFrom: dto.validFrom ? new Date(dto.validFrom) : null,
+            validTo: dto.validTo ? new Date(dto.validTo) : null,
+            currency: parsed.currency,
+            lineItems: parsed.lineItems,
+          });
+        } catch {
+          this.metrics.trackCounter('contributions.flyer_award_failed.count', 1, {
+            userId: user.id,
+          });
+        }
+      }
 
       return {
         ingestionId: ingestion.id,

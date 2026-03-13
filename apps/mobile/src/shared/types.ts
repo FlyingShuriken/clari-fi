@@ -187,6 +187,105 @@ export interface UploadArtifactResponse {
   publicUrl?: string;
 }
 
+export type ContributionKind = 'RECEIPT' | 'FLYER';
+export type ContributionAcceptanceStatus = 'ACCEPTED' | 'REJECTED' | 'DUPLICATE' | 'CAPPED';
+export type PointLedgerEntryType =
+  | 'RECEIPT_ACCEPTED'
+  | 'FLYER_ACCEPTED'
+  | 'STREAK_BONUS'
+  | 'REDEMPTION';
+export type RewardType = 'VOUCHER' | 'PARTNER_DISCOUNT' | 'EXCLUSIVE_PROMOTION';
+export type RewardRedemptionStatus = 'PENDING' | 'FULFILLED' | 'CANCELLED' | 'EXPIRED';
+
+export interface ContributionReward {
+  submissionId: string;
+  acceptanceId: string;
+  kind: ContributionKind;
+  status: ContributionAcceptanceStatus;
+  basePoints: number;
+  bonusPoints: number;
+  totalPoints: number;
+  streakDays: number;
+  reasonCode?: string | null;
+}
+
+export interface ConfirmExpenseResponse {
+  expenseId: string;
+  lineItemCount: number;
+  createdAt: string;
+  contributionReward?: ContributionReward | null;
+}
+
+export interface ConfirmPromoResponse {
+  ingestionId: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  created: number;
+  skipped: number;
+  reviewStatus: PromoReviewStatus;
+  contributionReward?: ContributionReward | null;
+}
+
+export interface RewardSummary {
+  userId: string;
+  balance: number;
+  currentStreakDays: number;
+  lastAcceptedAt: string | null;
+  generatedAt: string;
+}
+
+export interface RewardCatalogItem {
+  id: string;
+  code: string;
+  title: string;
+  description: string | null;
+  type: RewardType;
+  pointsCost: number;
+  active: boolean;
+}
+
+export interface RewardCatalogResponse {
+  items: RewardCatalogItem[];
+  generatedAt: string;
+}
+
+export interface RewardLedgerEntry {
+  id: string;
+  type: PointLedgerEntryType;
+  pointsDelta: number;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface RewardLedgerResponse {
+  userId: string;
+  balance: number;
+  items: RewardLedgerEntry[];
+  generatedAt: string;
+}
+
+export interface RewardRedemption {
+  id: string;
+  rewardId: string;
+  rewardTitle: string;
+  rewardType: RewardType;
+  pointsCost: number;
+  status: RewardRedemptionStatus;
+  createdAt: string;
+  fulfilledAt: string | null;
+  cancelledAt: string | null;
+}
+
+export interface RewardRedemptionsResponse {
+  userId: string;
+  items: RewardRedemption[];
+  generatedAt: string;
+}
+
+export interface RewardRedeemResponse extends RewardRedemption {
+  remainingBalance: number;
+  generatedAt: string;
+}
+
 export interface PriceHistoryPoint {
   bucket: string;
   minUnitPrice: number;

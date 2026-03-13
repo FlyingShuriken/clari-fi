@@ -23,6 +23,10 @@ import {
   createPriceAlert,
   createSplit,
   finalizeSplit,
+  getRewardRedemptions,
+  getRewardsCatalog,
+  getRewardsLedger,
+  getRewardsSummary,
   getHealthLive,
   getHealthReady,
   getSplit,
@@ -47,6 +51,7 @@ import {
   parseDocument,
   parseVoice,
   registerPushDevice,
+  redeemReward,
   removeFamilyMember,
   revokePushDevice,
   uploadArtifact,
@@ -59,6 +64,7 @@ import {
 import type {
   AlertEvent,
   AlertKind,
+  ContributionReward,
   FamilyProfile,
   FamilyRole,
   HealthLiveResponse,
@@ -73,6 +79,10 @@ import type {
   PromoIngestionItem,
   PushDevice,
   ReceiptParseResult,
+  RewardCatalogItem,
+  RewardLedgerEntry,
+  RewardRedemption,
+  RewardSummary,
   SignalDecisionFilter,
   SplitDetailResponse,
   SplitSummary,
@@ -461,6 +471,11 @@ export interface ClariFiController {
   ledgerTotal: number;
   reportSummary: ReportSummary | null;
   subscription: SubscriptionSnapshot | null;
+  rewardSummary: RewardSummary | null;
+  rewardCatalog: RewardCatalogItem[];
+  rewardLedger: RewardLedgerEntry[];
+  rewardRedemptions: RewardRedemption[];
+  lastContributionReward: ContributionReward | null;
 
   families: FamilyProfile[];
   activeFamilyId: string;
@@ -595,6 +610,12 @@ export interface ClariFiController {
   loadReport: () => Promise<void>;
   loadSubscription: () => Promise<void>;
   updateSubscriptionPlan: (plan: 'FREE' | 'PREMIUM', addonCount: number) => Promise<void>;
+  loadRewardSummary: () => Promise<void>;
+  loadRewardCatalog: () => Promise<void>;
+  loadRewardLedger: () => Promise<void>;
+  loadRewardRedemptions: () => Promise<void>;
+  redeemRewardById: (rewardId: string) => Promise<void>;
+  clearLastContributionReward: () => void;
 
   createFamilyProfile: () => Promise<void>;
   loadFamiliesList: () => Promise<void>;
@@ -667,6 +688,7 @@ function useClariFiControllerValue(): ClariFiController {
   const { user } = useUser();
   const getTokenRef = useRef(getToken);
   const subscriptionLoadInFlightRef = useRef(false);
+  const rewardSummaryLoadInFlightRef = useRef(false);
   const parseVoiceTranscriptRef = useRef<(transcript: string) => Promise<void>>(async () => undefined);
 
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultApiBaseUrl);
@@ -747,6 +769,11 @@ function useClariFiControllerValue(): ClariFiController {
   const [ledgerItems, setLedgerItems] = useState<LedgerExpense[]>([]);
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
+  const [rewardSummary, setRewardSummary] = useState<RewardSummary | null>(null);
+  const [rewardCatalog, setRewardCatalog] = useState<RewardCatalogItem[]>([]);
+  const [rewardLedger, setRewardLedger] = useState<RewardLedgerEntry[]>([]);
+  const [rewardRedemptions, setRewardRedemptions] = useState<RewardRedemption[]>([]);
+  const [lastContributionReward, setLastContributionReward] = useState<ContributionReward | null>(null);
 
   const [families, setFamilies] = useState<FamilyProfile[]>([]);
   const [activeFamilyId, setActiveFamilyId] = useState('');
@@ -1004,12 +1031,133 @@ function useClariFiControllerValue(): ClariFiController {
     [apiBaseUrl, getBearerTokenOrThrow, runTask],
   );
 
+  const fetchRewardSummary = useCallback(
+    async (bearerToken: string) => {
+      const result = await getRewardsSummary(normalizeBaseUrl(apiBaseUrl), bearerToken);
+      setRewardSummary(result);
+      return result;
+    },
+    [apiBaseUrl],
+  );
+
+  const fetchRewardCatalog = useCallback(
+    async (bearerToken: string) => {
+      const result = await getRewardsCatalog(normalizeBaseUrl(apiBaseUrl), bearerToken);
+      setRewardCatalog(result.items);
+      return result;
+    },
+    [apiBaseUrl],
+  );
+
+  const fetchRewardLedger = useCallback(
+    async (bearerToken: string, limit = 25) => {
+      const result = await getRewardsLedger(normalizeBaseUrl(apiBaseUrl), bearerToken, limit);
+      setRewardLedger(result.items);
+      setRewardSummary((previous) =>
+        previous
+          ? {
+              ...previous,
+              balance: result.balance,
+              generatedAt: result.generatedAt,
+            }
+          : previous,
+      );
+      return result;
+    },
+    [apiBaseUrl],
+  );
+
+  const fetchRewardRedemptions = useCallback(
+    async (bearerToken: string, limit = 25) => {
+      const result = await getRewardRedemptions(normalizeBaseUrl(apiBaseUrl), bearerToken, limit);
+      setRewardRedemptions(result.items);
+      return result;
+    },
+    [apiBaseUrl],
+  );
+
+  const loadRewardSummary = useCallback(async () => {
+    if (rewardSummaryLoadInFlightRef.current) {
+      return;
+    }
+
+    rewardSummaryLoadInFlightRef.current = true;
+    try {
+      await runTask(async () => {
+        const token = await getBearerTokenOrThrow();
+        await fetchRewardSummary(token);
+      }, { clearMessage: false });
+    } finally {
+      rewardSummaryLoadInFlightRef.current = false;
+    }
+  }, [fetchRewardSummary, getBearerTokenOrThrow, runTask]);
+
+  const loadRewardCatalog = useCallback(async () => {
+    await runTask(async () => {
+      const token = await getBearerTokenOrThrow();
+      await fetchRewardCatalog(token);
+    }, { clearMessage: false });
+  }, [fetchRewardCatalog, getBearerTokenOrThrow, runTask]);
+
+  const loadRewardLedger = useCallback(async () => {
+    await runTask(async () => {
+      const token = await getBearerTokenOrThrow();
+      await fetchRewardLedger(token);
+    }, { clearMessage: false });
+  }, [fetchRewardLedger, getBearerTokenOrThrow, runTask]);
+
+  const loadRewardRedemptions = useCallback(async () => {
+    await runTask(async () => {
+      const token = await getBearerTokenOrThrow();
+      await fetchRewardRedemptions(token);
+    }, { clearMessage: false });
+  }, [fetchRewardRedemptions, getBearerTokenOrThrow, runTask]);
+
+  const clearLastContributionReward = useCallback(() => {
+    setLastContributionReward(null);
+  }, []);
+
+  const redeemRewardById = useCallback(
+    async (rewardId: string) => {
+      await runTask(async () => {
+        const token = await getBearerTokenOrThrow();
+        const result = await redeemReward(normalizeBaseUrl(apiBaseUrl), token, rewardId);
+        await Promise.all([
+          fetchRewardSummary(token),
+          fetchRewardLedger(token),
+          fetchRewardRedemptions(token),
+        ]);
+        setMessage(`Redeemed ${result.rewardTitle}. ${result.remainingBalance} points left.`);
+      });
+    },
+    [
+      apiBaseUrl,
+      fetchRewardLedger,
+      fetchRewardRedemptions,
+      fetchRewardSummary,
+      getBearerTokenOrThrow,
+      runTask,
+    ],
+  );
+
   useEffect(() => {
     if (!user?.id) {
       return;
     }
     void loadSubscription();
   }, [loadSubscription, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setRewardSummary(null);
+      setRewardCatalog([]);
+      setRewardLedger([]);
+      setRewardRedemptions([]);
+      setLastContributionReward(null);
+      return;
+    }
+    void loadRewardSummary();
+  }, [loadRewardSummary, user?.id]);
 
   const loadPushDevices = useCallback(async () => {
     await runTask(async () => {
@@ -1061,6 +1209,11 @@ function useClariFiControllerValue(): ClariFiController {
       setLastSyncedClerkUserId('');
       setLastAutoSyncAttemptedClerkUserId('');
       setSubscription(null);
+      setRewardSummary(null);
+      setRewardCatalog([]);
+      setRewardLedger([]);
+      setRewardRedemptions([]);
+      setLastContributionReward(null);
       setBackendLiveHealth(null);
       setBackendReadyHealth(null);
       setBackendHealthCheckedAt('');
@@ -1261,6 +1414,7 @@ function useClariFiControllerValue(): ClariFiController {
         },
       });
       clearVoiceDraft();
+      setLastContributionReward(null);
       setMessage('Voice expense saved.');
     });
   }, [apiBaseUrl, clearVoiceDraft, getBearerTokenOrThrow, runTask, voiceParse]);
@@ -1343,7 +1497,7 @@ function useClariFiControllerValue(): ClariFiController {
       const token = await getBearerTokenOrThrow();
       const merchantText = overrides?.merchantText?.trim() || receiptParse.candidate.merchantText;
       const areaText = overrides?.areaText?.trim() || undefined;
-      await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
+      const result = await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
         ...receiptParse.candidate,
         merchantText,
         areaText,
@@ -1364,10 +1518,15 @@ function useClariFiControllerValue(): ClariFiController {
           confidence: 0.8,
         },
       });
+      setLastContributionReward(result.contributionReward ?? null);
+      await fetchRewardSummary(token);
+      await fetchRewardLedger(token);
       setMessage('Receipt expense saved.');
     });
   }, [
     apiBaseUrl,
+    fetchRewardLedger,
+    fetchRewardSummary,
     getBearerTokenOrThrow,
     receiptParse,
     runTask,
@@ -1468,7 +1627,7 @@ function useClariFiControllerValue(): ClariFiController {
       if (documentParse.documentKind === 'receipt') {
         const merchantText = overrides?.merchantText?.trim() || documentParse.candidate.merchantText;
         const areaText = overrides?.areaText?.trim() || undefined;
-        await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
+        const result = await confirmExpense(normalizeBaseUrl(apiBaseUrl), token, {
           ...documentParse.candidate,
           merchantText,
           areaText,
@@ -1492,6 +1651,9 @@ function useClariFiControllerValue(): ClariFiController {
             confidence: documentParse.confidence,
           },
         });
+        setLastContributionReward(result.contributionReward ?? null);
+        await fetchRewardSummary(token);
+        await fetchRewardLedger(token);
         setMessage('Receipt expense saved.');
         clearParsedDocument();
         return;
@@ -1510,6 +1672,9 @@ function useClariFiControllerValue(): ClariFiController {
           lineItems: documentParse.candidate.lineItems,
         });
         setPromoIngestionResult(result);
+        setLastContributionReward(result.contributionReward ?? null);
+        await fetchRewardSummary(token);
+        await fetchRewardLedger(token);
         setMessage('Flyer prices saved.');
         clearParsedDocument();
         return;
@@ -1524,6 +1689,8 @@ function useClariFiControllerValue(): ClariFiController {
     documentMimeType,
     documentParse,
     documentUris,
+    fetchRewardLedger,
+    fetchRewardSummary,
     getBearerTokenOrThrow,
     runTask,
   ]);
@@ -2281,6 +2448,11 @@ function useClariFiControllerValue(): ClariFiController {
       ledgerTotal: ledgerItems.reduce((acc, item) => acc + item.totalAmount, 0),
       reportSummary,
       subscription,
+      rewardSummary,
+      rewardCatalog,
+      rewardLedger,
+      rewardRedemptions,
+      lastContributionReward,
 
       families,
       activeFamilyId,
@@ -2381,6 +2553,12 @@ function useClariFiControllerValue(): ClariFiController {
 
       loadLedger,
       loadReport,
+      loadRewardSummary,
+      loadRewardCatalog,
+      loadRewardLedger,
+      loadRewardRedemptions,
+      redeemRewardById,
+      clearLastContributionReward,
 
       createFamilyProfile,
       loadFamiliesList,
@@ -2479,10 +2657,15 @@ function useClariFiControllerValue(): ClariFiController {
       loadPriceHistoryResult,
       loadPriceSignalResult,
       loadPromos,
+      loadRewardCatalog,
+      loadRewardLedger,
+      loadRewardRedemptions,
+      loadRewardSummary,
       loadReport,
       loadSubscription,
       loadSplitSessions,
       loading,
+      lastContributionReward,
       markEventRead,
       markAllEventsRead,
       message,
@@ -2517,7 +2700,12 @@ function useClariFiControllerValue(): ClariFiController {
       receiptParseLatencyMs,
       recognitionState,
       recognizerAvailable,
+      redeemRewardById,
       reportSummary,
+      rewardCatalog,
+      rewardLedger,
+      rewardRedemptions,
+      rewardSummary,
       subscription,
       removeFamilyMemberAction,
       saveSplitAllocationsAction,
@@ -2558,6 +2746,7 @@ function useClariFiControllerValue(): ClariFiController {
       stopListening,
       syncBackendUser,
       transcriptInput,
+      clearLastContributionReward,
       splitAssignmentsInput,
       splitBalanceSummary,
       splitDetail,

@@ -12,6 +12,7 @@ import { CaptureScreen } from '../../features/capture/screens/CaptureScreen';
 import { FamilyScreen } from '../../features/families/screens/FamilyScreen';
 import { LedgerScreen } from '../../features/ledger/screens/LedgerScreen';
 import { PricesScreen } from '../../features/prices/screens/PricesScreen';
+import { RewardsScreen } from '../../features/rewards/screens/RewardsScreen';
 import { SplitsScreen } from '../../features/splits/screens/SplitsScreen';
 import { StoreMapScreen } from '../../features/prices/screens/StoreMapScreen';
 import { SubscriptionScreen } from '../../features/subscription/screens/SubscriptionScreen';
@@ -30,6 +31,7 @@ export type RootStackParamList = {
   Families: undefined;
   Splits: undefined;
   Subscription: undefined;
+  Rewards: undefined;
   StoreMap: { items: string[]; lat: number; lng: number; radiusKm: number; areaText?: string };
 };
 
@@ -159,6 +161,11 @@ export function AppNavigator() {
             name="Subscription"
             component={SubscriptionScreen}
             options={{ presentation: 'modal', title: 'ClariFi Premium' }}
+          />
+          <RootStack.Screen
+            name="Rewards"
+            component={RewardsScreen}
+            options={{ presentation: 'modal', title: 'Rewards' }}
           />
           <RootStack.Screen name="Families" component={FamilyScreen} options={{ title: 'Families' }} />
           <RootStack.Screen name="Splits" component={SplitsScreen} options={{ title: 'Splits' }} />

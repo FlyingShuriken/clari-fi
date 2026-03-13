@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ProvidersModule } from '../../infrastructure/providers/providers.module';
 import { AuthModule } from '../auth/auth.module';
+import { ContributionsModule } from '../contributions/contributions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { ItemNormalizerService } from './item-normalizer.service';
@@ -10,7 +11,7 @@ import { PricesService } from './prices.service';
 import { StoreResolverService } from './store-resolver.service';
 
 @Module({
-  imports: [AuthModule, ProvidersModule, NotificationsModule, SubscriptionsModule],
+  imports: [AuthModule, ProvidersModule, NotificationsModule, SubscriptionsModule, ContributionsModule],
   controllers: [PricesController],
   providers: [PricesService, ItemNormalizerService, StoreResolverService, PricesAlertsScheduler],
   exports: [PricesService],
