@@ -2,6 +2,10 @@
 
 ClariFi is a React Native + NestJS product for fast expense capture (voice/receipt), personal reporting, and community price intelligence.
 
+## Link To Materials 
+- Demo Video :https://youtu.be/yeskPQPnGgw
+- Report :https://drive.google.com/file/d/1kbjdI1CLgrHf5ob9_jE0mV77_nhqvv3n/view?usp=sharing
+
 ## Repository Layout
 
 - `apps/api`: NestJS API + Prisma (`src/modules`, `prisma`, `scripts`).
