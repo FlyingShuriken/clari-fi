@@ -11,11 +11,55 @@ import type { ExpenseConfirmLocation } from '../components/expense-confirm-edito
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
+import type { ContributionReward } from '../../../shared/types';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 function emptyConfirmLocation(): ExpenseConfirmLocation {
   return { labelText: '', areaText: '', source: 'unset' };
+}
+
+function contributionRewardHeadline(reward: ContributionReward | null): string {
+  if (!reward) {
+    return '';
+  }
+
+  if (reward.status === 'ACCEPTED') {
+    return `+${reward.totalPoints} pts earned`;
+  }
+
+  if (reward.status === 'DUPLICATE') {
+    return 'Contribution saved, no points awarded';
+  }
+
+  if (reward.status === 'CAPPED') {
+    return 'Daily points cap reached';
+  }
+
+  return 'Contribution reviewed';
+}
+
+function contributionRewardBody(reward: ContributionReward | null): string {
+  if (!reward) {
+    return '';
+  }
+
+  if (reward.status === 'ACCEPTED') {
+    if (reward.bonusPoints > 0) {
+      return `${reward.kind === 'FLYER' ? 'Flyer' : 'Receipt'} accepted with a ${reward.streakDays}-day streak bonus.`;
+    }
+    return `${reward.kind === 'FLYER' ? 'Flyer' : 'Receipt'} accepted into trusted price data.`;
+  }
+
+  if (reward.status === 'DUPLICATE') {
+    return 'This upload matched an earlier accepted contribution, so it does not increase your balance.';
+  }
+
+  if (reward.status === 'CAPPED') {
+    return 'The upload was accepted, but today’s contribution points cap has already been reached.';
+  }
+
+  return 'The contribution was reviewed without a reward change.';
 }
 
 export function CaptureScreen() {
@@ -126,6 +170,14 @@ export function CaptureScreen() {
           <Text style={styles.appName}>ClariFi</Text>
         </View>
         <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.pointsChip}
+            onPress={() => navigation.navigate('Rewards')}
+            testID={TEST_IDS.capture.rewardsButton}
+          >
+            <MaterialCommunityIcons name="star-four-points-outline" size={16} color={Colors.amber} />
+            <Text style={styles.pointsChipText}>{controller.rewardSummary?.balance ?? 0} pts</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.headerChip} onPress={() => navigation.navigate('Subscription')}>
             <MaterialCommunityIcons name="crown-outline" size={16} color={Colors.green} />
             <Text style={styles.headerChipText}>
@@ -144,6 +196,75 @@ export function CaptureScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        <TouchableOpacity style={styles.rewardsCard} onPress={() => navigation.navigate('Rewards')} activeOpacity={0.92}>
+          <View style={styles.rewardsCardHeader}>
+            <View style={styles.rewardsCardTitleBlock}>
+              <Text style={styles.rewardsEyebrow}>Contribute • Earn • Redeem</Text>
+              <Text style={styles.rewardsTitle}>
+                {controller.rewardSummary?.balance ?? 0} pts available
+              </Text>
+              <Text style={styles.rewardsCopy}>
+                Receipt uploads earn +8, flyer uploads earn +10, and streaks add bonuses.
+              </Text>
+            </View>
+            <View style={styles.rewardsCardArrow}>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={Colors.textPrimary} />
+            </View>
+          </View>
+          <View style={styles.rewardsStatsRow}>
+            <View style={styles.rewardsStatPill}>
+              <Text style={styles.rewardsStatLabel}>Receipt</Text>
+              <Text style={styles.rewardsStatValue}>+8</Text>
+            </View>
+            <View style={styles.rewardsStatPill}>
+              <Text style={styles.rewardsStatLabel}>Flyer</Text>
+              <Text style={styles.rewardsStatValue}>+10</Text>
+            </View>
+            <View style={styles.rewardsStatPill}>
+              <Text style={styles.rewardsStatLabel}>Streak</Text>
+              <Text style={styles.rewardsStatValue}>
+                {controller.rewardSummary?.currentStreakDays ?? 0}d
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {controller.lastContributionReward ? (
+          <View style={styles.rewardBanner}>
+            <View style={styles.rewardBannerHeader}>
+              <View style={styles.rewardBannerBadge}>
+                <MaterialCommunityIcons
+                  name={
+                    controller.lastContributionReward.status === 'ACCEPTED'
+                      ? 'gift-open-outline'
+                      : 'information-outline'
+                  }
+                  size={16}
+                  color={
+                    controller.lastContributionReward.status === 'ACCEPTED'
+                      ? Colors.amber
+                      : Colors.textSecondary
+                  }
+                />
+              </View>
+              <View style={styles.rewardBannerTextBlock}>
+                <Text style={styles.rewardBannerTitle}>
+                  {contributionRewardHeadline(controller.lastContributionReward)}
+                </Text>
+                <Text style={styles.rewardBannerCopy}>
+                  {contributionRewardBody(controller.lastContributionReward)}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={controller.clearLastContributionReward}>
+                <MaterialCommunityIcons name="close" size={18} color={Colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.rewardBannerButton} onPress={() => navigation.navigate('Rewards')}>
+              <Text style={styles.rewardBannerButtonText}>View rewards wallet</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {/* ── Voice hero card ── */}
         <View style={styles.heroCard}>
           <View style={styles.labelRow}>
@@ -468,6 +589,20 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 999,
   },
+  pointsChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FDB02218',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  pointsChipText: {
+    color: Colors.amber,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   headerChipText: {
     color: Colors.green,
     fontSize: 12,
@@ -488,6 +623,118 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 110,
     gap: 14,
+  },
+  rewardsCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 24,
+    padding: 18,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: '#FDB02230',
+  },
+  rewardsCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  rewardsCardTitleBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  rewardsEyebrow: {
+    color: Colors.amber,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+  },
+  rewardsTitle: {
+    color: Colors.textPrimary,
+    fontSize: 21,
+    fontWeight: '800',
+  },
+  rewardsCopy: {
+    color: Colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  rewardsCardArrow: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rewardsStatsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  rewardsStatPill: {
+    flex: 1,
+    backgroundColor: Colors.bg,
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 3,
+  },
+  rewardsStatLabel: {
+    color: Colors.textSecondary,
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  rewardsStatValue: {
+    color: Colors.textPrimary,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  rewardBanner: {
+    backgroundColor: Colors.surface,
+    borderRadius: 20,
+    padding: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  rewardBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  rewardBannerBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: Colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rewardBannerTextBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  rewardBannerTitle: {
+    color: Colors.textPrimary,
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  rewardBannerCopy: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  rewardBannerButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: Colors.greenDim,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+  },
+  rewardBannerButtonText: {
+    color: Colors.green,
+    fontSize: 12,
+    fontWeight: '700',
   },
 
   // Hero voice card

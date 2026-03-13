@@ -18,6 +18,7 @@ export const TEST_IDS = {
     stopListeningButton: 'capture.stop_listening.button',
     parseVoiceButton: 'capture.parse_voice.button',
     confirmVoiceButton: 'capture.confirm_voice.button',
+    rewardsButton: 'capture.rewards.button',
     receiptCameraButton: 'capture.receipt.camera.button',
     receiptGalleryButton: 'capture.receipt.gallery.button',
     parseReceiptButton: 'capture.parse_receipt.button',
@@ -28,6 +29,10 @@ export const TEST_IDS = {
   },
   reports: {
     loadButton: 'reports.load.button',
+  },
+  rewards: {
+    refreshButton: 'rewards.refresh.button',
+    redeemPrimaryButton: 'rewards.redeem.primary.button',
   },
   families: {
     loadButton: 'families.load.button',

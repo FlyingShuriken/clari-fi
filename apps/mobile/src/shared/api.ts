@@ -1,6 +1,8 @@
 import type {
   AlertEvent,
   AuthVerifyResponse,
+  ConfirmExpenseResponse,
+  ConfirmPromoResponse,
   FamilyInviteCreated,
   FamilyListResponse,
   FamilyProfile,
@@ -19,6 +21,11 @@ import type {
   PromoReviewStatus,
   PushDevice,
   ReceiptParseResult,
+  RewardCatalogResponse,
+  RewardLedgerResponse,
+  RewardRedeemResponse,
+  RewardRedemptionsResponse,
+  RewardSummary,
   SplitDetailResponse,
   SplitSummary,
   SubscriptionSnapshot,
@@ -278,8 +285,8 @@ export async function confirmExpense(
   baseUrl: string,
   bearerToken: string,
   payload: Record<string, unknown>,
-): Promise<{ expenseId: string }> {
-  return apiRequest<{ expenseId: string }>(baseUrl, '/expenses', {
+): Promise<ConfirmExpenseResponse> {
+  return apiRequest<ConfirmExpenseResponse>(baseUrl, '/expenses', {
     method: 'POST',
     headers: { Authorization: `Bearer ${bearerToken}` },
     body: JSON.stringify(payload),
@@ -680,20 +687,8 @@ export async function confirmPromoIngestion(
       confidence?: number;
     }>;
   },
-): Promise<{
-  ingestionId: string;
-  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-  created: number;
-  skipped: number;
-  reviewStatus: PromoReviewStatus;
-}> {
-  return apiRequest<{
-    ingestionId: string;
-    status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-    created: number;
-    skipped: number;
-    reviewStatus: PromoReviewStatus;
-  }>(baseUrl, '/prices/promos/confirm', {
+): Promise<ConfirmPromoResponse> {
+  return apiRequest<ConfirmPromoResponse>(baseUrl, '/prices/promos/confirm', {
     method: 'POST',
     headers: { Authorization: `Bearer ${bearerToken}` },
     body: JSON.stringify(input),
@@ -783,6 +778,60 @@ export async function updateMockSubscription(
     method: 'PATCH',
     headers: { Authorization: `Bearer ${bearerToken}` },
     body: JSON.stringify(input),
+  });
+}
+
+export async function getRewardsSummary(
+  baseUrl: string,
+  bearerToken: string,
+): Promise<RewardSummary> {
+  return apiRequest<RewardSummary>(baseUrl, '/rewards/summary', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function getRewardsCatalog(
+  baseUrl: string,
+  bearerToken: string,
+): Promise<RewardCatalogResponse> {
+  return apiRequest<RewardCatalogResponse>(baseUrl, '/rewards/catalog', {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function getRewardsLedger(
+  baseUrl: string,
+  bearerToken: string,
+  limit = 25,
+): Promise<RewardLedgerResponse> {
+  return apiRequest<RewardLedgerResponse>(baseUrl, `/rewards/ledger?limit=${limit}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function getRewardRedemptions(
+  baseUrl: string,
+  bearerToken: string,
+  limit = 25,
+): Promise<RewardRedemptionsResponse> {
+  return apiRequest<RewardRedemptionsResponse>(baseUrl, `/rewards/redemptions?limit=${limit}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function redeemReward(
+  baseUrl: string,
+  bearerToken: string,
+  rewardId: string,
+): Promise<RewardRedeemResponse> {
+  return apiRequest<RewardRedeemResponse>(baseUrl, '/rewards/redeem', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+    body: JSON.stringify({ rewardId }),
   });
 }
 
