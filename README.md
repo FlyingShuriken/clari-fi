@@ -33,6 +33,87 @@ pnpm build
 pnpm verify:phase4c
 ```
 
+## Getting Started on macOS (Backend + iOS Simulator)
+
+Use this flow when developing on a MacBook with Xcode and the iOS Simulator.
+
+### 1. Install dependencies
+
+```bash
+pnpm install
+```
+
+### 2. Configure the backend
+
+Copy the API env file:
+
+```bash
+cp apps/api/.env.example apps/api/.env
+```
+
+Then update `apps/api/.env` with the required values:
+
+- `DATABASE_URL`
+- `CLERK_SECRET_KEY`
+- `OPENROUTER_API_KEY` if you keep `EXPENSE_PARSER_PROVIDER=openrouter`
+
+If you only need a basic local boot first, switch `EXPENSE_PARSER_PROVIDER=heuristic` to avoid requiring OpenRouter during startup.
+
+Make sure PostgreSQL is running, then apply Prisma migrations:
+
+```bash
+pnpm --filter @clarifi/api prisma:migrate
+```
+
+### 3. Start the backend
+
+In the first terminal, run:
+
+```bash
+pnpm dev:api
+```
+
+The backend will be available at `http://localhost:3000/v1`.
+
+### 4. Configure the mobile app for the iOS Simulator
+
+Copy the mobile env file:
+
+```bash
+cp apps/mobile/.env.example apps/mobile/.env
+```
+
+Then set these values in `apps/mobile/.env`:
+
+```env
+EXPO_PUBLIC_API_BASE_URL=http://localhost:3000/v1
+EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
+EXPO_PUBLIC_STT_ON_DEVICE_ENABLED=true
+```
+
+For the iOS Simulator on macOS, `localhost` is the correct backend URL. Only use a LAN IP such as `http://192.168.x.x:3000/v1` when testing on a physical iPhone.
+
+### 5. Launch the app in the Apple iOS Simulator
+
+In a second terminal, run:
+
+```bash
+pnpm --filter @clarifi/mobile ios
+```
+
+This will generate the native iOS project if needed, open the iOS Simulator, and run the app against your local backend.
+
+### 6. Verify the connection
+
+After the app opens:
+
+- sign in
+- open the `Account` tab
+- tap `Check health`
+- tap `Sync user`
+
+If `Live` and `Ready` show as healthy, the simulator is connected to the backend correctly.
+
 ## Environment
 
 - Root `.env` is private and ignored.
