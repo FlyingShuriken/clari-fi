@@ -1,42 +1,43 @@
-# ClariFi Monorepo
+# ClariFi
 
-ClariFi is a React Native + NestJS product for fast expense capture (voice/receipt), personal reporting, and community price intelligence.
+ClariFi is a personal finance app built for fast expense capture and community-powered price intelligence. Users can log expenses by voice or receipt photo, track monthly spending, and compare grocery prices across nearby stores — including basket-level recommendations that factor in proximity.
 
-## Link To Materials
+- **Final Pitch Deck:** [ClariFi_Presentation.pdf](ClariFi_Presentation.pdf)
+- **Refinement Changelog:** [Refinement_Changelog.pdf](Refinement_Changelog.pdf)
+- **Live Product Demonstration Video:** [Backup Demo Video.mp4](Backup%20Demo%20Video.mp4)
+- **Backend Live Deployment:** http://54.188.161.56/v1/health/live
 
-- Demo Video :https://youtu.be/yeskPQPnGgw
-- Report :https://drive.google.com/file/d/1kbjdI1CLgrHf5ob9_jE0mV77_nhqvv3n/view?usp=sharing
+## Stack
 
-## Repository Layout
+| Layer              | Technology                                                  |
+| ------------------ | ----------------------------------------------------------- |
+| Mobile             | Expo 54 (React Native), React 19                            |
+| API                | NestJS 10, Prisma 5                                         |
+| Database           | PostgreSQL                                                  |
+| Auth               | Clerk                                                       |
+| Storage            | Supabase Storage                                            |
+| AI                 | OpenRouter — GPT-4.1-mini for OCR, STT, and expense parsing |
+| Push notifications | Expo Push                                                   |
+| Shared contracts   | Zod + TypeScript                                            |
 
-- `apps/api`: NestJS API + Prisma (`src/modules`, `prisma`, `scripts`).
-- `apps/mobile`: Expo React Native app.
-- `packages/shared`: shared contracts (Zod/TS) used by API and mobile.
-- `tasks`: execution plans and test runbooks.
+## Monorepo Layout
 
-## Core API Domains (Current)
-
-- Auth (`/v1/auth/clerk`)
-- Health (`/v1/health/live`, `/v1/health/ready`)
-- Parse (`/v1/parse/voice`, `/v1/parse/receipt`)
-- Expenses + Reports (`/v1/expenses`, `/v1/reports/monthly`)
-- Prices + Signals + Alerts (`/v1/prices/*`)
-- Families + Splits (`/v1/families`, `/v1/splits`)
-
-## Commands
-
-```bash
-pnpm install
-pnpm dev:api
-pnpm dev:mobile
-pnpm test
-pnpm build
-pnpm verify:phase4c
+```
+apps/
+  api/       — NestJS backend (src/modules/, prisma/, scripts/)
+  mobile/    — Expo React Native app
+packages/
+  shared/    — Zod/TypeScript types shared between API and mobile
 ```
 
-## Getting Started on macOS (Backend + iOS Simulator)
+## Prerequisites
 
-Use this flow when developing on a MacBook with Xcode and the iOS Simulator.
+- Node.js 20+
+- pnpm 10
+- PostgreSQL (local or remote)
+- Xcode with iOS Simulator (macOS only, for running the mobile app)
+
+## Getting Started
 
 ### 1. Install dependencies
 
@@ -46,21 +47,20 @@ pnpm install
 
 ### 2. Configure the backend
 
-Copy the API env file:
-
 ```bash
 cp apps/api/.env.example apps/api/.env
 ```
 
-Then update `apps/api/.env` with the required values:
+Edit `apps/api/.env` with the values below. The rest have working defaults.
 
-- `DATABASE_URL`
-- `CLERK_SECRET_KEY`
-- `OPENROUTER_API_KEY` if you keep `EXPENSE_PARSER_PROVIDER=openrouter`
+| Variable                                     | Required    | Notes                                                     |
+| -------------------------------------------- | ----------- | --------------------------------------------------------- |
+| `DATABASE_URL`                               | Yes         | PostgreSQL connection string                              |
+| `CLERK_SECRET_KEY`                           | Yes         | From the Clerk dashboard                                  |
+| `OPENROUTER_API_KEY`                         | Conditional | Not needed if you set `EXPENSE_PARSER_PROVIDER=heuristic` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Yes         | For receipt image storage                                 |
 
-If you only need a basic local boot first, switch `EXPENSE_PARSER_PROVIDER=heuristic` to avoid requiring OpenRouter during startup.
-
-Make sure PostgreSQL is running, then apply Prisma migrations:
+Run database migrations:
 
 ```bash
 pnpm --filter @clarifi/api prisma:migrate
@@ -68,23 +68,18 @@ pnpm --filter @clarifi/api prisma:migrate
 
 ### 3. Start the backend
 
-In the first terminal, run:
-
 ```bash
 pnpm dev:api
+# API available at http://localhost:3000/v1
 ```
 
-The backend will be available at `http://localhost:3000/v1`.
-
-### 4. Configure the mobile app for the iOS Simulator
-
-Copy the mobile env file:
+### 4. Configure the mobile app
 
 ```bash
 cp apps/mobile/.env.example apps/mobile/.env
 ```
 
-Then set these values in `apps/mobile/.env`:
+Edit `apps/mobile/.env`:
 
 ```env
 EXPO_PUBLIC_API_BASE_URL=http://localhost:3000/v1
@@ -92,48 +87,45 @@ EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
 EXPO_PUBLIC_STT_ON_DEVICE_ENABLED=true
 ```
 
-For the iOS Simulator on macOS, `localhost` is the correct backend URL. Only use a LAN IP such as `http://192.168.x.x:3000/v1` when testing on a physical iPhone.
+> Use `http://localhost:3000/v1` for the iOS Simulator. When testing on a physical iPhone on the same network, replace `localhost` with your machine's LAN IP (e.g. `http://192.168.x.x:3000/v1`).
 
-### 5. Launch the app in the Apple iOS Simulator
-
-In a second terminal, run:
+### 5. Launch the iOS Simulator
 
 ```bash
 pnpm --filter @clarifi/mobile ios
 ```
 
-This will generate the native iOS project if needed, open the iOS Simulator, and run the app against your local backend.
+This generates the native iOS project if needed, opens the Simulator, and starts the app against your local backend.
 
 ### 6. Verify the connection
 
-After the app opens:
+After signing in, open the **Account** tab and tap:
 
-- sign in
-- open the `Account` tab
-- tap `Check health`
-- tap `Sync user`
+- **Check health** — confirms `/v1/health/live` and `/v1/health/ready` are responding
+- **Sync user** — registers your Clerk identity with the backend
 
-If `Live` and `Ready` show as healthy, the simulator is connected to the backend correctly.
+Both should succeed before testing other features.
 
-## Environment
+## API Reference
 
-- Root `.env` is private and ignored.
-- Use `.env.example` files for required keys.
-- Mobile public keys live in `apps/mobile/.env` and are exposed through `EXPO_PUBLIC_*`.
+All routes require a valid Clerk session token and are prefixed with `/v1`. Health endpoints are unauthenticated.
 
-## Notes
-
-- `docs/` is intentionally gitignored in this baseline.
-- Native mobile folders (`apps/mobile/ios`, `apps/mobile/android`) are generated artifacts and untracked.
-
-## Phase 4C Verification
-
-- Run `pnpm verify:phase4c` before cutting an internal beta baseline.
-- Use the Account tab in the mobile app to verify:
-  - backend user sync
-  - `/v1/health/live` and `/v1/health/ready`
-  - current registered push devices
-- Follow `tasks/phase4c-mobile-smoke.md` for the full iPhone smoke sequence.
+| Module        | Routes                                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Health        | `GET /health/live`, `GET /health/ready`                                                                                          |
+| Auth          | `POST /auth/clerk`                                                                                                               |
+| Parse         | `POST /parse/voice`, `POST /parse/receipt`                                                                                       |
+| Expenses      | `GET /expenses`, `POST /expenses`, `GET/PATCH/DELETE /expenses/:id`                                                              |
+| Reports       | `GET /reports/monthly`                                                                                                           |
+| Prices        | `GET /prices/compare`, `POST /prices/compare/multi`, `GET /prices/history`, `GET /prices/signal`, `GET /prices/locations/search` |
+| Alerts        | `GET/POST /prices/alerts`, `PATCH/DELETE /prices/alerts/:alertId`, `GET /prices/alerts/events`                                   |
+| Promos        | `POST /prices/promos/ingest`, `POST /prices/promos/confirm`, `GET /prices/promos`                                                |
+| Families      | `GET/POST /families`, `POST /families/invite`, `POST /families/join`                                                             |
+| Splits        | `GET/POST /splits`, `PATCH /splits/:id`                                                                                          |
+| Notifications | `POST /notifications/devices`                                                                                                    |
+| Rewards       | `GET /rewards`, `POST /rewards/redeem`                                                                                           |
+| Contributions | `GET /contributions`                                                                                                             |
+| Subscriptions | `GET /subscriptions`                                                                                                             |
 
 ## Architecture Diagram (Direct)
 
@@ -153,6 +145,6 @@ If `Live` and `Ready` show as healthy, the simulator is connected to the backend
 
 The refined version of ClariFi improves the project in three major ways:
 
-1. **Clearer consumer-facing problem framing** The problem is now centred around “Data Darkness”, making it easier for users and judges to understand the real pain point.
+1. **Clearer consumer-facing problem framing** The problem is now centred around "Data Darkness", making it easier for users and judges to understand the real pain point.
 2. **Stronger feature logic** The price comparison feature has evolved from single-item lookup into a basket-based recommendation system that considers both total cost and proximity.
 3. **More convincing AI validation** The AI logic is now better defined through capture intelligence, purchase intelligence, and basket intelligence, each with specific technologies, reasoning methods, and outputs.
