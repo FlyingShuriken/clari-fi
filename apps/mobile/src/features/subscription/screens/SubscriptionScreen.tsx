@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { Colors } from '../../../theme';
+import { InlineSpinner } from '../../../components/ui/loading-state';
 
 type PlanChoice = 'FREE' | 'PREMIUM';
 
@@ -111,7 +112,6 @@ export function SubscriptionScreen() {
       >
         {/* Hero */}
         <View style={styles.hero}>
-          <View style={styles.heroGlowAccent} />
           <Animated.View style={[styles.crownBadge, { transform: [{ scale: crownScale }] }]}>
             <MaterialCommunityIcons name="crown" size={30} color="#fff" />
           </Animated.View>
@@ -123,6 +123,9 @@ export function SubscriptionScreen() {
             ))}
           </View>
         </View>
+        {controller.initialDataLoading && !controller.subscription ? (
+          <InlineSpinner label="Syncing current plan" />
+        ) : null}
 
         {/* Plan cards side by side */}
         <View style={styles.planRow}>
@@ -347,15 +350,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1E1040',
   },
-  heroGlowAccent: {
-    position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: '#6366F128',
-  },
   crownBadge: {
     width: 70,
     height: 70,
@@ -376,7 +370,7 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '700',
     fontFamily: 'Georgia',
-    letterSpacing: -0.5,
+    letterSpacing: 0,
   },
   heroSub: {
     color: Colors.textSecondary,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Animated } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, Text, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,6 +8,7 @@ import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { ExpenseCard } from '../../../components/ui/expense-card';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { RefreshScroll } from '../../../components/ui/refresh-scroll';
+import { LoadingRows } from '../../../components/ui/loading-state';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
@@ -56,12 +57,22 @@ export function LedgerScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (hasLoadedLedgerRef.current) {
+      if (
+        hasLoadedLedgerRef.current ||
+        controller.initialDataLoading ||
+        controller.authSyncStatus !== 'ok' ||
+        controller.ledgerItems.length > 0
+      ) {
         return;
       }
       hasLoadedLedgerRef.current = true;
       void controller.loadLedger();
-    }, [controller.loadLedger]),
+    }, [
+      controller.authSyncStatus,
+      controller.initialDataLoading,
+      controller.ledgerItems.length,
+      controller.loadLedger,
+    ]),
   );
 
   useEffect(() => {
@@ -115,7 +126,11 @@ export function LedgerScreen() {
             disabled={controller.loading}
             testID={TEST_IDS.ledger.refreshButton}
           >
-            <MaterialCommunityIcons name="refresh" size={20} color={Colors.textSecondary} />
+            {controller.loading || controller.initialDataLoading ? (
+              <ActivityIndicator size="small" color={Colors.green} />
+            ) : (
+              <MaterialCommunityIcons name="refresh" size={20} color={Colors.textSecondary} />
+            )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Families')}>
             <MaterialCommunityIcons name="account-group-outline" size={20} color={Colors.textSecondary} />
@@ -190,7 +205,9 @@ export function LedgerScreen() {
               })}
             </ScrollView>
 
-            {filteredItems.length === 0 ? (
+            {controller.initialDataLoading && filteredItems.length === 0 ? (
+              <LoadingRows label="Syncing expenses" count={4} />
+            ) : filteredItems.length === 0 ? (
               <EmptyState
                 icon="receipt-text-outline"
                 message={

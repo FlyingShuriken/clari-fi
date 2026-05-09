@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -6,6 +6,7 @@ import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { DarkCard } from '../../../components/ui/dark-card';
 import { PillBadge } from '../../../components/ui/pill-badge';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { LoadingRows } from '../../../components/ui/loading-state';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
@@ -41,6 +42,10 @@ export function FamilyScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        </DarkCard>
+      ) : controller.initialDataLoading ? (
+        <DarkCard radius={16}>
+          <LoadingRows label="Syncing family capacity" count={1} />
         </DarkCard>
       ) : null}
 
@@ -103,11 +108,17 @@ export function FamilyScreen() {
           disabled={controller.loading}
           testID={TEST_IDS.families.loadButton}
         >
-          <Text style={styles.refreshText}>Refresh</Text>
+          {controller.loading || controller.initialDataLoading ? (
+            <ActivityIndicator size="small" color={Colors.green} />
+          ) : (
+            <Text style={styles.refreshText}>Sync</Text>
+          )}
         </TouchableOpacity>
       </View>
 
-      {controller.families.length === 0 ? (
+      {controller.initialDataLoading && controller.families.length === 0 ? (
+        <LoadingRows label="Syncing families" count={3} />
+      ) : controller.families.length === 0 ? (
         <EmptyState icon="account-group-outline" message="No families yet. Create or join one above." />
       ) : (
         controller.families.map((family) => {

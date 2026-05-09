@@ -472,6 +472,8 @@ export interface ClariFiController {
   message: string;
   clearMessage: () => void;
   loading: boolean;
+  initialDataLoading: boolean;
+  initialDataSyncedAt: string;
   signedInEmail: string;
   backendUserId: string;
   authSyncStatus: 'idle' | 'syncing' | 'ok' | 'error';
@@ -721,6 +723,11 @@ function useClariFiControllerValue(): ClariFiController {
   const { getToken, signOut } = useAuth();
   const { user } = useUser();
   const getTokenRef = useRef(getToken);
+  const bootstrapInFlightRef = useRef(false);
+  const bootstrappedForUserRef = useRef('');
+  const bootstrapRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bootstrapRetryCountRef = useRef(0);
+  const splitSessionsBootstrappedForFamilyRef = useRef('');
   const subscriptionLoadInFlightRef = useRef(false);
   const rewardSummaryLoadInFlightRef = useRef(false);
   const parseVoiceTranscriptRef = useRef<(transcript: string) => Promise<void>>(async () => undefined);
@@ -728,11 +735,12 @@ function useClariFiControllerValue(): ClariFiController {
   const [apiBaseUrl, setApiBaseUrl] = useState(defaultApiBaseUrl);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialDataLoading, setInitialDataLoading] = useState(false);
+  const [initialDataSyncedAt, setInitialDataSyncedAt] = useState('');
+  const [bootstrapRequestId, setBootstrapRequestId] = useState(0);
   const [backendUserId, setBackendUserId] = useState('');
   const [authSyncStatus, setAuthSyncStatus] = useState<'idle' | 'syncing' | 'ok' | 'error'>('idle');
   const [authSyncError, setAuthSyncError] = useState('');
-  const [lastSyncedClerkUserId, setLastSyncedClerkUserId] = useState('');
-  const [lastAutoSyncAttemptedClerkUserId, setLastAutoSyncAttemptedClerkUserId] = useState('');
   const [backendLiveHealth, setBackendLiveHealth] = useState<HealthLiveResponse | null>(null);
   const [backendReadyHealth, setBackendReadyHealth] = useState<HealthReadyResponse | null>(null);
   const [backendHealthCheckedAt, setBackendHealthCheckedAt] = useState('');
@@ -970,9 +978,6 @@ function useClariFiControllerValue(): ClariFiController {
         const token = await getBearerTokenOrThrow();
         const result = await verifyClerkSessionToken(normalizeBaseUrl(apiBaseUrl), token);
         setBackendUserId(result.user.id);
-        if (user?.id) {
-          setLastSyncedClerkUserId(user.id);
-        }
         setAuthSyncStatus('ok');
         if (!options?.silent) {
           setMessage(`Synced backend user: ${result.user.email}`);
@@ -987,38 +992,33 @@ function useClariFiControllerValue(): ClariFiController {
   );
 
   useEffect(() => {
-    if (!user?.id) {
-      setAuthSyncStatus('idle');
-      setAuthSyncError('');
-      setLastSyncedClerkUserId('');
-      setLastAutoSyncAttemptedClerkUserId('');
-      setSubscription(null);
+    if (user?.id) {
       return;
     }
 
-    if (
-      lastSyncedClerkUserId === user.id ||
-      lastAutoSyncAttemptedClerkUserId === user.id ||
-      authSyncStatus === 'syncing'
-    ) {
-      return;
+    if (bootstrapRetryTimerRef.current) {
+      clearTimeout(bootstrapRetryTimerRef.current);
+      bootstrapRetryTimerRef.current = null;
     }
 
-    setLastAutoSyncAttemptedClerkUserId(user.id);
-    void performBackendUserSync({ silent: true }).catch(() => {
-      // Keep silent for auto sync; account screen exposes status for debugging.
-    });
-  }, [
-    authSyncStatus,
-    lastAutoSyncAttemptedClerkUserId,
-    lastSyncedClerkUserId,
-    performBackendUserSync,
-    user?.id,
-  ]);
+    bootstrapRetryCountRef.current = 0;
+    bootstrapInFlightRef.current = false;
+    setBootstrapRequestId(0);
+    setAuthSyncStatus('idle');
+    setAuthSyncError('');
+    setInitialDataLoading(false);
+    setInitialDataSyncedAt('');
+    bootstrappedForUserRef.current = '';
+    splitSessionsBootstrappedForFamilyRef.current = '';
+    setSubscription(null);
+  }, [user?.id]);
 
   const syncBackendUser = useCallback(async () => {
     await runTask(async () => {
       await performBackendUserSync();
+      bootstrappedForUserRef.current = '';
+      bootstrapRetryCountRef.current = 0;
+      setBootstrapRequestId((current) => current + 1);
     });
   }, [performBackendUserSync, runTask]);
 
@@ -1035,6 +1035,15 @@ function useClariFiControllerValue(): ClariFiController {
     });
   }, [apiBaseUrl, runTask]);
 
+  const fetchSubscriptionSnapshot = useCallback(
+    async (bearerToken: string) => {
+      const result = await getSubscription(normalizeBaseUrl(apiBaseUrl), bearerToken);
+      setSubscription(result);
+      return result;
+    },
+    [apiBaseUrl],
+  );
+
   const loadSubscription = useCallback(async () => {
     if (subscriptionLoadInFlightRef.current) {
       return;
@@ -1044,13 +1053,12 @@ function useClariFiControllerValue(): ClariFiController {
     try {
       await runTask(async () => {
         const token = await getBearerTokenOrThrow();
-        const result = await getSubscription(normalizeBaseUrl(apiBaseUrl), token);
-        setSubscription(result);
+        await fetchSubscriptionSnapshot(token);
       }, { clearMessage: false });
     } finally {
       subscriptionLoadInFlightRef.current = false;
     }
-  }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
+  }, [fetchSubscriptionSnapshot, getBearerTokenOrThrow, runTask]);
 
   const updateSubscriptionPlan = useCallback(
     async (plan: 'FREE' | 'PREMIUM', addonCount: number) => {
@@ -1178,13 +1186,6 @@ function useClariFiControllerValue(): ClariFiController {
 
   useEffect(() => {
     if (!user?.id) {
-      return;
-    }
-    void loadSubscription();
-  }, [loadSubscription, user?.id]);
-
-  useEffect(() => {
-    if (!user?.id) {
       setRewardSummary(null);
       setRewardCatalog([]);
       setRewardLedger([]);
@@ -1192,8 +1193,161 @@ function useClariFiControllerValue(): ClariFiController {
       setLastContributionReward(null);
       return;
     }
-    void loadRewardSummary();
-  }, [loadRewardSummary, user?.id]);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    const bootstrapKey = `${user.id}:${normalizeBaseUrl(apiBaseUrl)}`;
+    if (bootstrappedForUserRef.current === bootstrapKey || bootstrapInFlightRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    setInitialDataLoading(true);
+
+    const scheduleBootstrap = (delayMs: number) => {
+      if (bootstrapRetryTimerRef.current) {
+        clearTimeout(bootstrapRetryTimerRef.current);
+      }
+
+      bootstrapRetryTimerRef.current = setTimeout(() => {
+        bootstrapRetryTimerRef.current = null;
+        void runBootstrap();
+      }, delayMs);
+    };
+
+    const runBootstrap = async () => {
+      if (cancelled || bootstrapInFlightRef.current) {
+        return;
+      }
+
+      bootstrapInFlightRef.current = true;
+      setInitialDataLoading(true);
+      setAuthSyncStatus('syncing');
+      setAuthSyncError('');
+
+      let shouldRetry = false;
+      try {
+        const token = await getBearerTokenOrThrow();
+        const baseUrl = normalizeBaseUrl(apiBaseUrl);
+        const verified = await verifyClerkSessionToken(baseUrl, token);
+        const errors: string[] = [];
+        const runBootstrapTask = async (task: () => Promise<void>) => {
+          try {
+            await task();
+          } catch (error) {
+            errors.push(errorToMessage(error));
+          }
+        };
+
+        setBackendUserId(verified.user.id);
+        setAuthSyncStatus('ok');
+
+        await Promise.all([
+          runBootstrapTask(async () => {
+            const [live, ready] = await Promise.all([getHealthLive(baseUrl), getHealthReady(baseUrl)]);
+            setBackendLiveHealth(live);
+            setBackendReadyHealth(ready);
+            setBackendHealthCheckedAt(new Date().toISOString());
+          }),
+          runBootstrapTask(async () => {
+            await fetchSubscriptionSnapshot(token);
+          }),
+          runBootstrapTask(async () => {
+            const result = await listPushDevices(baseUrl, token);
+            setPushDevices(result.items);
+          }),
+          runBootstrapTask(async () => {
+            const result = await listExpenses(baseUrl, token);
+            setLedgerItems(mapLedgerItems(result.items as unknown[]));
+          }),
+          runBootstrapTask(async () => {
+            const result = await loadMonthlyReport(baseUrl, token);
+            setReportSummary(mapReportSummary(result));
+          }),
+          runBootstrapTask(async () => {
+            const [summary, catalog, ledger, redemptions] = await Promise.all([
+              getRewardsSummary(baseUrl, token),
+              getRewardsCatalog(baseUrl, token),
+              getRewardsLedger(baseUrl, token, 25),
+              getRewardRedemptions(baseUrl, token, 25),
+            ]);
+            setRewardSummary(summary);
+            setRewardCatalog(catalog.items);
+            setRewardLedger(ledger.items);
+            setRewardRedemptions(redemptions.items);
+          }),
+          runBootstrapTask(async () => {
+            const result = await listFamilies(baseUrl, token);
+            setFamilies(result.items);
+            setActiveFamilyId((current) =>
+              result.items.some((item) => item.id === current) ? current : result.items[0]?.id ?? '',
+            );
+          }),
+          runBootstrapTask(async () => {
+            const result = await listPriceAlerts(baseUrl, token);
+            setAlerts(result.items);
+          }),
+          runBootstrapTask(async () => {
+            const result = await listAlertEvents(baseUrl, token, {
+              limit: 20,
+              unreadOnly: false,
+            });
+            setAlertEvents(result.items);
+            setAlertUnreadCount(result.items.filter((item) => item.readAt === null).length);
+          }),
+          runBootstrapTask(async () => {
+            const result = await listPromos(baseUrl, token, {
+              limit: 10,
+            });
+            setPromoItems(result.items);
+          }),
+        ]);
+
+        bootstrapRetryCountRef.current = 0;
+        bootstrappedForUserRef.current = bootstrapKey;
+        setInitialDataSyncedAt(new Date().toISOString());
+        if (errors.length > 0) {
+          setMessage(`Auto-sync completed with ${errors.length} issue${errors.length === 1 ? '' : 's'}: ${errors[0]}`);
+        }
+      } catch (error) {
+        const message = errorToMessage(error);
+        setAuthSyncStatus('error');
+        setAuthSyncError(message);
+        shouldRetry = bootstrapRetryCountRef.current < 3;
+        if (shouldRetry) {
+          bootstrapRetryCountRef.current += 1;
+          scheduleBootstrap(600 * bootstrapRetryCountRef.current);
+        } else {
+          setMessage(message);
+        }
+      } finally {
+        bootstrapInFlightRef.current = false;
+        if (!shouldRetry) {
+          setInitialDataLoading(false);
+        }
+      }
+    };
+
+    scheduleBootstrap(0);
+
+    return () => {
+      cancelled = true;
+      if (bootstrapRetryTimerRef.current) {
+        clearTimeout(bootstrapRetryTimerRef.current);
+        bootstrapRetryTimerRef.current = null;
+      }
+    };
+  }, [
+    apiBaseUrl,
+    bootstrapRequestId,
+    fetchSubscriptionSnapshot,
+    getBearerTokenOrThrow,
+    user?.id,
+  ]);
 
   const loadPushDevices = useCallback(async () => {
     await runTask(async () => {
@@ -1242,8 +1396,16 @@ function useClariFiControllerValue(): ClariFiController {
       setBackendUserId('');
       setAuthSyncStatus('idle');
       setAuthSyncError('');
-      setLastSyncedClerkUserId('');
-      setLastAutoSyncAttemptedClerkUserId('');
+      setInitialDataLoading(false);
+      setInitialDataSyncedAt('');
+      setBootstrapRequestId(0);
+      bootstrapRetryCountRef.current = 0;
+      if (bootstrapRetryTimerRef.current) {
+        clearTimeout(bootstrapRetryTimerRef.current);
+        bootstrapRetryTimerRef.current = null;
+      }
+      bootstrappedForUserRef.current = '';
+      splitSessionsBootstrappedForFamilyRef.current = '';
       setSubscription(null);
       setRewardSummary(null);
       setRewardCatalog([]);
@@ -2051,12 +2213,38 @@ function useClariFiControllerValue(): ClariFiController {
         limit: 20,
       });
       setSplitSummaries(result.items);
-      if (result.items.length > 0 && !activeSplitId) {
-        setActiveSplitId(result.items[0]?.id ?? '');
-      }
+      setActiveSplitId((current) =>
+        result.items.some((item) => item.id === current) ? current : result.items[0]?.id ?? '',
+      );
       setMessage(`Loaded ${result.items.length} split sessions.`);
     });
-  }, [activeFamilyId, activeSplitId, apiBaseUrl, getBearerTokenOrThrow, runTask]);
+  }, [activeFamilyId, apiBaseUrl, getBearerTokenOrThrow, runTask]);
+
+  useEffect(() => {
+    if (!user?.id || authSyncStatus !== 'ok' || !activeFamilyId) {
+      return;
+    }
+
+    const bootstrapKey = `${user.id}:${normalizeBaseUrl(apiBaseUrl)}:${activeFamilyId}`;
+    if (splitSessionsBootstrappedForFamilyRef.current === bootstrapKey) {
+      return;
+    }
+
+    splitSessionsBootstrappedForFamilyRef.current = bootstrapKey;
+    void (async () => {
+      const token = await getBearerTokenOrThrow();
+      const result = await listSplits(normalizeBaseUrl(apiBaseUrl), token, {
+        familyId: activeFamilyId,
+        limit: 20,
+      });
+      setSplitSummaries(result.items);
+      setActiveSplitId((current) =>
+        result.items.some((item) => item.id === current) ? current : result.items[0]?.id ?? '',
+      );
+    })().catch((error) => {
+      setMessage(errorToMessage(error));
+    });
+  }, [activeFamilyId, apiBaseUrl, authSyncStatus, getBearerTokenOrThrow, user?.id]);
 
   const loadActiveSplitDetail = useCallback(async () => {
     await loadSplitDetailById(activeSplitId);
@@ -2470,6 +2658,8 @@ function useClariFiControllerValue(): ClariFiController {
       message,
       clearMessage,
       loading,
+      initialDataLoading,
+      initialDataSyncedAt,
       signedInEmail,
       backendUserId,
       authSyncStatus,
@@ -2699,6 +2889,8 @@ function useClariFiControllerValue(): ClariFiController {
       familyRoleTarget,
       finalizeActiveSplit,
       includePromo,
+      initialDataLoading,
+      initialDataSyncedAt,
       ingestPromoFile,
       joinFamilyByInviteCode,
       ledgerItems,

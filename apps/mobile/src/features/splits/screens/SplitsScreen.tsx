@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { DarkCard } from '../../../components/ui/dark-card';
+import { LoadingRows } from '../../../components/ui/loading-state';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 
@@ -145,10 +146,16 @@ export function SplitsScreen() {
               onPress={controller.loadFamiliesList}
               disabled={controller.loading}
             >
-              <Text style={styles.smallBtnText}>Refresh</Text>
+              {controller.loading || controller.initialDataLoading ? (
+                <ActivityIndicator size="small" color={Colors.green} />
+              ) : (
+                <Text style={styles.smallBtnText}>Sync</Text>
+              )}
             </TouchableOpacity>
           </View>
-          {controller.families.length === 0 ? (
+          {controller.initialDataLoading && controller.families.length === 0 ? (
+            <LoadingRows label="Syncing families" count={2} />
+          ) : controller.families.length === 0 ? (
             <Text style={styles.emptyText}>No families found. Go to Families tab to create one.</Text>
           ) : (
             controller.families.map((family) => {
@@ -191,12 +198,19 @@ export function SplitsScreen() {
               disabled={controller.loading}
               testID={TEST_IDS.ledger.refreshButton}
             >
-              <Text style={styles.smallBtnText}>Load</Text>
+              {controller.loading || controller.initialDataLoading ? (
+                <ActivityIndicator size="small" color={Colors.green} />
+              ) : (
+                <Text style={styles.smallBtnText}>Sync</Text>
+              )}
             </TouchableOpacity>
           </View>
           <Text style={styles.emptyText}>
             Family: {activeFamily?.name ?? '-'}
           </Text>
+          {controller.initialDataLoading && controller.ledgerItems.length === 0 ? (
+            <LoadingRows label="Syncing expenses" count={3} />
+          ) : null}
           {controller.ledgerItems.slice(0, 20).map((expense) => {
             const isSelected = selectedExpenseId === expense.id;
             return (
@@ -295,7 +309,7 @@ export function SplitsScreen() {
               onPress={controller.loadSplitSessions}
               disabled={controller.loading || !controller.activeFamilyId}
             >
-              <Text style={styles.smallBtnText}>Load sessions</Text>
+              <Text style={styles.smallBtnText}>Sync sessions</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.emptyText}>Active split: {controller.activeSplitId || '-'}</Text>

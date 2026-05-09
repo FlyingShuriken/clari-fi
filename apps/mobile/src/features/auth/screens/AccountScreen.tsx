@@ -4,6 +4,7 @@ import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { MetaRow } from '../../../components/ui/meta-row';
 import { DarkCard } from '../../../components/ui/dark-card';
 import { PillBadge } from '../../../components/ui/pill-badge';
+import { InlineSpinner } from '../../../components/ui/loading-state';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import { Colors } from '../../../theme';
 
@@ -18,6 +19,7 @@ export function AccountScreen() {
   const activePushDeviceCount = controller.pushDevices.filter((d) => d.active).length;
   const isLive = controller.backendLiveHealth?.status === 'live';
   const isReady = controller.backendReadyHealth?.status === 'ready';
+  const syncInProgress = controller.authSyncStatus === 'syncing' || controller.initialDataLoading;
 
   return (
     <ScrollView
@@ -30,20 +32,35 @@ export function AccountScreen() {
         <View style={styles.statusRow}>
           <PillBadge label={isLive ? 'Live' : 'Offline'} color={isLive ? 'green' : 'coral'} />
           <PillBadge label={isReady ? 'Ready' : 'Not ready'} color={isReady ? 'green' : 'amber'} />
+          <PillBadge
+            label={
+              controller.authSyncStatus === 'error'
+                ? 'Sync error'
+                : controller.authSyncStatus === 'ok'
+                ? 'Synced'
+                : 'Syncing'
+            }
+            color={controller.authSyncStatus === 'error' ? 'coral' : 'green'}
+          />
         </View>
+        {syncInProgress ? <InlineSpinner label="Syncing account data" /> : null}
         <View style={styles.metaGroup}>
           <MetaRow label="Signed in as" value={controller.signedInEmail || '-'} />
           <MetaRow label="Backend user" value={controller.backendUserId || '-'} />
           <MetaRow label="Health checked" value={formatTimestamp(controller.backendHealthCheckedAt)} />
+          <MetaRow label="Data synced" value={formatTimestamp(controller.initialDataSyncedAt)} />
         </View>
+        {controller.authSyncError ? (
+          <Text style={styles.errorText}>{controller.authSyncError}</Text>
+        ) : null}
         <View style={styles.buttonRow}>
           <TouchableOpacity
-            style={[styles.btn, styles.btnPrimary]}
+            style={[styles.btn, styles.btnOutline]}
             onPress={controller.syncBackendUser}
             disabled={controller.loading}
             testID={TEST_IDS.account.syncBackendButton}
           >
-            <Text style={styles.btnPrimaryText}>Sync user</Text>
+            <Text style={styles.btnOutlineText}>Sync now</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.btn, styles.btnOutline]}
@@ -71,7 +88,7 @@ export function AccountScreen() {
             disabled={controller.loading}
             testID={TEST_IDS.account.refreshPushDevicesButton}
           >
-            <Text style={styles.btnOutlineText}>Refresh devices</Text>
+            <Text style={styles.btnOutlineText}>Sync devices</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.btn, styles.btnOutline]}
@@ -137,6 +154,13 @@ const styles = StyleSheet.create({
   metaGroup: {
     gap: 8,
     marginBottom: 16,
+    marginTop: 12,
+  },
+  errorText: {
+    color: Colors.coral,
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: 12,
   },
   buttonRow: {
     flexDirection: 'row',

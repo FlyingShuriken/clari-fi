@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -9,6 +9,7 @@ import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { SectionLabel } from '../../../components/ui/section-label';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { RefreshScroll } from '../../../components/ui/refresh-scroll';
+import { LoadingRows } from '../../../components/ui/loading-state';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
@@ -196,7 +197,7 @@ export function AlertsScreen() {
                 disabled={controller.loading}
                 testID={TEST_IDS.alerts.loadAlertsButton}
               >
-                <Text style={styles.loadBtnText}>Load alerts</Text>
+                <Text style={styles.loadBtnText}>Sync alerts</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -210,8 +211,12 @@ export function AlertsScreen() {
             style={styles.utilBtn}
             testID={TEST_IDS.alerts.loadEventsButton}
           >
-            <MaterialCommunityIcons name="refresh" size={16} color={Colors.textSecondary} />
-            <Text style={styles.utilBtnText}>Refresh</Text>
+            {controller.loading || controller.initialDataLoading ? (
+              <ActivityIndicator size="small" color={Colors.green} />
+            ) : (
+              <MaterialCommunityIcons name="refresh" size={16} color={Colors.textSecondary} />
+            )}
+            <Text style={styles.utilBtnText}>Sync</Text>
           </TouchableOpacity>
           {controller.alertUnreadCount > 0 ? (
             <TouchableOpacity
@@ -329,10 +334,12 @@ export function AlertsScreen() {
           </>
         ) : null}
 
-        {controller.alertEvents.length === 0 && !showCreateForm ? (
+        {controller.initialDataLoading && controller.alertEvents.length === 0 && !showCreateForm ? (
+          <LoadingRows label="Syncing alerts" count={3} />
+        ) : controller.alertEvents.length === 0 && !showCreateForm ? (
           <EmptyState
             icon="bell-outline"
-            message="No alert events yet. Tap Refresh or create an alert."
+            message="No alert events yet. Create an alert to start monitoring."
           />
         ) : null}
       </RefreshScroll>

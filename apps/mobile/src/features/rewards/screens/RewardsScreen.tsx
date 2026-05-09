@@ -1,13 +1,14 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
 import { Colors } from '../../../theme';
+import { LoadingRows } from '../../../components/ui/loading-state';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -59,6 +60,10 @@ export function RewardsScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (controller.authSyncStatus !== 'ok' || controller.initialDataLoading) {
+        return;
+      }
+
       void Promise.all([
         controller.loadRewardSummary(),
         controller.loadRewardCatalog(),
@@ -66,6 +71,8 @@ export function RewardsScreen() {
         controller.loadRewardRedemptions(),
       ]);
     }, [
+      controller.authSyncStatus,
+      controller.initialDataLoading,
       controller.loadRewardCatalog,
       controller.loadRewardLedger,
       controller.loadRewardRedemptions,
@@ -102,7 +109,11 @@ export function RewardsScreen() {
             }}
             testID={TEST_IDS.rewards.refreshButton}
           >
-            <MaterialCommunityIcons name="refresh" size={18} color={Colors.textPrimary} />
+            {controller.loading || controller.initialDataLoading ? (
+              <ActivityIndicator size="small" color={Colors.green} />
+            ) : (
+              <MaterialCommunityIcons name="refresh" size={18} color={Colors.textPrimary} />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -164,8 +175,10 @@ export function RewardsScreen() {
             <Text style={styles.sectionTitle}>Rewards catalog</Text>
             <Text style={styles.sectionCaption}>{controller.rewardCatalog.length} active</Text>
           </View>
-          {controller.rewardCatalog.length === 0 ? (
-            <Text style={styles.emptyText}>Reward catalog will appear after the first sync.</Text>
+          {controller.initialDataLoading && controller.rewardCatalog.length === 0 ? (
+            <LoadingRows label="Syncing rewards" count={3} />
+          ) : controller.rewardCatalog.length === 0 ? (
+            <Text style={styles.emptyText}>Reward catalog will appear automatically after sync.</Text>
           ) : (
             controller.rewardCatalog.map((reward, index) => {
               const affordable = balance >= reward.pointsCost;
@@ -211,7 +224,9 @@ export function RewardsScreen() {
             <Text style={styles.sectionTitle}>Recent points activity</Text>
             <Text style={styles.sectionCaption}>{controller.rewardLedger.length} entries</Text>
           </View>
-          {controller.rewardLedger.length === 0 ? (
+          {controller.initialDataLoading && controller.rewardLedger.length === 0 ? (
+            <LoadingRows label="Syncing activity" count={3} />
+          ) : controller.rewardLedger.length === 0 ? (
             <Text style={styles.emptyText}>No points activity yet. Upload a receipt or flyer to start earning.</Text>
           ) : (
             controller.rewardLedger.map((entry) => (
@@ -242,7 +257,9 @@ export function RewardsScreen() {
             <Text style={styles.sectionTitle}>Redemption history</Text>
             <Text style={styles.sectionCaption}>{controller.rewardRedemptions.length} redemptions</Text>
           </View>
-          {controller.rewardRedemptions.length === 0 ? (
+          {controller.initialDataLoading && controller.rewardRedemptions.length === 0 ? (
+            <LoadingRows label="Syncing redemptions" count={2} />
+          ) : controller.rewardRedemptions.length === 0 ? (
             <Text style={styles.emptyText}>No redemptions yet.</Text>
           ) : (
             controller.rewardRedemptions.map((item) => (

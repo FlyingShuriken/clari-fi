@@ -196,6 +196,36 @@ export function CaptureScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {(controller.initialDataLoading || controller.authSyncStatus === 'error') ? (
+          <View
+            style={[
+              styles.syncBanner,
+              controller.authSyncStatus === 'error' && styles.syncBannerError,
+            ]}
+          >
+            {controller.initialDataLoading ? (
+              <ActivityIndicator size={16} color={Colors.green} />
+            ) : (
+              <MaterialCommunityIcons name="alert-circle-outline" size={18} color={Colors.coral} />
+            )}
+            <View style={styles.syncBannerTextBlock}>
+              <Text style={styles.syncBannerTitle}>
+                {controller.initialDataLoading ? 'Syncing your data' : 'Sync needs attention'}
+              </Text>
+              <Text style={styles.syncBannerCopy} numberOfLines={2}>
+                {controller.initialDataLoading
+                  ? 'Ledger, rewards, family sharing, alerts, and premium limits are loading automatically.'
+                  : controller.authSyncError}
+              </Text>
+            </View>
+            {controller.authSyncStatus === 'error' ? (
+              <TouchableOpacity style={styles.syncRetryBtn} onPress={controller.syncBackendUser}>
+                <Text style={styles.syncRetryText}>Retry</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+
         <TouchableOpacity style={styles.rewardsCard} onPress={() => navigation.navigate('Rewards')} activeOpacity={0.92}>
           <View style={styles.rewardsCardHeader}>
             <View style={styles.rewardsCardTitleBlock}>
@@ -573,7 +603,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontSize: 28,
     fontWeight: '700',
-    letterSpacing: -0.7,
+    letterSpacing: 0,
   },
   headerActions: {
     flexDirection: 'row',
@@ -623,6 +653,44 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 110,
     gap: 14,
+  },
+  syncBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.greenDim,
+  },
+  syncBannerError: {
+    borderColor: Colors.coralDim,
+  },
+  syncBannerTextBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  syncBannerTitle: {
+    color: Colors.textPrimary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  syncBannerCopy: {
+    color: Colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  syncRetryBtn: {
+    backgroundColor: Colors.coralDim,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  syncRetryText: {
+    color: Colors.coral,
+    fontSize: 12,
+    fontWeight: '800',
   },
   rewardsCard: {
     backgroundColor: Colors.surface,
