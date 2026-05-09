@@ -133,3 +133,51 @@ If `Live` and `Ready` show as healthy, the simulator is connected to the backend
   - `/v1/health/live` and `/v1/health/ready`
   - current registered push devices
 - Follow `tasks/phase4c-mobile-smoke.md` for the full iPhone smoke sequence.
+
+## Architecture Diagram (Direct)
+
+                    +-----------------------------------+
+                    |           Mobile App              |
+                    |      (Expo React Native)          |
+                    +----------------+------------------+
+                                     |
+                                     v
+                    +-----------------------------------+
+                    |            API (NestJS)           |
+                    |      apps/api/src/modules/*       |
+                    +---+-----------+-----------+-------+
+                        |           |           |
+                        |           |           |
+                        |           |           +-------------------------------+
+                        |           |                                           |
+                        |           v                                           v
+                        |   +---------------+                       +----------------------+
+                        |   | Reports Module|                       | Prices Module        |
+                        |   | weekly slides |                       | item normalization   |
+                        |   +-------+-------+                       +----------+-----------+
+                        |           |                                          |
+                        |           | LLM generateSlidesViaLlm                 | LLM canonicalizeWithLlm
+                        |           +--------------------------+---------------+
+                        |                                      |
+                        v                                      v
+               +------------------+                  +-------------------------+
+               | Parse Module     |                  | OpenRouter (LLM APIs)   |
+               | /voice /receipt  |<---------------->| - STT (audio)           |
+               | /document-images |                  | - OCR (vision text)     |
+               +---------+--------+                  | - Parser (structured)   |
+                         |                           | - Normalizer             |
+                         |                           | - Weekly insights        |
+                         |                           +-------------------------+
+                         |
+                         v
+                 +---------------+
+                 | PostgreSQL    |
+                 | Prisma ORM    |
+                 +-------+-------+
+                         ^
+                         |
+                 +-------+-------+
+                 | packages/shared|
+                 | shared contracts|
+                 +---------------+
+
