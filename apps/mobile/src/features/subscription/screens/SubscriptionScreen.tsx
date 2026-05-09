@@ -127,77 +127,77 @@ export function SubscriptionScreen() {
           <InlineSpinner label="Syncing current plan" />
         ) : null}
 
-        {/* Plan cards side by side */}
-        <View style={styles.planRow}>
+        {/* Plan toggle */}
+        <View style={styles.planToggle}>
           {(['FREE', 'PREMIUM'] as const).map((plan) => {
             const active = selectedPlan === plan;
             const isCurrent = controller.subscription?.plan === plan;
             return (
               <TouchableOpacity
                 key={plan}
+                style={[styles.planToggleBtn, active && styles.planToggleBtnActive]}
                 onPress={() => setSelectedPlan(plan)}
-                activeOpacity={0.85}
-                style={[styles.planCard, active && (plan === 'PREMIUM' ? styles.planCardPremiumActive : styles.planCardFreeActive)]}
                 accessibilityRole="button"
                 accessibilityLabel={`Select ${plan === 'FREE' ? 'Free' : 'Premium'} plan${isCurrent ? ', current plan' : ''}`}
                 accessibilityState={{ selected: active }}
               >
-                {/* Badge row */}
-                <View style={styles.planBadgeRow}>
-                  <View style={[styles.planBadge, plan === 'PREMIUM' && active && styles.planBadgePremium]}>
-                    <Text style={[styles.planBadgeText, plan === 'PREMIUM' && active && styles.planBadgeTextPremium]}>
-                      {isCurrent ? 'CURRENT' : plan === 'PREMIUM' ? 'POPULAR' : 'FREE'}
-                    </Text>
-                  </View>
-                  {active && (
-                    <MaterialCommunityIcons
-                      name="check-circle"
-                      size={15}
-                      color={plan === 'PREMIUM' ? Colors.green : Colors.textSecondary}
-                    />
-                  )}
-                </View>
-
-                <Text style={[styles.planName, plan === 'PREMIUM' && active && styles.planNamePremium]}>
+                <Text style={[styles.planToggleText, active && styles.planToggleTextActive]}>
                   {plan === 'FREE' ? 'Free' : 'Premium'}
                 </Text>
-
-                <View style={styles.priceRow}>
-                  <Text style={[styles.priceAmt, plan === 'PREMIUM' && active && styles.priceAmtPremium]}>
-                    {plan === 'FREE' ? 'RM 0' : 'RM 5.99'}
-                  </Text>
-                  <Text style={styles.pricePer}>/mo</Text>
-                </View>
-
-                <View style={styles.cardDivider} />
-
-                {(plan === 'FREE' ? FREE_FEATURES : PREMIUM_FEATURES).map((f, i) => (
-                  <View key={i} style={styles.featureRow}>
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={10}
-                      color={plan === 'PREMIUM' && i === PREMIUM_FEATURES.length - 1 ? Colors.amber : Colors.green}
-                    />
-                    <Text
-                      style={[
-                        styles.featureText,
-                        plan === 'PREMIUM' && i === PREMIUM_FEATURES.length - 1 && styles.featureTextAmber,
-                      ]}
-                    >
-                      {f}
-                    </Text>
-                  </View>
-                ))}
-
-                {plan === 'PREMIUM' && (
-                  <View style={styles.addonHint}>
-                    <MaterialCommunityIcons name="lightning-bolt" size={10} color={Colors.amber} />
-                    <Text style={styles.addonHintText}>Add-on packs available</Text>
-                  </View>
-                )}
+                {isCurrent ? <Text style={styles.planToggleCurrent}> · Current</Text> : null}
               </TouchableOpacity>
             );
           })}
+        </View>
+
+        {/* Selected plan card */}
+        <View style={styles.planCardFull}>
+          {/* Badge row */}
+          <View style={styles.planBadgeRow}>
+            <View style={[styles.planBadge, selectedPlan === 'PREMIUM' && styles.planBadgePremium]}>
+              <Text style={[styles.planBadgeText, selectedPlan === 'PREMIUM' && styles.planBadgeTextPremium]}>
+                {controller.subscription?.plan === selectedPlan ? 'CURRENT' : selectedPlan === 'PREMIUM' ? 'POPULAR' : 'FREE'}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={[styles.planName, selectedPlan === 'PREMIUM' && styles.planNamePremium]}>
+            {selectedPlan === 'FREE' ? 'Free' : 'Premium'}
+          </Text>
+
+          <View style={styles.priceRow}>
+            <Text style={[styles.priceAmt, selectedPlan === 'PREMIUM' && styles.priceAmtPremium]}>
+              {selectedPlan === 'FREE' ? 'RM 0' : 'RM 5.99'}
+            </Text>
+            <Text style={styles.pricePer}>/mo</Text>
+          </View>
+
+          <View style={styles.cardDivider} />
+
+          {(selectedPlan === 'FREE' ? FREE_FEATURES : PREMIUM_FEATURES).map((f, i) => (
+            <View key={i} style={styles.featureRow}>
+              <MaterialCommunityIcons
+                name="check"
+                size={10}
+                color={selectedPlan === 'PREMIUM' && i === PREMIUM_FEATURES.length - 1 ? Colors.amber : Colors.green}
+              />
+              <Text
+                style={[
+                  styles.featureText,
+                  selectedPlan === 'PREMIUM' && i === PREMIUM_FEATURES.length - 1 && styles.featureTextAmber,
+                ]}
+              >
+                {f}
+              </Text>
+            </View>
+          ))}
+
+          {selectedPlan === 'PREMIUM' && (
+            <View style={styles.addonHint}>
+              <MaterialCommunityIcons name="lightning-bolt" size={10} color={Colors.amber} />
+              <Text style={styles.addonHintText}>Add-on packs available</Text>
+            </View>
+          )}
         </View>
 
         {/* Add-on packs */}
@@ -398,9 +398,43 @@ const styles = StyleSheet.create({
   },
 
   // Plan cards
-  planRow: {
+  planToggle: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
+  },
+  planToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  planToggleBtnActive: {
+    backgroundColor: Colors.surfaceHigh,
+    borderColor: Colors.green,
+  },
+  planToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  planToggleTextActive: {
+    color: Colors.green,
+  },
+  planToggleCurrent: {
+    fontSize: 12,
+    color: Colors.textMuted,
+  },
+  planCardFull: {
+    backgroundColor: Colors.surface,
+    borderRadius: 24,
+    padding: 20,
+    gap: 12,
   },
   planCard: {
     flex: 1,

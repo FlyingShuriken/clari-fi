@@ -10,4 +10,5 @@ export { PillBadge } from './pill-badge';
 export { RefreshScroll } from './refresh-scroll';
 export { ScreenContainer } from './screen-container';
 export { SectionLabel } from './section-label';
+export { ScrollToTop } from './scroll-to-top';
 export { StatCard } from './stat-card';

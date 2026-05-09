@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { TextInput } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,6 +12,7 @@ import { LoadingRows } from '../../../components/ui/loading-state';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
+import { AlertFormSheet } from '../components/alert-form-sheet';
 
 type BadgeColor = 'green' | 'indigo' | 'coral' | 'amber';
 
@@ -41,10 +41,6 @@ function formatRelativeTime(iso: string): string {
   if (hrs < 24) return `${hrs} hr${hrs > 1 ? 's' : ''} ago`;
   return new Date(iso).toLocaleDateString('default', { month: 'short', day: 'numeric' });
 }
-
-const inputTheme = {
-  colors: { onSurface: Colors.textPrimary, onSurfaceVariant: Colors.textSecondary },
-};
 
 export function AlertsScreen() {
   const controller = useClariFiController();
@@ -102,127 +98,6 @@ export function AlertsScreen() {
         onRefreshAsync={controller.loadAlertEvents}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Inline create form */}
-        {showCreateForm ? (
-          <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Create alert</Text>
-
-            <View style={styles.kindRow}>
-              {(['THRESHOLD', 'SIGNAL'] as const).map((k) => (
-                <TouchableOpacity
-                  key={k}
-                  style={[styles.kindChip, controller.alertKind === k && styles.kindChipActive]}
-                  onPress={() => controller.setAlertKind(k)}
-                  accessibilityRole="button"
-                  accessibilityLabel={k === 'THRESHOLD' ? 'Threshold alert' : 'Smart signal alert'}
-                  accessibilityState={{ selected: controller.alertKind === k }}
-                >
-                  <Text style={[styles.kindText, controller.alertKind === k && styles.kindTextActive]}>
-                    {k === 'THRESHOLD' ? 'Threshold' : 'Smart signal'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TextInput
-              label="Item"
-              value={controller.alertItem}
-              onChangeText={controller.setAlertItem}
-              mode="outlined"
-              style={styles.input}
-              theme={inputTheme}
-            />
-
-            {controller.alertKind === 'THRESHOLD' ? (
-              <TextInput
-                label="Target unit price"
-                value={controller.alertTargetUnitPrice}
-                onChangeText={controller.setAlertTargetUnitPrice}
-                keyboardType="decimal-pad"
-                mode="outlined"
-                style={styles.input}
-                theme={inputTheme}
-              />
-            ) : (
-              <>
-                <View style={styles.kindRow}>
-                  {(['BOTH', 'BUY_NOW', 'WAIT'] as const).map((f) => (
-                    <TouchableOpacity
-                      key={f}
-                      style={[styles.kindChip, controller.alertSignalDecisionFilter === f && styles.kindChipActive]}
-                      onPress={() => controller.setAlertSignalDecisionFilter(f)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Signal decision filter ${f === 'BOTH' ? 'buy and wait' : f === 'BUY_NOW' ? 'buy now' : 'wait'}`}
-                      accessibilityState={{ selected: controller.alertSignalDecisionFilter === f }}
-                    >
-                      <Text style={[styles.kindText, controller.alertSignalDecisionFilter === f && styles.kindTextActive]}>
-                        {f === 'BOTH' ? 'Buy + Wait' : f === 'BUY_NOW' ? 'Buy' : 'Wait'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-                <TextInput
-                  label="Min confidence (0–1)"
-                  value={controller.alertSignalMinConfidence}
-                  onChangeText={controller.setAlertSignalMinConfidence}
-                  keyboardType="decimal-pad"
-                  mode="outlined"
-                  style={styles.input}
-                  theme={inputTheme}
-                />
-              </>
-            )}
-
-            <View style={styles.locationRow}>
-              <TextInput
-                label="Radius km"
-                value={controller.alertRadiusKm}
-                onChangeText={controller.setAlertRadiusKm}
-                keyboardType="decimal-pad"
-                mode="outlined"
-                style={[styles.input, { flex: 1 }]}
-                theme={inputTheme}
-              />
-              <TextInput
-                label="Area"
-                value={controller.alertAreaText}
-                onChangeText={controller.setAlertAreaText}
-                mode="outlined"
-                style={[styles.input, { flex: 1 }]}
-                theme={inputTheme}
-              />
-            </View>
-
-            <View style={styles.formBtns}>
-              <TouchableOpacity
-                style={styles.createBtn}
-                onPress={async () => {
-                  await controller.createAlert();
-                  setShowCreateForm(false);
-                }}
-                disabled={controller.loading}
-                testID={TEST_IDS.alerts.createButton}
-                accessibilityRole="button"
-                accessibilityLabel="Create alert"
-                accessibilityState={{ disabled: controller.loading }}
-              >
-                <Text style={styles.createBtnText}>Create</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.loadBtn}
-                onPress={controller.loadAlerts}
-                disabled={controller.loading}
-                testID={TEST_IDS.alerts.loadAlertsButton}
-                accessibilityRole="button"
-                accessibilityLabel="Sync alert rules"
-                accessibilityState={{ disabled: controller.loading }}
-              >
-                <Text style={styles.loadBtnText}>Sync alerts</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : null}
-
         {/* Utility row */}
         <View style={styles.utilRow}>
           <TouchableOpacity
@@ -375,6 +250,8 @@ export function AlertsScreen() {
           />
         ) : null}
       </RefreshScroll>
+
+      <AlertFormSheet visible={showCreateForm} onDismiss={() => setShowCreateForm(false)} />
     </View>
   );
 }
@@ -448,79 +325,6 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 100,
     gap: 10,
-  },
-  formCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 16,
-    gap: 10,
-  },
-  formTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  kindRow: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  kindChip: {
-    minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: Colors.surfaceHigh,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  kindChipActive: {
-    backgroundColor: Colors.greenDim,
-    borderColor: Colors.green,
-  },
-  kindText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  kindTextActive: {
-    color: Colors.green,
-    fontWeight: '600',
-  },
-  input: {
-    backgroundColor: Colors.surface,
-  },
-  locationRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  formBtns: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  createBtn: {
-    flex: 1,
-    backgroundColor: Colors.green,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  createBtnText: {
-    color: Colors.bg,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  loadBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  loadBtnText: {
-    color: Colors.textSecondary,
-    fontSize: 14,
   },
   utilRow: {
     flexDirection: 'row',

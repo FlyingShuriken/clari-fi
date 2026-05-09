@@ -1,4 +1,6 @@
 import { ActivityIndicator, StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { TextInput } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,6 +20,7 @@ const inputTheme = {
 export function FamilyScreen() {
   const controller = useClariFiController();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [showCreateJoin, setShowCreateJoin] = useState(false);
   const activeFamily = controller.families.find((f) => f.id === controller.activeFamilyId);
   const canManageMembers = activeFamily?.currentUserRole === 'OWNER';
 
@@ -54,196 +57,276 @@ export function FamilyScreen() {
         </DarkCard>
       ) : null}
 
-      {/* Create family card */}
-      <DarkCard radius={16}>
-        <Text style={styles.cardTitle}>Create family</Text>
-        <TextInput
-          label="Family name"
-          value={controller.familyNameInput}
-          onChangeText={controller.setFamilyNameInput}
-          mode="outlined"
-          style={styles.input}
-          testID={TEST_IDS.families.nameInput}
-          theme={inputTheme}
-        />
-        <TouchableOpacity
-          style={styles.primaryBtn}
-          onPress={controller.createFamilyProfile}
-          disabled={controller.loading}
-          testID={TEST_IDS.families.createButton}
-          accessibilityRole="button"
-          accessibilityLabel="Create family"
-          accessibilityState={{ disabled: controller.loading }}
-        >
-          <Text style={styles.primaryBtnText}>Create family</Text>
-        </TouchableOpacity>
-      </DarkCard>
-
-      {/* Join family card */}
-      <DarkCard radius={16}>
-        <Text style={styles.cardTitle}>Join via invite code</Text>
-        <TextInput
-          label="Invite code"
-          value={controller.familyInviteCodeInput}
-          onChangeText={controller.setFamilyInviteCodeInput}
-          mode="outlined"
-          autoCapitalize="characters"
-          style={styles.input}
-          testID={TEST_IDS.families.inviteCodeInput}
-          theme={inputTheme}
-        />
-        <TouchableOpacity
-          style={[styles.secondaryBtn]}
-          onPress={controller.joinFamilyByInviteCode}
-          disabled={controller.loading}
-          testID={TEST_IDS.families.joinButton}
-          accessibilityRole="button"
-          accessibilityLabel="Join family with invite code"
-          accessibilityState={{ disabled: controller.loading }}
-        >
-          <Text style={styles.secondaryBtnText}>Join via code</Text>
-        </TouchableOpacity>
-        {controller.familyInviteLatestCode ? (
-          <Text style={styles.codeHint}>
-            Latest invite code: {controller.familyInviteLatestCode}
-          </Text>
-        ) : null}
-      </DarkCard>
-
-      {/* Families list */}
-      <View style={styles.listHeader}>
-        <Text style={styles.listTitle}>Your families</Text>
-        <TouchableOpacity
-          style={styles.refreshBtn}
-          onPress={controller.loadFamiliesList}
-          disabled={controller.loading}
-          testID={TEST_IDS.families.loadButton}
-          accessibilityRole="button"
-          accessibilityLabel="Sync families"
-          accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
-        >
-          {controller.loading || controller.initialDataLoading ? (
-            <ActivityIndicator size="small" color={Colors.green} />
-          ) : (
-            <Text style={styles.refreshText}>Sync</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {controller.initialDataLoading && controller.families.length === 0 ? (
-        <LoadingRows label="Syncing families" count={3} />
-      ) : controller.families.length === 0 ? (
-        <EmptyState
-          icon="account-group-outline"
-          title="No family workspace yet"
-          message="Create a family to share expenses, invite members, and split receipts together."
-        />
-      ) : (
-        controller.families.map((family) => {
-          const isActive = family.id === controller.activeFamilyId;
-          return (
-            <DarkCard key={family.id} radius={16} glow={isActive ? 'green' : undefined}>
-              <View style={styles.familyRow}>
-                <View style={styles.familyInfo}>
-                  <Text style={styles.familyName}>{family.name}</Text>
-                  <Text style={styles.familyMeta}>
-                    {family.currentUserRole ?? 'N/A'} · {family.members.length} member{family.members.length !== 1 ? 's' : ''}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[styles.setActiveBtn, isActive && styles.setActiveBtnActive]}
-                  onPress={() => controller.setActiveFamilyId(family.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={isActive ? `${family.name} is the active family` : `Set ${family.name} as active family`}
-                  accessibilityState={{ selected: isActive }}
-                >
-                  <Text style={[styles.setActiveBtnText, isActive && styles.setActiveBtnTextActive]}>
-                    {isActive ? 'Active' : 'Set active'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </DarkCard>
-          );
-        })
-      )}
-
-      {/* Active family members */}
-      {activeFamily ? (
+      {controller.families.length > 0 ? (
         <>
           <View style={styles.listHeader}>
-            <Text style={styles.listTitle}>Members — {activeFamily.name}</Text>
+            <Text style={styles.listTitle}>Your families</Text>
             <TouchableOpacity
               style={styles.refreshBtn}
-              onPress={controller.createActiveFamilyInvite}
+              onPress={controller.loadFamiliesList}
               disabled={controller.loading}
-              testID={TEST_IDS.families.createInviteButton}
+              testID={TEST_IDS.families.loadButton}
               accessibilityRole="button"
-              accessibilityLabel={`Create invite for ${activeFamily.name}`}
-              accessibilityState={{ disabled: controller.loading }}
+              accessibilityLabel="Sync families"
+              accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
             >
-              <Text style={styles.refreshText}>+ Invite</Text>
+              {controller.loading || controller.initialDataLoading ? (
+                <ActivityIndicator size="small" color={Colors.green} />
+              ) : (
+                <Text style={styles.refreshText}>Sync</Text>
+              )}
             </TouchableOpacity>
           </View>
-          {activeFamily.members.map((member) => (
-            <DarkCard key={member.id} radius={16}>
-              <View style={styles.memberRow}>
-                <View style={styles.memberInfo}>
-                  <Text style={styles.memberName}>{member.displayName || member.email}</Text>
-                  <Text style={styles.memberMeta}>
-                    Joined {new Date(member.joinedAt).toLocaleDateString()}
-                  </Text>
-                </View>
-                <PillBadge
-                  label={member.role}
-                  color={member.role === 'OWNER' ? 'green' : member.role === 'EDITOR' ? 'indigo' : 'amber'}
-                />
-              </View>
-              {canManageMembers ? (
-                <View style={styles.roleActions}>
-                  {member.role !== 'OWNER' ? (
-                    <TouchableOpacity
-                      style={styles.roleChip}
-                      onPress={() => controller.updateFamilyMemberRoleById(member.id, 'OWNER')}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Make ${member.displayName || member.email} an owner`}
-                    >
-                      <Text style={styles.roleChipText}>Owner</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {member.role !== 'EDITOR' ? (
-                    <TouchableOpacity
-                      style={styles.roleChip}
-                      onPress={() => controller.updateFamilyMemberRoleById(member.id, 'EDITOR')}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Make ${member.displayName || member.email} an editor`}
-                    >
-                      <Text style={styles.roleChipText}>Editor</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                  {member.role !== 'VIEWER' ? (
-                    <TouchableOpacity
-                      style={styles.roleChip}
-                      onPress={() => controller.updateFamilyMemberRoleById(member.id, 'VIEWER')}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Make ${member.displayName || member.email} a viewer`}
-                    >
-                      <Text style={styles.roleChipText}>Viewer</Text>
-                    </TouchableOpacity>
-                  ) : null}
+
+          {controller.families.map((family) => {
+            const isActive = family.id === controller.activeFamilyId;
+            return (
+              <DarkCard key={family.id} radius={16} glow={isActive ? 'green' : undefined}>
+                <View style={styles.familyRow}>
+                  <View style={styles.familyInfo}>
+                    <Text style={styles.familyName}>{family.name}</Text>
+                    <Text style={styles.familyMeta}>
+                      {family.currentUserRole ?? 'N/A'} · {family.members.length} member{family.members.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
                   <TouchableOpacity
-                    style={[styles.roleChip, styles.roleChipDanger]}
-                    onPress={() => controller.removeFamilyMemberById(member.id)}
+                    style={[styles.setActiveBtn, isActive && styles.setActiveBtnActive]}
+                    onPress={() => controller.setActiveFamilyId(family.id)}
                     accessibilityRole="button"
-                    accessibilityLabel={`Remove ${member.displayName || member.email} from family`}
+                    accessibilityLabel={isActive ? `${family.name} is the active family` : `Set ${family.name} as active family`}
+                    accessibilityState={{ selected: isActive }}
                   >
-                    <Text style={[styles.roleChipText, styles.roleChipDangerText]}>Remove</Text>
+                    <Text style={[styles.setActiveBtnText, isActive && styles.setActiveBtnTextActive]}>
+                      {isActive ? 'Active' : 'Set active'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
-              ) : null}
-            </DarkCard>
-          ))}
+              </DarkCard>
+            );
+          })}
+
+          {activeFamily ? (
+            <>
+              <View style={styles.listHeader}>
+                <Text style={styles.listTitle}>Members — {activeFamily.name}</Text>
+                <TouchableOpacity
+                  style={styles.refreshBtn}
+                  onPress={controller.createActiveFamilyInvite}
+                  disabled={controller.loading}
+                  testID={TEST_IDS.families.createInviteButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Create invite for ${activeFamily.name}`}
+                  accessibilityState={{ disabled: controller.loading }}
+                >
+                  <Text style={styles.refreshText}>+ Invite</Text>
+                </TouchableOpacity>
+              </View>
+              {activeFamily.members.map((member) => (
+                <DarkCard key={member.id} radius={16}>
+                  <View style={styles.memberRow}>
+                    <View style={styles.memberInfo}>
+                      <Text style={styles.memberName}>{member.displayName || member.email}</Text>
+                      <Text style={styles.memberMeta}>
+                        Joined {new Date(member.joinedAt).toLocaleDateString()}
+                      </Text>
+                    </View>
+                    <PillBadge
+                      label={member.role}
+                      color={member.role === 'OWNER' ? 'green' : member.role === 'EDITOR' ? 'indigo' : 'amber'}
+                    />
+                  </View>
+                  {canManageMembers ? (
+                    <View style={styles.roleActions}>
+                      {member.role !== 'OWNER' ? (
+                        <TouchableOpacity
+                          style={styles.roleChip}
+                          onPress={() => controller.updateFamilyMemberRoleById(member.id, 'OWNER')}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Make ${member.displayName || member.email} an owner`}
+                        >
+                          <Text style={styles.roleChipText}>Owner</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {member.role !== 'EDITOR' ? (
+                        <TouchableOpacity
+                          style={styles.roleChip}
+                          onPress={() => controller.updateFamilyMemberRoleById(member.id, 'EDITOR')}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Make ${member.displayName || member.email} an editor`}
+                        >
+                          <Text style={styles.roleChipText}>Editor</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {member.role !== 'VIEWER' ? (
+                        <TouchableOpacity
+                          style={styles.roleChip}
+                          onPress={() => controller.updateFamilyMemberRoleById(member.id, 'VIEWER')}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Make ${member.displayName || member.email} a viewer`}
+                        >
+                          <Text style={styles.roleChipText}>Viewer</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      <TouchableOpacity
+                        style={[styles.roleChip, styles.roleChipDanger]}
+                        onPress={() => controller.removeFamilyMemberById(member.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${member.displayName || member.email} from family`}
+                      >
+                        <Text style={[styles.roleChipText, styles.roleChipDangerText]}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : null}
+                </DarkCard>
+              ))}
+            </>
+          ) : null}
+
+          {showCreateJoin ? (
+            <>
+              <TouchableOpacity
+                style={styles.createJoinToggle}
+                onPress={() => setShowCreateJoin((v) => !v)}
+                accessibilityRole="button"
+                accessibilityLabel="Hide create and join options"
+              >
+                <MaterialCommunityIcons name="chevron-up" size={16} color={Colors.green} />
+                <Text style={styles.createJoinToggleText}>Hide create & join</Text>
+              </TouchableOpacity>
+
+              <DarkCard radius={16}>
+                <Text style={styles.cardTitle}>Create family</Text>
+                <TextInput
+                  label="Family name"
+                  value={controller.familyNameInput}
+                  onChangeText={controller.setFamilyNameInput}
+                  mode="outlined"
+                  style={styles.input}
+                  testID={TEST_IDS.families.nameInput}
+                  theme={inputTheme}
+                />
+                <TouchableOpacity
+                  style={styles.primaryBtn}
+                  onPress={controller.createFamilyProfile}
+                  disabled={controller.loading}
+                  testID={TEST_IDS.families.createButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Create family"
+                  accessibilityState={{ disabled: controller.loading }}
+                >
+                  <Text style={styles.primaryBtnText}>Create family</Text>
+                </TouchableOpacity>
+              </DarkCard>
+
+              <DarkCard radius={16}>
+                <Text style={styles.cardTitle}>Join via invite code</Text>
+                <TextInput
+                  label="Invite code"
+                  value={controller.familyInviteCodeInput}
+                  onChangeText={controller.setFamilyInviteCodeInput}
+                  mode="outlined"
+                  autoCapitalize="characters"
+                  style={styles.input}
+                  testID={TEST_IDS.families.inviteCodeInput}
+                  theme={inputTheme}
+                />
+                <TouchableOpacity
+                  style={[styles.secondaryBtn]}
+                  onPress={controller.joinFamilyByInviteCode}
+                  disabled={controller.loading}
+                  testID={TEST_IDS.families.joinButton}
+                  accessibilityRole="button"
+                  accessibilityLabel="Join family with invite code"
+                  accessibilityState={{ disabled: controller.loading }}
+                >
+                  <Text style={styles.secondaryBtnText}>Join via code</Text>
+                </TouchableOpacity>
+                {controller.familyInviteLatestCode ? (
+                  <Text style={styles.codeHint}>
+                    Latest invite code: {controller.familyInviteLatestCode}
+                  </Text>
+                ) : null}
+              </DarkCard>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={styles.createJoinToggle}
+              onPress={() => setShowCreateJoin((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel="Show create and join options"
+            >
+              <MaterialCommunityIcons name="plus" size={16} color={Colors.green} />
+              <Text style={styles.createJoinToggleText}>Create or join a family</Text>
+            </TouchableOpacity>
+          )}
         </>
-      ) : null}
+      ) : (
+        <>
+          <DarkCard radius={16}>
+            <Text style={styles.cardTitle}>Create family</Text>
+            <TextInput
+              label="Family name"
+              value={controller.familyNameInput}
+              onChangeText={controller.setFamilyNameInput}
+              mode="outlined"
+              style={styles.input}
+              testID={TEST_IDS.families.nameInput}
+              theme={inputTheme}
+            />
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={controller.createFamilyProfile}
+              disabled={controller.loading}
+              testID={TEST_IDS.families.createButton}
+              accessibilityRole="button"
+              accessibilityLabel="Create family"
+              accessibilityState={{ disabled: controller.loading }}
+            >
+              <Text style={styles.primaryBtnText}>Create family</Text>
+            </TouchableOpacity>
+          </DarkCard>
+
+          <DarkCard radius={16}>
+            <Text style={styles.cardTitle}>Join via invite code</Text>
+            <TextInput
+              label="Invite code"
+              value={controller.familyInviteCodeInput}
+              onChangeText={controller.setFamilyInviteCodeInput}
+              mode="outlined"
+              autoCapitalize="characters"
+              style={styles.input}
+              testID={TEST_IDS.families.inviteCodeInput}
+              theme={inputTheme}
+            />
+            <TouchableOpacity
+              style={[styles.secondaryBtn]}
+              onPress={controller.joinFamilyByInviteCode}
+              disabled={controller.loading}
+              testID={TEST_IDS.families.joinButton}
+              accessibilityRole="button"
+              accessibilityLabel="Join family with invite code"
+              accessibilityState={{ disabled: controller.loading }}
+            >
+              <Text style={styles.secondaryBtnText}>Join via code</Text>
+            </TouchableOpacity>
+            {controller.familyInviteLatestCode ? (
+              <Text style={styles.codeHint}>
+                Latest invite code: {controller.familyInviteLatestCode}
+              </Text>
+            ) : null}
+          </DarkCard>
+
+          {controller.initialDataLoading && controller.families.length === 0 ? (
+            <LoadingRows label="Syncing families" count={3} />
+          ) : (
+            <EmptyState
+              icon="account-group-outline"
+              title="No family workspace yet"
+              message="Create a family to share expenses, invite members, and split receipts together."
+            />
+          )}
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -314,6 +397,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 10,
+  },
+  createJoinToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  createJoinToggleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.green,
   },
   listHeader: {
     flexDirection: 'row',

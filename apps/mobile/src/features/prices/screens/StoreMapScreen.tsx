@@ -14,7 +14,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { Colors } from '../../../theme';
 import { LeafletMap } from '../components/leaflet-map';
-import { StoreListItem } from '../components/store-list-item';
 import { StoreBottomSheet } from '../components/store-bottom-sheet';
 import { useMultiItemCompare } from '../hooks/use-multi-item-compare';
 import type { StoreAggregate } from '../types/store-aggregate';
@@ -164,19 +163,34 @@ export function StoreMapScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         ) : (
           <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.cardsRow}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.cardsList}
           >
             {sortedStores.map((store) => (
-              <StoreListItem
+              <TouchableOpacity
                 key={store.storeId}
-                store={store}
-                totalItemsQueried={items.length}
-                isCheapest={store.storeId === cheapestId}
+                style={[styles.storeRow, store.storeId === cheapestId && styles.storeRowCheapest]}
                 onPress={() => setSelectedStore(store)}
-                formatCurrency={controller.formatCurrency}
-              />
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`${store.storeName || store.areaText || 'Store'}, ${controller.formatCurrency(store.totalLatestPrice)}, ${store.distanceKm.toFixed(1)} km`}
+              >
+                <View style={styles.storeRowLeft}>
+                  {store.storeId === cheapestId ? <View style={styles.cheapestDot} /> : null}
+                  <View style={styles.storeRowInfo}>
+                    <Text style={styles.storeRowName} numberOfLines={1}>
+                      {store.storeName || store.areaText || 'Unknown area'}
+                    </Text>
+                    <Text style={styles.storeRowMeta}>
+                      {store.distanceKm.toFixed(1)} km · {store.itemCoverage}/{items.length} items
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.storeRowRight}>
+                  <Text style={styles.storeRowPrice}>{controller.formatCurrency(store.totalLatestPrice)}</Text>
+                  <MaterialCommunityIcons name="chevron-right" size={16} color={Colors.textMuted} />
+                </View>
+              </TouchableOpacity>
             ))}
           </ScrollView>
         )}
@@ -333,10 +347,59 @@ const styles = StyleSheet.create({
     color: Colors.bg,
     fontWeight: '700',
   },
-  cardsRow: {
+  cardsList: {
+    paddingVertical: 4,
+    gap: 6,
+  },
+  storeRow: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surfaceHigh,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     gap: 10,
-    paddingBottom: 4,
+  },
+  storeRowCheapest: {
+    borderWidth: 1,
+    borderColor: Colors.green + '40',
+    backgroundColor: Colors.greenDim,
+  },
+  storeRowLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cheapestDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.green,
+  },
+  storeRowInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  storeRowName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  storeRowMeta: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+  },
+  storeRowRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  storeRowPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
   },
   loader: {
     marginTop: 20,

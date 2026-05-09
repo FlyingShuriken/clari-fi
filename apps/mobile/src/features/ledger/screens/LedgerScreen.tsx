@@ -9,6 +9,7 @@ import { ExpenseCard } from '../../../components/ui/expense-card';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { RefreshScroll } from '../../../components/ui/refresh-scroll';
 import { LoadingRows } from '../../../components/ui/loading-state';
+import { SectionLabel } from '../../../components/ui/section-label';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
@@ -41,6 +42,16 @@ function filterMatch(category: string, filter: FilterCategory): boolean {
     Utilities: ['utilities'],
   };
   return map[filter].includes(category);
+}
+
+function dateGroupKey(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString('default', { month: 'long', day: 'numeric' });
 }
 
 export function LedgerScreen() {
@@ -86,12 +97,7 @@ export function LedgerScreen() {
     nudgeBannerShownRef.current = true;
     setShowNudgeBanner(true);
     Animated.timing(nudgeOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-    const timer = setTimeout(() => {
-      Animated.timing(nudgeOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start(() =>
-        setShowNudgeBanner(false),
-      );
-    }, 6000);
-    return () => clearTimeout(timer);
+    // Banner stays visible until user dismisses — no auto-dismiss timer
   }, [controller.ledgerItems, nudgeOpacity]);
 
   const openReports = async () => {
@@ -110,6 +116,17 @@ export function LedgerScreen() {
     filterMatch(inferCategory(item.lineItems), selectedFilter),
   );
 
+  const groupedItems = filteredItems.reduce<{ label: string; items: typeof filteredItems }[]>((groups, item) => {
+    const key = dateGroupKey(item.transactionAt);
+    const last = groups[groups.length - 1];
+    if (last && last.label === key) {
+      last.items.push(item);
+    } else {
+      groups.push({ label: key, items: [item] });
+    }
+    return groups;
+  }, []);
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -118,42 +135,6 @@ export function LedgerScreen() {
           <Text style={styles.subtitle}>
             {monthLabel} · {controller.formatCurrency(controller.ledgerTotal)} tracked
           </Text>
-        </View>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={segment === 'entries' ? controller.loadLedger : controller.loadReport}
-            disabled={controller.loading}
-            testID={TEST_IDS.ledger.refreshButton}
-            accessibilityRole="button"
-            accessibilityLabel={segment === 'entries' ? 'Refresh expenses' : 'Refresh reports'}
-            accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
-            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-          >
-            {controller.loading || controller.initialDataLoading ? (
-              <ActivityIndicator size="small" color={Colors.green} />
-            ) : (
-              <MaterialCommunityIcons name="refresh" size={20} color={Colors.textSecondary} />
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate('Families')}
-            accessibilityRole="button"
-            accessibilityLabel="Open family sharing"
-            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-          >
-            <MaterialCommunityIcons name="account-group-outline" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => navigation.navigate('Splits')}
-            accessibilityRole="button"
-            accessibilityLabel="Open bill splits"
-            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
-          >
-            <MaterialCommunityIcons name="call-split" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -185,6 +166,43 @@ export function LedgerScreen() {
             color={segment === 'reports' ? Colors.green : Colors.textSecondary}
           />
           <Text style={[styles.segmentText, segment === 'reports' && styles.segmentTextActive]}>Reports</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.toolsRow}>
+        <TouchableOpacity
+          style={styles.toolChip}
+          onPress={segment === 'entries' ? controller.loadLedger : controller.loadReport}
+          disabled={controller.loading || controller.initialDataLoading}
+          testID={TEST_IDS.ledger.refreshButton}
+          accessibilityRole="button"
+          accessibilityLabel={segment === 'entries' ? 'Refresh expenses' : 'Refresh reports'}
+          accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
+        >
+          {controller.loading || controller.initialDataLoading ? (
+            <ActivityIndicator size="small" color={Colors.green} />
+          ) : (
+            <MaterialCommunityIcons name="refresh" size={14} color={Colors.green} />
+          )}
+          <Text style={styles.toolChipText}>Sync</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.toolChip}
+          onPress={() => navigation.navigate('Families')}
+          accessibilityRole="button"
+          accessibilityLabel="Open family sharing"
+        >
+          <MaterialCommunityIcons name="account-group-outline" size={14} color={Colors.textSecondary} />
+          <Text style={styles.toolChipText}>Families</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.toolChip}
+          onPress={() => navigation.navigate('Splits')}
+          accessibilityRole="button"
+          accessibilityLabel="Open bill splits"
+        >
+          <MaterialCommunityIcons name="call-split" size={14} color={Colors.textSecondary} />
+          <Text style={styles.toolChipText}>Split</Text>
         </TouchableOpacity>
       </View>
 
@@ -250,36 +268,27 @@ export function LedgerScreen() {
                 onAction={selectedFilter === 'All' ? () => navigation.navigate('MainTabs', { screen: 'Home' }) : () => setSelectedFilter('All')}
               />
             ) : (
-              filteredItems.map((item) => {
-                const category = inferCategory(item.lineItems);
-                const date = new Date(item.transactionAt);
-                const today = new Date();
-                const yesterday = new Date(today);
-                yesterday.setDate(today.getDate() - 1);
+              groupedItems.map((group) => (
+                <View key={group.label}>
+                  <SectionLabel label={group.label.toUpperCase()} />
+                  {group.items.map((item) => {
+                    const category = inferCategory(item.lineItems);
+                    const cheaperOption = item.cheaperOption;
 
-                let timeStr: string;
-                if (date.toDateString() === today.toDateString()) {
-                  timeStr = `Today ${date.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit' })}`;
-                } else if (date.toDateString() === yesterday.toDateString()) {
-                  timeStr = `Yesterday ${date.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit' })}`;
-                } else {
-                  timeStr = date.toLocaleDateString('default', { month: 'short', day: 'numeric' });
-                }
-
-                const cheaperOption = item.cheaperOption;
-
-                return (
-                  <ExpenseCard
-                    key={item.id}
-                    merchant={item.merchant}
-                    meta={[category, item.paymentMethod, timeStr].filter(Boolean).join(' · ')}
-                    amount={controller.formatCurrency(item.totalAmount, item.currency)}
-                    category={category}
-                    hasCheaperOption={cheaperOption?.hasAlternative}
-                    onPress={() => navigation.navigate('ExpenseDetail', { expenseId: item.id })}
-                  />
-                );
-              })
+                    return (
+                      <ExpenseCard
+                        key={item.id}
+                        merchant={item.merchant}
+                        meta={[category, item.paymentMethod].filter(Boolean).join(' · ')}
+                        amount={controller.formatCurrency(item.totalAmount, item.currency)}
+                        category={category}
+                        hasCheaperOption={cheaperOption?.hasAlternative}
+                        onPress={() => navigation.navigate('ExpenseDetail', { expenseId: item.id })}
+                      />
+                    );
+                  })}
+                </View>
+              ))
             )}
           </>
         )}
@@ -315,24 +324,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.textSecondary,
   },
-  headerIcons: {
-    flexDirection: 'row',
-    gap: 4,
-    paddingTop: 4,
-  },
-  iconBtn: {
-    width: 44,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: Colors.surface,
-  },
   segmentRow: {
     flexDirection: 'row',
     gap: 8,
     paddingHorizontal: 24,
     paddingBottom: 10,
+  },
+  toolsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 4,
+  },
+  toolChip: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 100,
+    backgroundColor: Colors.surface,
+  },
+  toolChipText: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    fontWeight: '500',
   },
   segmentBtn: {
     flex: 1,

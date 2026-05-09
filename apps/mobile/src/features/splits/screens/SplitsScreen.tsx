@@ -7,14 +7,12 @@ import { LoadingRows } from '../../../components/ui/loading-state';
 import { Colors } from '../../../theme';
 import { TEST_IDS } from '../../../core/testing/test-ids';
 
-type WizardStep = 1 | 2 | 3 | 4 | 5;
+type WizardStep = 1 | 2 | 3;
 
 const STEP_LABELS: Record<WizardStep, string> = {
-  1: 'Select family',
-  2: 'Select expense',
-  3: 'Select participants',
-  4: 'Assign items',
-  5: 'Review & finalize',
+  1: 'Choose expense',
+  2: "Who's splitting?",
+  3: 'Assign items',
 };
 
 function toNumber(value: string): number {
@@ -35,6 +33,7 @@ export function SplitsScreen() {
   const [guestParticipants, setGuestParticipants] = useState<string[]>([]);
   const [sharedChargeInput, setSharedChargeInput] = useState('0');
   const [assignmentsByLineItemId, setAssignmentsByLineItemId] = useState<Record<string, string[]>>({});
+  const [showReview, setShowReview] = useState(false);
 
   const activeFamily = useMemo(
     () => controller.families.find((f) => f.id === controller.activeFamilyId) ?? null,
@@ -52,6 +51,7 @@ export function SplitsScreen() {
     setGuestParticipants([]);
     setSharedChargeInput('0');
     setAssignmentsByLineItemId({});
+    setShowReview(false);
   }, [controller.activeFamilyId]);
 
   useEffect(() => {
@@ -103,7 +103,7 @@ export function SplitsScreen() {
       participantFamilyMemberIds: selectedFamilyMemberIds,
       guestParticipants,
     });
-    setStep(4);
+    setStep(3);
   };
 
   const saveAllocations = async () => {
@@ -116,7 +116,7 @@ export function SplitsScreen() {
       lineAssignments,
       sharedCharge: toNumber(sharedChargeInput),
     });
-    setStep(5);
+    setShowReview(true);
   };
 
   const hasParticipants = selectedFamilyMemberIds.length + guestParticipants.length > 0;
@@ -124,11 +124,7 @@ export function SplitsScreen() {
     splitLineItems.length > 0 &&
     splitLineItems.every((lineItem) => (assignmentsByLineItemId[lineItem.id] ?? []).length > 0);
   const canFinalizeSplit = Boolean(controller.activeSplitId && splitDetail && allLineItemsAssigned);
-  const highestReachableStep: WizardStep = canFinalizeSplit
-    ? 5
-    : controller.activeSplitId
-    ? 4
-    : hasParticipants && controller.activeFamilyId
+  const highestReachableStep: WizardStep = controller.activeSplitId
     ? 3
     : controller.activeFamilyId
     ? 2
@@ -142,7 +138,7 @@ export function SplitsScreen() {
     >
       {/* Progress bar */}
       <View style={styles.progressContainer}>
-        {([1, 2, 3, 4, 5] as WizardStep[]).map((s) => (
+        {([1, 2, 3] as WizardStep[]).map((s) => (
           <TouchableOpacity
             key={s}
             style={[styles.stepWrapper, s > highestReachableStep && styles.stepWrapperDisabled]}
@@ -159,72 +155,17 @@ export function SplitsScreen() {
       </View>
       <Text style={styles.stepLabel}>{STEP_LABELS[step]}</Text>
 
-      {/* Step 1: Select family */}
+      {/* Step 1: Choose expense */}
       {step === 1 ? (
         <DarkCard radius={16}>
           <View style={styles.stepHeader}>
-            <Text style={styles.stepSectionTitle}>Select active family</Text>
-            <TouchableOpacity
-              style={styles.smallBtn}
-              onPress={controller.loadFamiliesList}
-              disabled={controller.loading}
-            >
-              {controller.loading || controller.initialDataLoading ? (
-                <ActivityIndicator size="small" color={Colors.green} />
-              ) : (
-                <Text style={styles.smallBtnText}>Sync</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          {controller.initialDataLoading && controller.families.length === 0 ? (
-            <LoadingRows label="Syncing families" count={2} />
-          ) : controller.families.length === 0 ? (
-            <Text style={styles.emptyText}>No families found. Create or join one in Families, then return here.</Text>
-          ) : (
-            controller.families.map((family) => {
-              const isActive = family.id === controller.activeFamilyId;
-              return (
-                <TouchableOpacity
-                  key={family.id}
-                  style={[styles.listItem, isActive && styles.listItemActive]}
-                  onPress={() => controller.setActiveFamilyId(family.id)}
-                >
-                  <Text style={styles.listItemTitle}>{family.name}</Text>
-                  <Text style={styles.listItemMeta}>
-                    {family.currentUserRole ?? 'N/A'} · {family.members.length} members
-                  </Text>
-                  {isActive ? (
-                    <Text style={styles.activeIndicator}>✓ Active</Text>
-                  ) : null}
-                </TouchableOpacity>
-              );
-            })
-          )}
-          <TouchableOpacity
-            style={[styles.continueBtn, !controller.activeFamilyId && styles.continueBtnDisabled]}
-            onPress={() => setStep(2)}
-            disabled={!controller.activeFamilyId}
-            accessibilityRole="button"
-            accessibilityLabel="Continue to expense selection"
-            accessibilityState={{ disabled: !controller.activeFamilyId }}
-          >
-            <Text style={styles.continueBtnText}>Continue →</Text>
-          </TouchableOpacity>
-        </DarkCard>
-      ) : null}
-
-      {/* Step 2: Select expense */}
-      {step === 2 ? (
-        <DarkCard radius={16}>
-          <View style={styles.stepHeader}>
-            <Text style={styles.stepSectionTitle}>Select expense</Text>
+            <Text style={styles.stepSectionTitle}>Choose expense</Text>
             <TouchableOpacity
               style={styles.smallBtn}
               onPress={controller.loadLedger}
               disabled={controller.loading}
-              testID={TEST_IDS.ledger.refreshButton}
               accessibilityRole="button"
-              accessibilityLabel="Sync expenses for splitting"
+              accessibilityLabel="Sync expenses"
               accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
             >
               {controller.loading || controller.initialDataLoading ? (
@@ -234,53 +175,61 @@ export function SplitsScreen() {
               )}
             </TouchableOpacity>
           </View>
-          <Text style={styles.emptyText}>
-            Family: {activeFamily?.name ?? '-'}
-          </Text>
-          {controller.initialDataLoading && controller.ledgerItems.length === 0 ? (
-            <LoadingRows label="Syncing expenses" count={3} />
-          ) : null}
-          {controller.ledgerItems.slice(0, 20).map((expense) => {
-            const isSelected = selectedExpenseId === expense.id;
-            return (
-              <TouchableOpacity
-                key={expense.id}
-                style={[styles.listItem, isSelected && styles.listItemActive]}
-                onPress={() => setSelectedExpenseId(expense.id)}
-                accessibilityRole="button"
-                accessibilityLabel={`Select expense from ${expense.merchant}`}
-                accessibilityState={{ selected: isSelected }}
-              >
-                <Text style={styles.listItemTitle}>{expense.merchant}</Text>
-                <Text style={styles.listItemMeta}>
-                  {controller.formatCurrency(expense.totalAmount, expense.currency)} ·{' '}
-                  {new Date(expense.transactionAt).toLocaleDateString()}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-          <TextInput
-            label="Shared charge"
-            value={sharedChargeInput}
-            onChangeText={setSharedChargeInput}
-            keyboardType="decimal-pad"
-            mode="outlined"
-            style={styles.input}
-            theme={inputTheme}
-          />
+
+          {!controller.activeFamilyId ? (
+            <Text style={styles.emptyText}>Set an active family first. Go to Families to create or join one.</Text>
+          ) : (
+            <>
+              <Text style={styles.emptyText}>Family: {activeFamily?.name ?? '-'}</Text>
+              {controller.initialDataLoading && controller.ledgerItems.length === 0 ? (
+                <LoadingRows label="Syncing expenses" count={3} />
+              ) : null}
+              {controller.ledgerItems.slice(0, 20).map((expense) => {
+                const isSelected = selectedExpenseId === expense.id;
+                return (
+                  <TouchableOpacity
+                    key={expense.id}
+                    style={[styles.listItem, isSelected && styles.listItemActive]}
+                    onPress={() => setSelectedExpenseId(expense.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select expense from ${expense.merchant}`}
+                    accessibilityState={{ selected: isSelected }}
+                  >
+                    <Text style={styles.listItemTitle}>{expense.merchant}</Text>
+                    <Text style={styles.listItemMeta}>
+                      {controller.formatCurrency(expense.totalAmount, expense.currency)} ·{' '}
+                      {new Date(expense.transactionAt).toLocaleDateString()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TextInput
+                label="Shared charge"
+                value={sharedChargeInput}
+                onChangeText={setSharedChargeInput}
+                keyboardType="decimal-pad"
+                mode="outlined"
+                style={styles.input}
+                theme={inputTheme}
+              />
+            </>
+          )}
+
           <TouchableOpacity
-            style={styles.continueBtn}
-            onPress={() => setStep(3)}
+            style={[styles.continueBtn, !controller.activeFamilyId && styles.continueBtnDisabled]}
+            onPress={() => setStep(2)}
+            disabled={!controller.activeFamilyId}
             accessibilityRole="button"
             accessibilityLabel="Continue to participants"
+            accessibilityState={{ disabled: !controller.activeFamilyId }}
           >
             <Text style={styles.continueBtnText}>Continue →</Text>
           </TouchableOpacity>
         </DarkCard>
       ) : null}
 
-      {/* Step 3: Select participants */}
-      {step === 3 ? (
+      {/* Step 2: Select participants */}
+      {step === 2 ? (
         <DarkCard radius={16}>
           <Text style={styles.stepSectionTitle}>Select participants</Text>
           <Text style={styles.emptyText}>Family members:</Text>
@@ -349,8 +298,8 @@ export function SplitsScreen() {
         </DarkCard>
       ) : null}
 
-      {/* Step 4: Assign items */}
-      {step === 4 ? (
+      {/* Step 3: Assign items */}
+      {step === 3 ? (
         <DarkCard radius={16}>
           <View style={styles.stepHeader}>
             <Text style={styles.stepSectionTitle}>Assign line items</Text>
@@ -417,86 +366,81 @@ export function SplitsScreen() {
                 accessibilityLabel="Save split allocations"
                 accessibilityState={{ disabled: controller.loading || !controller.activeSplitId || !allLineItemsAssigned }}
               >
-                <Text style={styles.continueBtnText}>Save allocations →</Text>
+                <Text style={styles.continueBtnText}>Finalize split</Text>
               </TouchableOpacity>
             </>
           ) : (
             <Text style={styles.emptyText}>Create or sync a split draft, then select a session with line items to continue.</Text>
           )}
-        </DarkCard>
-      ) : null}
-
-      {/* Step 5: Review and finalize */}
-      {step === 5 ? (
-        <DarkCard radius={16}>
-          <Text style={styles.stepSectionTitle}>Review and finalize</Text>
-          {splitDetail ? (
+          {showReview && splitDetail ? (
             <View style={styles.reviewBlock}>
-              <Text style={styles.listItemTitle}>{splitDetail.split.title || 'Split'}</Text>
-              <Text style={styles.listItemMeta}>
-                {splitDetail.split.status} · {controller.formatCurrency(splitDetail.split.totalAmount)}
-              </Text>
-            </View>
-          ) : null}
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[styles.smallBtn, styles.smallBtnOutline]}
-              onPress={async () => {
-                if (controller.activeSplitId) {
-                  await controller.loadSplitBalancesById(controller.activeSplitId);
-                }
-              }}
-              disabled={controller.loading || !canFinalizeSplit}
-              testID={TEST_IDS.splits.loadBalancesButton}
-              accessibilityRole="button"
-              accessibilityLabel="Load split balances"
-              accessibilityState={{ disabled: controller.loading || !canFinalizeSplit }}
-            >
-              <Text style={styles.smallBtnOutlineText}>Load balances</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.continueBtn, { flex: 1 }, (!canFinalizeSplit || controller.loading) && styles.continueBtnDisabled]}
-              onPress={async () => {
-                if (canFinalizeSplit && controller.activeSplitId) {
-                  await controller.finalizeSplitById(controller.activeSplitId);
-                  await controller.loadSplitBalancesById(controller.activeSplitId);
-                }
-              }}
-              disabled={controller.loading || !canFinalizeSplit}
-              testID={TEST_IDS.splits.finalizeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Finalize split"
-              accessibilityState={{ disabled: controller.loading || !canFinalizeSplit }}
-            >
-              <Text style={styles.continueBtnText}>Finalize split</Text>
-            </TouchableOpacity>
-          </View>
-          {controller.splitBalanceSummary ? (
-            <View style={styles.balanceBlock}>
-              <Text style={styles.balanceTitle}>Balances</Text>
-              {controller.splitBalanceSummary.balances.map((row) => (
-                <View key={row.participantId} style={styles.balanceRow}>
-                  <Text style={styles.balanceName}>{row.displayName}</Text>
-                  <Text style={styles.balanceValues}>
-                    owed {controller.formatCurrency(row.owedAmount)} · net {controller.formatCurrency(row.netAmount)}
-                  </Text>
-                </View>
-              ))}
-              {controller.splitBalanceSummary.settlements.length > 0 ? (
-                <>
-                  <Text style={[styles.balanceTitle, { marginTop: 12 }]}>Settlements</Text>
-                  {controller.splitBalanceSummary.settlements.map((row, i) => (
-                    <Text
-                      key={`${row.fromParticipantId}-${row.toParticipantId}-${i}`}
-                      style={styles.listItemMeta}
-                    >
-                      {row.fromParticipantId} → {row.toParticipantId}: {controller.formatCurrency(row.amount)}
-                    </Text>
+              <View style={styles.divider} />
+              <Text style={styles.stepSectionTitle}>Review and finalize</Text>
+              <View style={styles.reviewBlock}>
+                <Text style={styles.listItemTitle}>{splitDetail.split.title || 'Split'}</Text>
+                <Text style={styles.listItemMeta}>
+                  {splitDetail.split.status} · {controller.formatCurrency(splitDetail.split.totalAmount)}
+                </Text>
+              </View>
+              <View style={styles.actionRow}>
+                <TouchableOpacity
+                  style={[styles.smallBtn, styles.smallBtnOutline]}
+                  onPress={async () => {
+                    if (controller.activeSplitId) {
+                      await controller.loadSplitBalancesById(controller.activeSplitId);
+                    }
+                  }}
+                  disabled={controller.loading || !canFinalizeSplit}
+                  accessibilityRole="button"
+                  accessibilityLabel="Load split balances"
+                  accessibilityState={{ disabled: controller.loading || !canFinalizeSplit }}
+                >
+                  <Text style={styles.smallBtnOutlineText}>Load balances</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.continueBtn, { flex: 1 }, (!canFinalizeSplit || controller.loading) && styles.continueBtnDisabled]}
+                  onPress={async () => {
+                    if (canFinalizeSplit && controller.activeSplitId) {
+                      await controller.finalizeSplitById(controller.activeSplitId);
+                      await controller.loadSplitBalancesById(controller.activeSplitId);
+                    }
+                  }}
+                  disabled={controller.loading || !canFinalizeSplit}
+                  accessibilityRole="button"
+                  accessibilityLabel="Finalize split"
+                  accessibilityState={{ disabled: controller.loading || !canFinalizeSplit }}
+                >
+                  <Text style={styles.continueBtnText}>Finalize split</Text>
+                </TouchableOpacity>
+              </View>
+              {controller.splitBalanceSummary ? (
+                <View style={styles.balanceBlock}>
+                  <Text style={styles.balanceTitle}>Balances</Text>
+                  {controller.splitBalanceSummary.balances.map((row) => (
+                    <View key={row.participantId} style={styles.balanceRow}>
+                      <Text style={styles.balanceName}>{row.displayName}</Text>
+                      <Text style={styles.balanceValues}>
+                        owed {controller.formatCurrency(row.owedAmount)} · net {controller.formatCurrency(row.netAmount)}
+                      </Text>
+                    </View>
                   ))}
-                </>
-              ) : (
-                <Text style={styles.emptyText}>No settlement transfers required.</Text>
-              )}
+                  {controller.splitBalanceSummary.settlements.length > 0 ? (
+                    <>
+                      <Text style={[styles.balanceTitle, { marginTop: 12 }]}>Settlements</Text>
+                      {controller.splitBalanceSummary.settlements.map((row, i) => (
+                        <Text
+                          key={`${row.fromParticipantId}-${row.toParticipantId}-${i}`}
+                          style={styles.listItemMeta}
+                        >
+                          {row.fromParticipantId} → {row.toParticipantId}: {controller.formatCurrency(row.amount)}
+                        </Text>
+                      ))}
+                    </>
+                  ) : (
+                    <Text style={styles.emptyText}>No settlement transfers required.</Text>
+                  )}
+                </View>
+              ) : null}
             </View>
           ) : null}
         </DarkCard>

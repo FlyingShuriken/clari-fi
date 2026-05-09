@@ -1,6 +1,6 @@
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -10,6 +10,7 @@ import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
 import { Colors } from '../../../theme';
 import { LoadingRows } from '../../../components/ui/loading-state';
 import { EmptyState } from '../../../components/ui/empty-state';
+import { ScrollToTop } from '../../../components/ui/scroll-to-top';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -82,13 +83,19 @@ export function RewardsScreen() {
   );
 
   const balance = controller.rewardSummary?.balance ?? 0;
+  const scrollRef = useRef<ScrollView>(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const hasActivity = controller.rewardLedger.length > 0 || controller.rewardRedemptions.length > 0;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 24) + 24 }]}
         showsVerticalScrollIndicator={false}
+        onScroll={(e) => setShowScrollTop(e.nativeEvent.contentOffset.y > 600)}
+        scrollEventThrottle={400}
       >
         <View style={styles.header}>
           <View style={styles.headerTextBlock}>
@@ -152,32 +159,34 @@ export function RewardsScreen() {
           </View>
         </View>
 
-        <View style={styles.loopCard}>
-          <Text style={styles.sectionTitle}>How it works</Text>
-          <View style={styles.loopSteps}>
-            <View style={styles.loopStep}>
-              <View style={[styles.loopBadge, { backgroundColor: '#F970661F' }]}>
-                <Text style={[styles.loopBadgeText, { color: '#F97066' }]}>1</Text>
+        {!hasActivity ? (
+          <View style={styles.loopCard}>
+            <Text style={styles.sectionTitle}>How it works</Text>
+            <View style={styles.loopSteps}>
+              <View style={styles.loopStep}>
+                <View style={[styles.loopBadge, { backgroundColor: '#F970661F' }]}>
+                  <Text style={[styles.loopBadgeText, { color: '#F97066' }]}>1</Text>
+                </View>
+                <Text style={styles.loopTitle}>Contribute Data</Text>
+                <Text style={styles.loopCopy}>Upload receipts or flyers with product prices.</Text>
               </View>
-              <Text style={styles.loopTitle}>Contribute Data</Text>
-              <Text style={styles.loopCopy}>Upload receipts or flyers with product prices.</Text>
-            </View>
-            <View style={styles.loopStep}>
-              <View style={[styles.loopBadge, { backgroundColor: '#FDB0221F' }]}>
-                <Text style={[styles.loopBadgeText, { color: Colors.amber }]}>2</Text>
+              <View style={styles.loopStep}>
+                <View style={[styles.loopBadge, { backgroundColor: '#FDB0221F' }]}>
+                  <Text style={[styles.loopBadgeText, { color: Colors.amber }]}>2</Text>
+                </View>
+                <Text style={styles.loopTitle}>Earn Points</Text>
+                <Text style={styles.loopCopy}>Accepted receipt +8, flyer +10, plus streak bonuses.</Text>
               </View>
-              <Text style={styles.loopTitle}>Earn Points</Text>
-              <Text style={styles.loopCopy}>Accepted receipt +8, flyer +10, plus streak bonuses.</Text>
-            </View>
-            <View style={styles.loopStep}>
-              <View style={[styles.loopBadge, { backgroundColor: '#56D9F11F' }]}>
-                <Text style={[styles.loopBadgeText, { color: '#56D9F1' }]}>3</Text>
+              <View style={styles.loopStep}>
+                <View style={[styles.loopBadge, { backgroundColor: '#56D9F11F' }]}>
+                  <Text style={[styles.loopBadgeText, { color: '#56D9F1' }]}>3</Text>
+                </View>
+                <Text style={styles.loopTitle}>Redeem Rewards</Text>
+                <Text style={styles.loopCopy}>Trade points for mock vouchers and partner perks.</Text>
               </View>
-              <Text style={styles.loopTitle}>Redeem Rewards</Text>
-              <Text style={styles.loopCopy}>Trade points for mock vouchers and partner perks.</Text>
             </View>
           </View>
-        </View>
+        ) : null}
 
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
@@ -299,6 +308,7 @@ export function RewardsScreen() {
           )}
         </View>
       </ScrollView>
+      <ScrollToTop scrollRef={scrollRef} visible={showScrollTop} />
     </View>
   );
 }

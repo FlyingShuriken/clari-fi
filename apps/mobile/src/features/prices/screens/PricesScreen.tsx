@@ -165,151 +165,146 @@ export function PricesScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Location card */}
-        <TouchableOpacity
-          style={styles.locationCard}
-          onPress={() => setLocationExpanded((v) => !v)}
-          activeOpacity={0.8}
+        <View style={styles.searchCard}>
+          {/* Location card */}
+          <TouchableOpacity
+            style={styles.locationCard}
+            onPress={() => setLocationExpanded((v) => !v)}
+            activeOpacity={0.8}
             testID={TEST_IDS.prices.locationAreaInput}
             accessibilityRole="button"
             accessibilityLabel={`Location: ${locationLabel}. ${locationSub}`}
             accessibilityState={{ expanded: locationExpanded, busy: locLoading }}
-        >
-          {locLoading ? (
-            <ActivityIndicator size="small" color={Colors.green} />
-          ) : (
-            <MaterialCommunityIcons name="map-marker" size={20} color={Colors.green} />
-          )}
-          <View style={styles.locationText}>
-            <Text style={styles.locationLabel} numberOfLines={1}>{locationLabel}</Text>
-            <Text style={styles.locationSub}>{locationSub}</Text>
-          </View>
-          <MaterialCommunityIcons
-            name={locationExpanded ? 'chevron-down' : 'chevron-right'}
-            size={16}
-            color={Colors.textMuted}
-          />
-        </TouchableOpacity>
-
-        {/* Inline location picker */}
-        {locationExpanded && (
-          <PriceLocationSelector
-            value={controller.priceQueryLocation}
-            gpsLoading={locLoading}
-            gpsError={locError}
-            searchQuery={locationSearchQuery}
-            searchLoading={locationSearchLoading}
-            searchError={locationSearchError}
-            suggestions={locationSuggestions}
-            onSearchQueryChange={setLocationSearchQuery}
-            onSelectSuggestion={handleSelectLocation}
-            onUseCurrentLocation={handleUseCurrentLocation}
-            onRadiusChange={(r) => controller.updatePriceQueryLocation({ radiusKmText: String(r) })}
-          />
-        )}
-
-        {/* Watchlist section */}
-        <Text style={styles.sectionLabel}>WATCHLIST</Text>
-
-        <View style={styles.searchRow}>
-          <View style={styles.inputBox}>
-            <MaterialCommunityIcons name="magnify" size={18} color={Colors.textMuted} />
-            <TextInput
-              style={styles.input}
-              placeholder="Add item to watchlist…"
-              placeholderTextColor={Colors.textMuted}
-              value={itemInput}
-              onChangeText={setItemInput}
-              onSubmitEditing={addItem}
-              returnKeyType="done"
-              autoCapitalize="none"
-            />
-          </View>
-          <TouchableOpacity
-            style={[styles.addBtn, compareItems.length >= compareLimit && styles.addBtnDisabled]}
-            onPress={addItem}
-            disabled={compareItems.length >= compareLimit || !itemInput.trim()}
-            accessibilityRole="button"
-            accessibilityLabel={compareItems.length >= compareLimit ? 'Item limit reached' : 'Add item to price search'}
-            accessibilityState={{ disabled: compareItems.length >= compareLimit || !itemInput.trim() }}
           >
-            <MaterialCommunityIcons name="plus" size={20} color={Colors.bg} />
+            {locLoading ? (
+              <ActivityIndicator size="small" color={Colors.green} />
+            ) : (
+              <MaterialCommunityIcons name="map-marker" size={20} color={Colors.green} />
+            )}
+            <View style={styles.locationText}>
+              <Text style={styles.locationLabel} numberOfLines={1}>{locationLabel}</Text>
+              <Text style={styles.locationSub}>{locationSub}</Text>
+            </View>
+            <MaterialCommunityIcons
+              name={locationExpanded ? 'chevron-down' : 'chevron-right'}
+              size={16}
+              color={Colors.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Inline location picker */}
+          {locationExpanded && (
+            <PriceLocationSelector
+              value={controller.priceQueryLocation}
+              gpsLoading={locLoading}
+              gpsError={locError}
+              searchQuery={locationSearchQuery}
+              searchLoading={locationSearchLoading}
+              searchError={locationSearchError}
+              suggestions={locationSuggestions}
+              onSearchQueryChange={setLocationSearchQuery}
+              onSelectSuggestion={handleSelectLocation}
+              onUseCurrentLocation={handleUseCurrentLocation}
+              onRadiusChange={(r) => controller.updatePriceQueryLocation({ radiusKmText: String(r) })}
+            />
+          )}
+
+          <View style={styles.searchRow}>
+            <View style={styles.inputBox}>
+              <MaterialCommunityIcons name="magnify" size={18} color={Colors.textMuted} />
+              <TextInput
+                style={styles.input}
+                placeholder="Add item to watchlist…"
+                placeholderTextColor={Colors.textMuted}
+                value={itemInput}
+                onChangeText={setItemInput}
+                onSubmitEditing={addItem}
+                returnKeyType="done"
+                autoCapitalize="none"
+              />
+            </View>
+            <TouchableOpacity
+              style={[styles.addBtn, compareItems.length >= compareLimit && styles.addBtnDisabled]}
+              onPress={addItem}
+              disabled={compareItems.length >= compareLimit || !itemInput.trim()}
+              accessibilityRole="button"
+              accessibilityLabel={compareItems.length >= compareLimit ? 'Item limit reached' : 'Add item to price search'}
+              accessibilityState={{ disabled: compareItems.length >= compareLimit || !itemInput.trim() }}
+            >
+              <MaterialCommunityIcons name="plus" size={20} color={Colors.bg} />
+            </TouchableOpacity>
+          </View>
+
+          {compareItems.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsRow}
+            >
+              {compareItems.map((item, idx) => (
+                <View key={item} style={styles.chip}>
+                  <Text style={styles.chipText}>{item}</Text>
+                  <TouchableOpacity
+                    onPress={() => removeItem(idx)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${item} from search`}
+                  >
+                    <MaterialCommunityIcons name="close" size={14} color={Colors.green} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          {compareItems.length === 0 && (
+            <Text style={styles.limitHint}>
+              {compareLimit === 1
+                ? '1 item/search on Free · Upgrade for more'
+                : `Up to ${compareLimit} items · ${compareRemaining} searches left`}
+            </Text>
+          )}
+
+          <View style={styles.radiusRow}>
+            {RADIUS_OPTIONS.map((km) => {
+              const active = selectedRadius === km;
+              return (
+                <TouchableOpacity
+                  key={km}
+                  style={[styles.radiusPill, active && styles.radiusPillActive]}
+                  onPress={() => controller.updatePriceQueryLocation({ radiusKmText: String(km) })}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Search within ${km} kilometers`}
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text style={[styles.radiusPillText, active && styles.radiusPillTextActive]}>
+                    {km} km
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.searchBtn, compareItems.length === 0 && styles.searchBtnDisabled]}
+            onPress={handleFindStores}
+            disabled={compareItems.length === 0 || locLoading}
+            accessibilityRole="button"
+            accessibilityLabel={compareItems.length === 0 ? 'Add items before searching stores' : `Search nearby stores within ${selectedRadius} kilometers`}
+            accessibilityState={{ disabled: compareItems.length === 0 || locLoading, busy: locLoading }}
+          >
+            <MaterialCommunityIcons
+              name="magnify"
+              size={20}
+              color={compareItems.length === 0 ? Colors.textSecondary : Colors.bg}
+            />
+            <Text style={[styles.searchBtnText, compareItems.length === 0 && styles.searchBtnTextDisabled]}>
+              {compareItems.length === 0
+                ? 'Add items to search'
+                : `Search Nearby · ${compareItems.length} item${compareItems.length > 1 ? 's' : ''} · ${selectedRadius}km`}
+            </Text>
           </TouchableOpacity>
         </View>
-
-        {compareItems.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipsRow}
-          >
-            {compareItems.map((item, idx) => (
-              <View key={item} style={styles.chip}>
-                <Text style={styles.chipText}>{item}</Text>
-                <TouchableOpacity
-                  onPress={() => removeItem(idx)}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${item} from search`}
-                >
-                  <MaterialCommunityIcons name="close" size={14} color={Colors.green} />
-                </TouchableOpacity>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-
-        {compareItems.length === 0 && (
-          <Text style={styles.limitHint}>
-            {compareLimit === 1
-              ? '1 item/search on Free · Upgrade for more'
-              : `Up to ${compareLimit} items · ${compareRemaining} searches left`}
-          </Text>
-        )}
-
-        {/* Search radius */}
-        <Text style={styles.sectionLabel}>SEARCH RADIUS</Text>
-
-        <View style={styles.radiusRow}>
-          {RADIUS_OPTIONS.map((km) => {
-            const active = selectedRadius === km;
-            return (
-              <TouchableOpacity
-                key={km}
-                style={[styles.radiusPill, active && styles.radiusPillActive]}
-                onPress={() => controller.updatePriceQueryLocation({ radiusKmText: String(km) })}
-                accessibilityRole="button"
-                accessibilityLabel={`Search within ${km} kilometers`}
-                accessibilityState={{ selected: active }}
-              >
-                <Text style={[styles.radiusPillText, active && styles.radiusPillTextActive]}>
-                  {km} km
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Search button */}
-        <TouchableOpacity
-          style={[styles.searchBtn, compareItems.length === 0 && styles.searchBtnDisabled]}
-          onPress={handleFindStores}
-          disabled={compareItems.length === 0 || locLoading}
-          accessibilityRole="button"
-          accessibilityLabel={compareItems.length === 0 ? 'Add items before searching stores' : `Search nearby stores within ${selectedRadius} kilometers`}
-          accessibilityState={{ disabled: compareItems.length === 0 || locLoading, busy: locLoading }}
-        >
-          <MaterialCommunityIcons
-            name="magnify"
-            size={20}
-            color={compareItems.length === 0 ? Colors.textSecondary : Colors.bg}
-          />
-          <Text style={[styles.searchBtnText, compareItems.length === 0 && styles.searchBtnTextDisabled]}>
-            {compareItems.length === 0
-              ? 'Add items to search'
-              : `Search Nearby · ${compareItems.length} item${compareItems.length > 1 ? 's' : ''} · ${selectedRadius}km`}
-          </Text>
-        </TouchableOpacity>
 
         {/* Compare results */}
         {controller.priceCompareResult ? (
@@ -410,6 +405,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
+  searchCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 24,
+    padding: 18,
+    gap: 14,
+  },
+
   // Location card
   locationCard: {
     flexDirection: 'row',
@@ -432,15 +434,6 @@ const styles = StyleSheet.create({
   locationSub: {
     fontSize: 11,
     color: Colors.textSecondary,
-  },
-
-  // Section labels
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.textMuted,
-    letterSpacing: 1,
-    marginTop: 4,
   },
 
   // Search row

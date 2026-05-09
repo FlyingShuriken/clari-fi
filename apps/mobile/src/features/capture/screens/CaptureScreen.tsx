@@ -245,45 +245,6 @@ export function CaptureScreen() {
           </View>
         ) : null}
 
-        <TouchableOpacity
-          style={styles.rewardsCard}
-          onPress={() => navigation.navigate('Rewards')}
-          activeOpacity={0.92}
-          accessibilityRole="button"
-          accessibilityLabel={`Open rewards. ${controller.rewardSummary?.balance ?? 0} points available.`}
-        >
-          <View style={styles.rewardsCardHeader}>
-            <View style={styles.rewardsCardTitleBlock}>
-              <Text style={styles.rewardsEyebrow}>Contribute • Earn • Redeem</Text>
-              <Text style={styles.rewardsTitle}>
-                {controller.rewardSummary?.balance ?? 0} pts available
-              </Text>
-              <Text style={styles.rewardsCopy}>
-                Receipt uploads earn +8, flyer uploads earn +10, and streaks add bonuses.
-              </Text>
-            </View>
-            <View style={styles.rewardsCardArrow}>
-              <MaterialCommunityIcons name="chevron-right" size={18} color={Colors.textPrimary} />
-            </View>
-          </View>
-          <View style={styles.rewardsStatsRow}>
-            <View style={styles.rewardsStatPill}>
-              <Text style={styles.rewardsStatLabel}>Receipt</Text>
-              <Text style={styles.rewardsStatValue}>+8</Text>
-            </View>
-            <View style={styles.rewardsStatPill}>
-              <Text style={styles.rewardsStatLabel}>Flyer</Text>
-              <Text style={styles.rewardsStatValue}>+10</Text>
-            </View>
-            <View style={styles.rewardsStatPill}>
-              <Text style={styles.rewardsStatLabel}>Streak</Text>
-              <Text style={styles.rewardsStatValue}>
-                {controller.rewardSummary?.currentStreakDays ?? 0}d
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-
         {controller.lastContributionReward ? (
           <View style={styles.rewardBanner}>
             <View style={styles.rewardBannerHeader}>
@@ -755,71 +716,6 @@ const styles = StyleSheet.create({
   syncRetryText: {
     color: Colors.coral,
     fontSize: 12,
-    fontWeight: '800',
-  },
-  rewardsCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 24,
-    padding: 18,
-    gap: 14,
-    borderWidth: 1,
-    borderColor: '#FDB02230',
-  },
-  rewardsCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  rewardsCardTitleBlock: {
-    flex: 1,
-    gap: 4,
-  },
-  rewardsEyebrow: {
-    color: Colors.amber,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.7,
-    textTransform: 'uppercase',
-  },
-  rewardsTitle: {
-    color: Colors.textPrimary,
-    fontSize: 21,
-    fontWeight: '800',
-  },
-  rewardsCopy: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  rewardsCardArrow: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rewardsStatsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  rewardsStatPill: {
-    flex: 1,
-    backgroundColor: Colors.bg,
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 3,
-  },
-  rewardsStatLabel: {
-    color: Colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  rewardsStatValue: {
-    color: Colors.textPrimary,
-    fontSize: 16,
     fontWeight: '800',
   },
   rewardBanner: {
