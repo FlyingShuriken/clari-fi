@@ -5,7 +5,6 @@ import { validateEnv } from './infrastructure/config/env.validation';
 import { MetricsModule } from './infrastructure/metrics/metrics.module';
 import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { ProvidersModule } from './infrastructure/providers/providers.module';
-import { QueueModule } from './infrastructure/queue/queue.module';
 import { StorageModule } from './infrastructure/storage/storage.module';
 import { ArtifactsModule } from './modules/artifacts/artifacts.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -33,7 +32,6 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     MetricsModule,
     ProvidersModule,
     StorageModule,
-    QueueModule,
     AuthModule,
     HealthModule,
     NotificationsModule,
