@@ -13,6 +13,55 @@ ClariFi is a React Native + NestJS product for fast expense capture (voice/recei
 - `packages/shared`: shared contracts (Zod/TS) used by API and mobile.
 - `tasks`: execution plans and test runbooks.
 
+## Architecture Diagram (Direct)
+
+```text
+                    +-----------------------------------+
+                    |           Mobile App              |
+                    |      (Expo React Native)          |
+                    +----------------+------------------+
+                                     |
+                                     v
+                    +-----------------------------------+
+                    |            API (NestJS)           |
+                    |      apps/api/src/modules/*       |
+                    +---+-----------+-----------+-------+
+                        |           |           |
+                        |           |           |
+                        |           |           +-------------------------------+
+                        |           |                                           |
+                        |           v                                           v
+                        |   +---------------+                       +----------------------+
+                        |   | Reports Module|                       | Prices Module        |
+                        |   | weekly slides |                       | item normalization   |
+                        |   +-------+-------+                       +----------+-----------+
+                        |           |                                          |
+                        |           | LLM generateSlidesViaLlm                 | LLM canonicalizeWithLlm
+                        |           +--------------------------+---------------+
+                        |                                      |
+                        v                                      v
+               +------------------+                  +-------------------------+
+               | Parse Module     |                  | OpenRouter (LLM APIs)   |
+               | /voice /receipt  |<---------------->| - STT (audio)           |
+               | /document-images |                  | - OCR (vision text)     |
+               +---------+--------+                  | - Parser (structured)   |
+                         |                           | - Normalizer             |
+                         |                           | - Weekly insights        |
+                         |                           +-------------------------+
+                         |
+                         v
+                 +---------------+
+                 | PostgreSQL    |
+                 | Prisma ORM    |
+                 +-------+-------+
+                         ^
+                         |
+                 +-------+-------+
+                 | packages/shared|
+                 | shared contracts|
+                 +---------------+
+```
+
 ## Core API Domains (Current)
 
 - Auth (`/v1/auth/clerk`)
