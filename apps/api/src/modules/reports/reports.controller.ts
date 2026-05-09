@@ -16,4 +16,9 @@ export class ReportsController {
   ) {
     return this.reportsService.getMonthlyReport(user, query);
   }
+
+  @Get('weekly')
+  async getWeeklyReport(@CurrentUser() user: AuthenticatedUser) {
+    return this.reportsService.getWeeklyReport(user);
+  }
 }

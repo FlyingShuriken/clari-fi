@@ -1,6 +1,7 @@
 import type {
   AlertEvent,
   AuthVerifyResponse,
+  WeeklyReportResponse,
   ConfirmExpenseResponse,
   ConfirmPromoResponse,
   FamilyInviteCreated,
@@ -307,6 +308,16 @@ export async function listExpenses(
   const suffix = params.toString() ? `?${params.toString()}` : '';
 
   return apiRequest<{ total: number; items: unknown[] }>(baseUrl, `/expenses${suffix}`, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${bearerToken}` },
+  });
+}
+
+export async function loadWeeklyReport(
+  baseUrl: string,
+  bearerToken: string,
+): Promise<WeeklyReportResponse> {
+  return apiRequest<WeeklyReportResponse>(baseUrl, '/reports/weekly', {
     method: 'GET',
     headers: { Authorization: `Bearer ${bearerToken}` },
   });

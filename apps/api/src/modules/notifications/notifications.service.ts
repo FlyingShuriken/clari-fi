@@ -159,6 +159,31 @@ export class NotificationsService {
     });
   }
 
+  async sendCheaperAlternativeFound(input: {
+    userId: string;
+    expenseId: string;
+    itemName: string;
+    savingsEstimate: number;
+    currency: string;
+  }): Promise<AlertPushDispatchResult> {
+    const symbol = input.currency === 'MYR' ? 'RM' : input.currency;
+    const title = `Cheaper option found!`;
+    const body = `You could save ~${symbol} ${input.savingsEstimate.toFixed(2)} on ${input.itemName}. Tap to see cheaper nearby.`;
+
+    return this.dispatchPush({
+      userId: input.userId,
+      title,
+      body,
+      data: {
+        type: 'cheaper_alternative',
+        expenseId: input.expenseId,
+        item: input.itemName,
+      },
+      sentMetric: 'cheaper_alternative.push.sent.count',
+      failedMetric: 'cheaper_alternative.push.failed.count',
+    });
+  }
+
   async sendSignalAlertEvent(input: SignalPushDispatchInput): Promise<AlertPushDispatchResult> {
     const locationText = input.storeName ?? input.areaText ?? 'nearby';
     const title = input.decision === 'BUY_NOW' ? `Signal: Buy now (${input.itemName})` : `Signal: Wait (${input.itemName})`;

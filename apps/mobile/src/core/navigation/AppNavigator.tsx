@@ -10,6 +10,7 @@ import { AlertsScreen } from '../../features/alerts/screens/AlertsScreen';
 import { AccountScreen } from '../../features/auth/screens/AccountScreen';
 import { CaptureScreen } from '../../features/capture/screens/CaptureScreen';
 import { FamilyScreen } from '../../features/families/screens/FamilyScreen';
+import { ExpenseDetailScreen } from '../../features/ledger/screens/ExpenseDetailScreen';
 import { LedgerScreen } from '../../features/ledger/screens/LedgerScreen';
 import { PricesScreen } from '../../features/prices/screens/PricesScreen';
 import { RewardsScreen } from '../../features/rewards/screens/RewardsScreen';
@@ -32,6 +33,7 @@ export type RootStackParamList = {
   Splits: undefined;
   Subscription: undefined;
   Rewards: undefined;
+  ExpenseDetail: { expenseId: string };
   StoreMap: { items: string[]; lat: number; lng: number; radiusKm: number; areaText?: string };
 };
 
@@ -169,6 +171,7 @@ export function AppNavigator() {
           />
           <RootStack.Screen name="Families" component={FamilyScreen} options={{ title: 'Families' }} />
           <RootStack.Screen name="Splits" component={SplitsScreen} options={{ title: 'Splits' }} />
+          <RootStack.Screen name="ExpenseDetail" component={ExpenseDetailScreen} options={{ title: 'Expense Detail' }} />
           <RootStack.Screen name="StoreMap" component={StoreMapScreen} options={{ title: 'Store Comparison', headerBackTitle: 'Back' }} />
         </RootStack.Navigator>
       </NavigationContainer>

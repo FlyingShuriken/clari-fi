@@ -36,6 +36,7 @@ import {
   listAlertEvents,
   listExpenses,
   listFamilies,
+  loadWeeklyReport,
   listPushDevices,
   listPriceAlerts,
   listPromos,
@@ -88,6 +89,7 @@ import type {
   SplitSummary,
   SubscriptionSnapshot,
   VoiceParseResult,
+  WeeklySlide,
 } from '../../shared/types';
 
 const defaultApiBaseUrl =
@@ -282,6 +284,26 @@ export interface LedgerLineItem {
   totalPrice: number;
 }
 
+export interface CheaperOptionItem {
+  description: string;
+  currentUnitPrice: number;
+  cheapestStore: string;
+  cheapestUnitPrice: number;
+  distanceKm: number;
+  savingsPerUnit: number;
+  currency: string;
+  storeId?: string;
+  lat?: number;
+  lng?: number;
+}
+
+export interface CheaperOptionMeta {
+  hasAlternative: boolean;
+  analyzedAt: string;
+  items: CheaperOptionItem[];
+  totalSavingsEstimate: number;
+}
+
 export interface LedgerExpense {
   id: string;
   merchant: string;
@@ -292,6 +314,9 @@ export interface LedgerExpense {
   areaText?: string;
   note?: string;
   lineItems: LedgerLineItem[];
+  cheaperOption?: CheaperOptionMeta;
+  locationLat?: number;
+  locationLng?: number;
 }
 
 export interface ReportSummary {
@@ -351,6 +376,9 @@ function mapLedgerItems(rawItems: unknown[]): LedgerExpense[] {
       } satisfies LedgerLineItem;
     });
 
+    const rawPayload = value.rawPayload as Record<string, unknown> | null | undefined;
+    const cheaperOption = rawPayload?.cheaperOption as CheaperOptionMeta | undefined;
+
     return {
       id: getString(value.id, `${Math.random()}`),
       merchant: getExpenseDisplayMerchant(value.merchantText, value.areaText),
@@ -361,6 +389,9 @@ function mapLedgerItems(rawItems: unknown[]): LedgerExpense[] {
       areaText: getString(value.areaText) || undefined,
       note: getString(value.note) || undefined,
       lineItems,
+      cheaperOption: cheaperOption?.hasAlternative ? cheaperOption : undefined,
+      locationLat: toNumber(value.locationLat) || undefined,
+      locationLng: toNumber(value.locationLng) || undefined,
     } satisfies LedgerExpense;
   });
 }
@@ -470,6 +501,8 @@ export interface ClariFiController {
   ledgerItems: LedgerExpense[];
   ledgerTotal: number;
   reportSummary: ReportSummary | null;
+  weeklySlides: WeeklySlide[];
+  weeklyReportLoading: boolean;
   subscription: SubscriptionSnapshot | null;
   rewardSummary: RewardSummary | null;
   rewardCatalog: RewardCatalogItem[];
@@ -608,6 +641,7 @@ export interface ClariFiController {
 
   loadLedger: () => Promise<void>;
   loadReport: () => Promise<void>;
+  loadWeeklyReport: () => Promise<void>;
   loadSubscription: () => Promise<void>;
   updateSubscriptionPlan: (plan: 'FREE' | 'PREMIUM', addonCount: number) => Promise<void>;
   loadRewardSummary: () => Promise<void>;
@@ -768,6 +802,8 @@ function useClariFiControllerValue(): ClariFiController {
 
   const [ledgerItems, setLedgerItems] = useState<LedgerExpense[]>([]);
   const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
+  const [weeklySlides, setWeeklySlides] = useState<WeeklySlide[]>([]);
+  const [weeklyReportLoading, setWeeklyReportLoading] = useState(false);
   const [subscription, setSubscription] = useState<SubscriptionSnapshot | null>(null);
   const [rewardSummary, setRewardSummary] = useState<RewardSummary | null>(null);
   const [rewardCatalog, setRewardCatalog] = useState<RewardCatalogItem[]>([]);
@@ -1714,6 +1750,22 @@ function useClariFiControllerValue(): ClariFiController {
     });
   }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
 
+  const loadWeeklyReportCallback = useCallback(async () => {
+    if (weeklyReportLoading) {
+      return;
+    }
+    setWeeklyReportLoading(true);
+    try {
+      const token = await getBearerTokenOrThrow();
+      const result = await loadWeeklyReport(normalizeBaseUrl(apiBaseUrl), token);
+      setWeeklySlides(result.slides);
+    } catch (err) {
+      setMessage(errorToMessage(err));
+    } finally {
+      setWeeklyReportLoading(false);
+    }
+  }, [apiBaseUrl, getBearerTokenOrThrow, weeklyReportLoading]);
+
   const loadFamiliesList = useCallback(async () => {
     await runTask(async () => {
       const token = await getBearerTokenOrThrow();
@@ -2447,6 +2499,8 @@ function useClariFiControllerValue(): ClariFiController {
       ledgerItems,
       ledgerTotal: ledgerItems.reduce((acc, item) => acc + item.totalAmount, 0),
       reportSummary,
+      weeklySlides,
+      weeklyReportLoading,
       subscription,
       rewardSummary,
       rewardCatalog,
@@ -2553,6 +2607,7 @@ function useClariFiControllerValue(): ClariFiController {
 
       loadLedger,
       loadReport,
+      loadWeeklyReport: loadWeeklyReportCallback,
       loadRewardSummary,
       loadRewardCatalog,
       loadRewardLedger,
@@ -2662,10 +2717,13 @@ function useClariFiControllerValue(): ClariFiController {
       loadRewardRedemptions,
       loadRewardSummary,
       loadReport,
+      loadWeeklyReportCallback,
       loadSubscription,
       loadSplitSessions,
       loading,
       lastContributionReward,
+      weeklySlides,
+      weeklyReportLoading,
       markEventRead,
       markAllEventsRead,
       message,
@@ -2702,6 +2760,8 @@ function useClariFiControllerValue(): ClariFiController {
       recognizerAvailable,
       redeemRewardById,
       reportSummary,
+      weeklySlides,
+      weeklyReportLoading,
       rewardCatalog,
       rewardLedger,
       rewardRedemptions,

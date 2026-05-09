@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, ScrollView } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Animated } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -48,6 +48,9 @@ export function LedgerScreen() {
   const insets = useSafeAreaInsets();
   const [selectedFilter, setSelectedFilter] = useState<FilterCategory>('All');
   const [segment, setSegment] = useState<LedgerSegment>('entries');
+  const [showNudgeBanner, setShowNudgeBanner] = useState(false);
+  const nudgeBannerShownRef = useRef(false);
+  const nudgeOpacity = useRef(new Animated.Value(0)).current;
   const hasLoadedLedgerRef = useRef(false);
   const hasLoadedOverviewRef = useRef(false);
 
@@ -60,6 +63,25 @@ export function LedgerScreen() {
       void controller.loadLedger();
     }, [controller.loadLedger]),
   );
+
+  useEffect(() => {
+    if (nudgeBannerShownRef.current) {
+      return;
+    }
+    const hasCheaper = controller.ledgerItems.some((item) => item.cheaperOption?.hasAlternative);
+    if (!hasCheaper) {
+      return;
+    }
+    nudgeBannerShownRef.current = true;
+    setShowNudgeBanner(true);
+    Animated.timing(nudgeOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    const timer = setTimeout(() => {
+      Animated.timing(nudgeOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start(() =>
+        setShowNudgeBanner(false),
+      );
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [controller.ledgerItems, nudgeOpacity]);
 
   const openReports = async () => {
     setSegment('reports');
@@ -129,6 +151,16 @@ export function LedgerScreen() {
         </TouchableOpacity>
       </View>
 
+      {showNudgeBanner && (
+        <Animated.View style={[styles.nudgeBanner, { opacity: nudgeOpacity }]}>
+          <MaterialCommunityIcons name="tag-arrow-down-outline" size={14} color={Colors.green} />
+          <Text style={styles.nudgeText}>Some transactions have cheaper nearby options. Tap to explore.</Text>
+          <TouchableOpacity onPress={() => setShowNudgeBanner(false)}>
+            <MaterialCommunityIcons name="close" size={14} color={Colors.textMuted} />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       <RefreshScroll
         style={styles.list}
         contentContainerStyle={styles.listContent}
@@ -184,6 +216,8 @@ export function LedgerScreen() {
                   timeStr = date.toLocaleDateString('default', { month: 'short', day: 'numeric' });
                 }
 
+                const cheaperOption = item.cheaperOption;
+
                 return (
                   <ExpenseCard
                     key={item.id}
@@ -191,6 +225,8 @@ export function LedgerScreen() {
                     meta={[category, item.paymentMethod, timeStr].filter(Boolean).join(' · ')}
                     amount={controller.formatCurrency(item.totalAmount, item.currency)}
                     category={category}
+                    hasCheaperOption={cheaperOption?.hasAlternative}
+                    onPress={() => navigation.navigate('ExpenseDetail', { expenseId: item.id })}
                   />
                 );
               })
@@ -297,6 +333,25 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: Colors.bg,
     fontWeight: '600',
+  },
+  nudgeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: Colors.greenDim,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.green + '40',
+  },
+  nudgeText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.textSecondary,
+    lineHeight: 16,
   },
   list: {
     flex: 1,

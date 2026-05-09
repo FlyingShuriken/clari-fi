@@ -1,4 +1,5 @@
-import { StyleSheet, View, Text } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors } from '../../theme';
 
 interface ExpenseCardProps {
@@ -6,6 +7,8 @@ interface ExpenseCardProps {
   meta: string;
   amount: string;
   category?: string;
+  hasCheaperOption?: boolean;
+  onPress?: () => void;
 }
 
 function getCategoryColor(category: string): string {
@@ -21,10 +24,10 @@ function getCategoryColor(category: string): string {
   return map[category.toLowerCase()] ?? Colors.catOther;
 }
 
-export function ExpenseCard({ merchant, meta, amount, category = 'other' }: ExpenseCardProps) {
+export function ExpenseCard({ merchant, meta, amount, category = 'other', hasCheaperOption, onPress }: ExpenseCardProps) {
   const barColor = getCategoryColor(category);
 
-  return (
+  const inner = (
     <View style={styles.card}>
       <View style={[styles.bar, { backgroundColor: barColor }]} />
       <View style={styles.info}>
@@ -32,8 +35,19 @@ export function ExpenseCard({ merchant, meta, amount, category = 'other' }: Expe
         <Text style={styles.meta} numberOfLines={1}>{meta}</Text>
       </View>
       <Text style={styles.amount}>{amount}</Text>
+      {hasCheaperOption && (
+        <View style={styles.badge}>
+          <MaterialCommunityIcons name="tag-arrow-down-outline" size={12} color={Colors.green} />
+        </View>
+      )}
     </View>
   );
+
+  if (onPress) {
+    return <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{inner}</TouchableOpacity>;
+  }
+
+  return inner;
 }
 
 const styles = StyleSheet.create({
@@ -69,5 +83,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.textPrimary,
     letterSpacing: -0.3,
+  },
+  badge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.greenDim,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

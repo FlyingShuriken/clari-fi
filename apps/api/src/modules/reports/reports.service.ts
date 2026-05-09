@@ -1,9 +1,64 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma, type Expense, type ExpenseLineItem } from '@prisma/client';
 import { MetricsService } from '../../infrastructure/metrics/metrics.service';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { MonthlyReportQueryDto } from './dto/monthly-report-query.dto';
+
+export interface WeeklySlide {
+  type: 'summary' | 'anomaly' | 'education' | 'tip';
+  title: string;
+  body: string;
+  metric?: string;
+  subtitle?: string;
+  emoji?: string;
+}
+
+function getIsoWeekKey(date: Date): string {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+function getWeekBounds(weekKey: string): { start: Date; end: Date } {
+  const [yearStr, weekStr] = weekKey.split('-W');
+  const year = Number(yearStr);
+  const week = Number(weekStr);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const startOfWeek1 = new Date(jan4);
+  startOfWeek1.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1));
+  const start = new Date(startOfWeek1);
+  start.setUTCDate(startOfWeek1.getUTCDate() + (week - 1) * 7);
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 7);
+  return { start, end };
+}
+
+function buildFallbackSlides(cashOut: number, expenseCount: number, currency: string): WeeklySlide[] {
+  const symbol = currency === 'MYR' ? 'RM' : currency;
+  return [
+    {
+      type: 'summary',
+      emoji: '📊',
+      title: 'Your Week in Review',
+      body: expenseCount === 0
+        ? 'No transactions recorded this week yet.'
+        : `You recorded ${expenseCount} transaction${expenseCount === 1 ? '' : 's'} this week.`,
+      metric: `${symbol} ${cashOut.toFixed(2)}`,
+      subtitle: `${expenseCount} transactions`,
+    },
+    {
+      type: 'tip',
+      emoji: '💡',
+      title: 'Start Tracking',
+      body: 'Keep capturing receipts and voice notes. The more data you record, the sharper your weekly insights will be.',
+    },
+  ];
+}
 
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
   groceries: ['fish', 'vegetable', 'fruit', 'market', 'pasar', 'rice', 'chicken'],
@@ -205,9 +260,12 @@ function computeAnomalies(expenses: Array<Pick<Expense, 'id' | 'merchantText' | 
 
 @Injectable()
 export class ReportsService {
+  private readonly logger = new Logger(ReportsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly metrics: MetricsService,
+    private readonly config: ConfigService,
   ) {}
 
   async getMonthlyReport(user: AuthenticatedUser, query: MonthlyReportQueryDto) {
@@ -365,5 +423,169 @@ export class ReportsService {
       anomalies,
       insights,
     };
+  }
+
+  async getWeeklyReport(user: AuthenticatedUser) {
+    const weekKey = getIsoWeekKey(new Date());
+    const { start, end } = getWeekBounds(weekKey);
+
+    const cached = await this.prisma.weeklyReport.findUnique({
+      where: { userId_weekKey: { userId: user.id, weekKey } },
+    });
+
+    if (cached) {
+      return {
+        weekKey,
+        slides: cached.slides as unknown as WeeklySlide[],
+        cached: true,
+      };
+    }
+
+    const prevStart = new Date(start);
+    prevStart.setUTCDate(start.getUTCDate() - 7);
+
+    const [expenses, prevExpenses] = await Promise.all([
+      this.prisma.expense.findMany({
+        where: { userId: user.id, transactionAt: { gte: start, lt: end } },
+        include: { lineItems: true },
+      }),
+      this.prisma.expense.findMany({
+        where: { userId: user.id, transactionAt: { gte: prevStart, lt: start } },
+      }),
+    ]);
+
+    const cashOut = expenses.reduce((sum, e) => sum + toFloat(e.totalAmount), 0);
+    const prevCashOut = prevExpenses.reduce((sum, e) => sum + toFloat(e.totalAmount), 0);
+    const currency = expenses[0]?.currency ?? 'MYR';
+    const symbol = currency === 'MYR' ? 'RM' : currency;
+
+    let slides: WeeklySlide[];
+
+    if (expenses.length === 0) {
+      slides = buildFallbackSlides(cashOut, 0, currency);
+    } else {
+      slides = await this.generateSlidesViaLlm(expenses, cashOut, prevCashOut, currency, symbol);
+    }
+
+    await this.prisma.weeklyReport.upsert({
+      where: { userId_weekKey: { userId: user.id, weekKey } },
+      create: { userId: user.id, weekKey, slides: slides as unknown as Prisma.InputJsonValue, generatedAt: new Date() },
+      update: { slides: slides as unknown as Prisma.InputJsonValue, generatedAt: new Date() },
+    });
+
+    return { weekKey, slides, cached: false };
+  }
+
+  private async generateSlidesViaLlm(
+    expenses: Array<Expense & { lineItems: ExpenseLineItem[] }>,
+    cashOut: number,
+    prevCashOut: number,
+    currency: string,
+    symbol: string,
+  ): Promise<WeeklySlide[]> {
+    const apiKey = this.config.get<string>('OPENROUTER_API_KEY');
+    const baseUrl = this.config.get<string>('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1').replace(/\/+$/, '');
+    const model = this.config.get<string>('OPENROUTER_PARSER_MODEL', 'openai/gpt-4.1-mini');
+
+    if (!apiKey) {
+      this.logger.warn('OPENROUTER_API_KEY not set — returning fallback weekly slides');
+      return buildFallbackSlides(cashOut, expenses.length, currency);
+    }
+
+    const expenseSummary = expenses.map((e) => ({
+      merchant: e.merchantText ?? 'Unknown',
+      amount: toFloat(e.totalAmount),
+      currency: e.currency,
+      date: e.transactionAt.toISOString().slice(0, 10),
+      items: e.lineItems.map((l) => ({
+        name: l.descriptionRaw,
+        unitPrice: l.unitPrice ? toFloat(l.unitPrice) : undefined,
+        qty: l.quantity ? toFloat(l.quantity) : undefined,
+        total: toFloat(l.totalPrice),
+      })),
+    }));
+
+    const systemPrompt = [
+      'You are a smart personal finance advisor for a Malaysian household spending app.',
+      'Analyze the weekly transactions and return a JSON array of story slides.',
+      'Return ONLY a valid JSON array — no markdown, no commentary, no code fences.',
+      'Each slide object has these keys: type, title, body, metric (optional), subtitle (optional), emoji (optional).',
+      'type must be one of: summary, anomaly, education, tip.',
+      'Generate 4 to 6 slides total. Always start with a summary slide and end with a tip slide.',
+      'The anomaly slide should highlight unusually high amounts or overpriced items compared to typical market prices.',
+      'The education slide explains WHY prices changed (supply chain, inflation, seasonal factors).',
+      'The tip slide must give specific, actionable savings advice based on the actual spending data.',
+      'Keep body text concise — under 120 characters per slide.',
+      `Currency is ${currency} (symbol: ${symbol}).`,
+    ].join(' ');
+
+    const userPrompt = JSON.stringify({
+      weeklyTotal: round2(cashOut),
+      previousWeekTotal: round2(prevCashOut),
+      transactionCount: expenses.length,
+      currency,
+      expenses: expenseSummary,
+    });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const headers: Record<string, string> = {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      };
+      const appUrl = this.config.get<string>('OPENROUTER_APP_URL');
+      const appName = this.config.get<string>('OPENROUTER_APP_NAME');
+      if (appUrl) headers['HTTP-Referer'] = appUrl;
+      if (appName) headers['X-Title'] = appName;
+
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        signal: controller.signal,
+        body: JSON.stringify({
+          model,
+          temperature: 0.4,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        this.logger.error(`OpenRouter weekly report request failed (${response.status})`);
+        return buildFallbackSlides(cashOut, expenses.length, currency);
+      }
+
+      const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const rawText = (payload.choices?.[0]?.message?.content ?? '').trim();
+
+      const jsonText = rawText.startsWith('[')
+        ? rawText
+        : (rawText.match(/```(?:json)?\s*([\s\S]*?)\s*```/i)?.[1] ?? rawText);
+
+      const parsed = JSON.parse(jsonText) as unknown;
+      if (!Array.isArray(parsed) || !parsed.length) {
+        return buildFallbackSlides(cashOut, expenses.length, currency);
+      }
+
+      return (parsed as Array<Record<string, unknown>>).map((slide) => ({
+        type: (['summary', 'anomaly', 'education', 'tip'].includes(String(slide.type))
+          ? slide.type
+          : 'summary') as WeeklySlide['type'],
+        title: String(slide.title ?? ''),
+        body: String(slide.body ?? ''),
+        metric: slide.metric ? String(slide.metric) : undefined,
+        subtitle: slide.subtitle ? String(slide.subtitle) : undefined,
+        emoji: slide.emoji ? String(slide.emoji) : undefined,
+      }));
+    } catch (err) {
+      this.logger.error(`Weekly report LLM call failed: ${String(err)}`);
+      return buildFallbackSlides(cashOut, expenses.length, currency);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 }

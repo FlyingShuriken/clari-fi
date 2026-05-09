@@ -17,7 +17,10 @@
         "NSCameraUsageDescription": "ClariFi uses the camera to capture receipt photos.",
         "NSPhotoLibraryUsageDescription": "ClariFi uses photo library access to import receipt images.",
         "NSUserNotificationsUsageDescription": "ClariFi sends price alert notifications when items hit your target price.",
-        "NSLocationWhenInUseUsageDescription": "ClariFi uses your location to find nearby store prices."
+        "NSLocationWhenInUseUsageDescription": "ClariFi uses your location to find nearby store prices.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
       },
       "bundleIdentifier": "com.mmch.clarifi"
     },

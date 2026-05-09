@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { CategoryProgress } from '../../../components/ui/category-progress';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { Colors } from '../../../theme';
+import { WeeklyStoryModal } from './WeeklyStoryModal';
 
 const CATEGORY_COLORS: Record<string, string> = {
   groceries: Colors.catFood,
@@ -23,6 +25,14 @@ const RANK_COLORS = [Colors.green, Colors.indigo, Colors.coral];
 export function LedgerOverviewPanel() {
   const controller = useClariFiController();
   const summary = controller.reportSummary;
+  const [storyVisible, setStoryVisible] = useState(false);
+
+  const handleOpenWeeklyReport = async () => {
+    if (controller.weeklySlides.length === 0) {
+      await controller.loadWeeklyReport();
+    }
+    setStoryVisible(true);
+  };
 
   const trendColor =
     summary?.spendDelta.direction === 'DOWN' ? Colors.green
@@ -62,6 +72,22 @@ export function LedgerOverviewPanel() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.weeklyCard} onPress={() => { void handleOpenWeeklyReport(); }}>
+        <MaterialCommunityIcons name="creation" size={20} color={Colors.green} />
+        <View style={styles.weeklyCardText}>
+          <Text style={styles.weeklyTitle}>Your Week in Review</Text>
+          <Text style={styles.weeklySub}>AI-powered insights · Story mode</Text>
+        </View>
+        <MaterialCommunityIcons name="chevron-right" size={18} color={Colors.textSecondary} />
+      </TouchableOpacity>
+
+      <WeeklyStoryModal
+        visible={storyVisible}
+        slides={controller.weeklySlides}
+        loading={controller.weeklyReportLoading}
+        onClose={() => setStoryVisible(false)}
+      />
+
       <View style={styles.heroCard}>
         <View style={styles.heroTopRow}>
           <View>
@@ -138,6 +164,30 @@ export function LedgerOverviewPanel() {
 const styles = StyleSheet.create({
   container: {
     gap: 12,
+  },
+  weeklyCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: Colors.green + '40',
+  },
+  weeklyCardText: {
+    flex: 1,
+    gap: 2,
+  },
+  weeklyTitle: {
+    color: Colors.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  weeklySub: {
+    color: Colors.textSecondary,
+    fontSize: 12,
   },
   emptyWrap: {
     paddingTop: 20,

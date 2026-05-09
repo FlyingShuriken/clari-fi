@@ -1,3 +1,18 @@
+export interface WeeklySlide {
+  type: 'summary' | 'anomaly' | 'education' | 'tip';
+  title: string;
+  body: string;
+  metric?: string;
+  subtitle?: string;
+  emoji?: string;
+}
+
+export interface WeeklyReportResponse {
+  weekKey: string;
+  slides: WeeklySlide[];
+  cached: boolean;
+}
+
 export interface AuthVerifyResponse {
   user: {
     id: string;

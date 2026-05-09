@@ -1908,6 +1908,263 @@ async function seedHouseholdData(args: {
       },
     ],
   });
+
+  // --- Pre-computed cheaper alternative nudges ---
+  const farleyStore = args.stores["farley-jalan-song"];
+  const choiceStore = args.stores["choice-gala-city"];
+
+  // May 2 Everrise BDC: rice and oil are cheaper at Farley (1.7 km away)
+  await prisma.expense.update({
+    where: { id: createdGroceryExpenses[8]!.id },
+    data: {
+      rawPayload: {
+        seed: "kuching-demo",
+        merchant: "Everrise BDC",
+        cheaperOption: {
+          hasAlternative: true,
+          analyzedAt: dayAt("2026-05-02", 17, 30).toISOString(),
+          items: [
+            {
+              description: "Jasmine Rice 5kg",
+              currentUnitPrice: 32.2,
+              cheapestStore: farleyStore.displayName,
+              cheapestUnitPrice: 31.7,
+              distanceKm: 1.7,
+              savingsPerUnit: 0.5,
+              currency: "MYR",
+              storeId: farleyStore.id,
+              lat: farleyStore.lat,
+              lng: farleyStore.lng,
+            },
+            {
+              description: "Cooking Oil 5kg",
+              currentUnitPrice: 31.4,
+              cheapestStore: farleyStore.displayName,
+              cheapestUnitPrice: 31.0,
+              distanceKm: 1.7,
+              savingsPerUnit: 0.4,
+              currency: "MYR",
+              storeId: farleyStore.id,
+              lat: farleyStore.lat,
+              lng: farleyStore.lng,
+            },
+          ],
+          totalSavingsEstimate: 0.9,
+        },
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  // May 6 Farley Jalan Song: chicken is cheaper at Choice Daily (0.7 km away)
+  await prisma.expense.update({
+    where: { id: createdGroceryExpenses[10]!.id },
+    data: {
+      rawPayload: {
+        seed: "kuching-demo",
+        merchant: "Farley Jalan Song",
+        cheaperOption: {
+          hasAlternative: true,
+          analyzedAt: dayAt("2026-05-06", 19, 30).toISOString(),
+          items: [
+            {
+              description: "Fresh Chicken Breast",
+              currentUnitPrice: 17.2,
+              cheapestStore: choiceStore.displayName,
+              cheapestUnitPrice: 15.9,
+              distanceKm: 0.7,
+              savingsPerUnit: 1.3,
+              currency: "MYR",
+              storeId: choiceStore.id,
+              lat: choiceStore.lat,
+              lng: choiceStore.lng,
+            },
+          ],
+          totalSavingsEstimate: 1.69,
+        },
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  // May 7 Choice Gala City: quick chicken run before the family gathering.
+  // This creates a price observation at Choice so StoreMapScreen has data.
+  await createReceiptExpense({
+    userId: ownerId,
+    familyId: args.family.id,
+    storeId: choiceStore.id,
+    merchantText: choiceStore.displayName,
+    areaText: choiceStore.areaText,
+    lat: choiceStore.lat,
+    lng: choiceStore.lng,
+    transactionAt: dayAt("2026-05-07", 15),
+    paymentMethod: PaymentMethodType.GRABPAY,
+    note: "Quick protein run before family gathering.",
+    items: [
+      {
+        descriptionRaw: "Fresh Chicken Breast",
+        canonicalName: "chicken breast" as const,
+        quantity: 1.5,
+        unitRaw: "kg",
+        unitPrice: 15.9,
+        totalPrice: 23.85,
+      },
+    ],
+    receiptFileRef: "seed://receipt/choice-gala-city/chicken-1.jpg",
+    itemMap: args.items,
+  });
+
+  // May 9 Everrise BDC: Saturday morning top-up with cheaper-alternative nudge.
+  // Chicken is RM2.60/kg cheaper at Choice Gala City (2.4 km away).
+  const may9Everrise = await createReceiptExpense({
+    userId: ownerId,
+    familyId: args.family.id,
+    storeId: args.stores["everrise-bdc"].id,
+    merchantText: args.stores["everrise-bdc"].displayName,
+    areaText: args.stores["everrise-bdc"].areaText,
+    lat: args.stores["everrise-bdc"].lat,
+    lng: args.stores["everrise-bdc"].lng,
+    transactionAt: dayAt("2026-05-09", 10),
+    paymentMethod: PaymentMethodType.DUITNOW,
+    note: "Saturday morning grocery top-up.",
+    items: [
+      {
+        descriptionRaw: "Jasmine Rice 5kg",
+        canonicalName: "rice 5kg" as const,
+        quantity: 1,
+        unitRaw: "5kg",
+        unitPrice: 31.3,
+        totalPrice: 31.3,
+      },
+      {
+        descriptionRaw: "Cooking Oil 5kg",
+        canonicalName: "cooking oil 5kg" as const,
+        quantity: 1,
+        unitRaw: "5kg",
+        unitPrice: 30.9,
+        totalPrice: 30.9,
+      },
+      {
+        descriptionRaw: "Eggs Grade C 30",
+        canonicalName: "eggs grade c 30" as const,
+        quantity: 1,
+        unitRaw: "30pcs",
+        unitPrice: 11.9,
+        totalPrice: 11.9,
+      },
+      {
+        descriptionRaw: "Fresh Chicken Breast",
+        canonicalName: "chicken breast" as const,
+        quantity: 1.0,
+        unitRaw: "kg",
+        unitPrice: 18.5,
+        totalPrice: 18.5,
+      },
+      {
+        descriptionRaw: "Fresh Milk 1L",
+        canonicalName: "fresh milk 1l" as const,
+        quantity: 1,
+        unitRaw: "1l",
+        unitPrice: 6.75,
+        totalPrice: 6.75,
+      },
+    ],
+    receiptFileRef: "seed://receipt/everrise-bdc/may9-morning.jpg",
+    itemMap: args.items,
+  });
+
+  await prisma.expense.update({
+    where: { id: may9Everrise.id },
+    data: {
+      rawPayload: {
+        seed: "kuching-demo",
+        merchant: "Everrise BDC",
+        cheaperOption: {
+          hasAlternative: true,
+          analyzedAt: dayAt("2026-05-09", 10, 30).toISOString(),
+          items: [
+            {
+              description: "Fresh Chicken Breast",
+              currentUnitPrice: 18.5,
+              cheapestStore: choiceStore.displayName,
+              cheapestUnitPrice: 15.9,
+              distanceKm: 2.4,
+              savingsPerUnit: 2.6,
+              currency: "MYR",
+              storeId: choiceStore.id,
+              lat: choiceStore.lat,
+              lng: choiceStore.lng,
+            },
+          ],
+          totalSavingsEstimate: 2.6,
+        },
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  // May 9 weekend brunch at Vivacity
+  await createManualExpense({
+    userId: ownerId,
+    merchantText: "Bing Coffee Vivacity",
+    areaText: "Jalan Wan Alwi",
+    transactionAt: dayAt("2026-05-09", 13),
+    paymentMethod: PaymentMethodType.GRABPAY,
+    note: "Weekend family brunch.",
+    items: [
+      { descriptionRaw: "Iced Americano", totalPrice: 14.0 },
+      { descriptionRaw: "Nasi Lemak Ayam", totalPrice: 18.5 },
+      { descriptionRaw: "Lemon Cheesecake", totalPrice: 13.0 },
+    ],
+  });
+}
+
+async function seedWeeklyReport(userId: string) {
+  const slides: Prisma.InputJsonValue = [
+    {
+      type: "summary",
+      emoji: "📊",
+      metric: "RM 594.56",
+      subtitle: "7 transactions · 4–9 May",
+      title: "Your busiest grocery week",
+      body: "You made 7 transactions this week totalling RM594.56 — 3.1× more than last week's RM189.49. Pre-Gawai restocking and a utility bill drove most of the spend.",
+    },
+    {
+      type: "anomaly",
+      emoji: "⚡",
+      metric: "RM 142.30",
+      subtitle: "Sarawak Energy · 5 May",
+      title: "Electricity bill higher than usual",
+      body: "Your electricity bill landed at RM142.30 on Monday — significantly above a typical weekday. The Labour Day long weekend likely drove higher home usage. Check if heavy appliances were left on overnight.",
+    },
+    {
+      type: "education",
+      emoji: "📖",
+      title: "Why chicken prices vary across Kuching",
+      body: "Fresh chicken breast can differ by RM2–3/kg across stores in the same district. Hypermarkets and daily marts source from different suppliers and use protein as a foot-traffic driver. A quick comparison before you shop can save RM3–5 per trip — no extra travel needed when stores are under 2 km apart.",
+    },
+    {
+      type: "tip",
+      emoji: "💡",
+      metric: "Save ~RM 6.50",
+      subtitle: "per weekly chicken purchase",
+      title: "Cheaper chicken is 0.7 km away",
+      body: "Choice Daily Gala City has fresh chicken breast at RM15.90/kg — RM2.60 cheaper than Everrise BDC. Both Choice and Farley Jalan Song are within 2.5 km of Everrise, so switching your protein shop this week costs nothing extra.",
+    },
+  ] as unknown as Prisma.InputJsonValue;
+
+  await prisma.weeklyReport.upsert({
+    where: {
+      userId_weekKey: { userId, weekKey: "2026-W19" },
+    },
+    update: {
+      slides,
+      generatedAt: dayAt("2026-05-09", 8),
+    },
+    create: {
+      userId,
+      weekKey: "2026-W19",
+      slides,
+      generatedAt: dayAt("2026-05-09", 8),
+    },
+  });
 }
 
 async function seedAlerts(args: {
@@ -2090,6 +2347,14 @@ async function main() {
   });
   await seedPushDevice(users["user_3AT9EbYugV4IirHcHRERHqTyH1e"].id);
 
+  try {
+    await seedWeeklyReport(users["user_3AT9EbYugV4IirHcHRERHqTyH1e"].id);
+  } catch {
+    console.warn(
+      "seedWeeklyReport skipped — WeeklyReport table may not exist yet. Run `npx prisma migrate dev` first.",
+    );
+  }
+
   const summary = await prisma.user.findMany({
     where: {
       clerkUserId: {
@@ -2127,6 +2392,13 @@ async function main() {
   console.log("Active invite code: KCHDEMO1");
   console.log("Recommended demo user: user_3AT9EbYugV4IirHcHRERHqTyH1e");
   console.log(`Reference month for subscription usage: ${DEMO_MONTH_KEY}`);
+  console.log("");
+  console.log("Feature 1 — Cheaper Alternative Nudge:");
+  console.log("  Expenses with cheaperOption: May 2 Everrise BDC, May 6 Farley, May 9 Everrise BDC");
+  console.log("  Choice Daily Gala City has chicken breast at RM15.90/kg (price obs seeded)");
+  console.log("Feature 2 — Weekly Story Report:");
+  console.log("  Pre-seeded WeeklyReport for 2026-W19 (4 slides)");
+  console.log("  Current week total: RM594.56 across 7 transactions");
 }
 
 main()

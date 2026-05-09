@@ -37,7 +37,8 @@ describe('ReportsService', () => {
       trackCounter: jest.fn(),
       trackTiming: jest.fn(),
     } as any;
-    const service = new ReportsService(prisma, metrics);
+    const config = { get: jest.fn().mockReturnValue(undefined) } as any;
+    const service = new ReportsService(prisma, metrics, config);
 
     const report = await service.getMonthlyReport(
       { id: 'u1', email: 'x@example.com', clerkUserId: 'clerk_1' },
