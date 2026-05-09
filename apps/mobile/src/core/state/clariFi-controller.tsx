@@ -95,7 +95,7 @@ const defaultApiBaseUrl =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   'http://localhost:3000/v1';
 
-const defaultSttLocale = 'en-SG';
+const defaultSttLocale = 'en-US';
 const onDeviceSttEnabled =
   String(
     Constants.expoConfig?.extra?.EXPO_PUBLIC_STT_ON_DEVICE_ENABLED ??

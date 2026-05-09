@@ -11,9 +11,6 @@
     },
     "ios": {
       "supportsTablet": true,
-      "entitlements": {
-        "aps-environment": "development"
-      },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "ClariFi uses the microphone to record voice expenses.",
         "NSSpeechRecognitionUsageDescription": "ClariFi uses speech recognition to turn your spoken expense into text.",
@@ -22,7 +19,7 @@
         "NSUserNotificationsUsageDescription": "ClariFi sends price alert notifications when items hit your target price.",
         "NSLocationWhenInUseUsageDescription": "ClariFi uses your location to find nearby store prices."
       },
-      "bundleIdentifier": "com.clarifi.app"
+      "bundleIdentifier": "com.mmch.clarifi"
     },
     "android": {
       "package": "com.clarifi.app",

@@ -8,8 +8,12 @@
     "start:dev": "nest start --watch",
     "test": "jest --config ./jest.config.ts",
     "signal:backtest": "ts-node scripts/signal-backtest.ts",
+    "seed:demo": "ts-node --project tsconfig.json prisma/seed.ts",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma"
+  },
+  "prisma": {
+    "seed": "ts-node --project tsconfig.json prisma/seed.ts"
   },
   "dependencies": {
     "@clarifi/shared": "workspace:*",

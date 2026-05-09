@@ -25,6 +25,10 @@ function normalizeTranscript(event: ExpoSpeechRecognitionResultEvent): string {
 function normalizeErrorMessage(event: ExpoSpeechRecognitionErrorEvent): string {
   const code = event.error?.trim() ?? 'unknown';
   const message = event.message?.trim() ?? 'Speech recognition failed.';
+  // kLSRErrorDomain 300 — simulator doesn't have the speech recognition stack
+  // if (code === 'audio-capture' && message.toLowerCase().includes('initialize')) {
+  //   return 'Speech recognition is not available in the iOS Simulator. Test on a real device.';
+  // }
   return `${message} (${code})`;
 }
 
@@ -81,7 +85,7 @@ class SpeechRecognitionService {
       lang: locale,
       interimResults: true,
       continuous: false,
-      requiresOnDeviceRecognition: true,
+      requiresOnDeviceRecognition: false,
       maxAlternatives: 1,
     });
   }

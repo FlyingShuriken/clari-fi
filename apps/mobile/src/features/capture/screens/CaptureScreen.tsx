@@ -299,7 +299,7 @@ export function CaptureScreen() {
           </Text>
           <Text style={styles.heroSubtitle}>
             {controller.recognizerAvailable === false
-              ? 'Voice recognizer unavailable on this device'
+              ? 'Recognizer is unavailable.'
               : voiceCandidate
                 ? 'Parsed and ready for your review.'
                 : controller.transcriptInput && controller.recognitionState === 'error'
