@@ -15,13 +15,18 @@ ClariFi is a React Native + NestJS product for fast expense capture (voice/recei
 
 ## Tech Architecture
 
-- Mobile client: Expo React Native app (`apps/mobile`) with Clerk for authentication, calling the API via `/v1`.
-- Backend API: NestJS service (`apps/api`) with Prisma + PostgreSQL, domain modules for expenses, reports, prices, splits, etc.
-- Shared contracts: `packages/shared` exports TypeScript/Zod contracts used by both API and mobile.
-- Auth: Clerk handles end-user auth on mobile and backend verification via Clerk server keys.
-- Data + storage: PostgreSQL as the primary database; Supabase provides backend DNS and storage (artifacts bucket).
-- Infrastructure: Redis-backed queue module for async work and scheduled jobs.
-- Deployment: API runs on AWS EC2.
+```mermaid
+flowchart LR
+    User((User)) --> Mobile[Expo React Native App]
+    Mobile -->|Auth| Clerk[Clerk Auth]
+    Mobile -->|API calls| API[NestJS API (AWS EC2)]
+    Shared[Shared TS/Zod Contracts] --- Mobile
+    Shared --- API
+    API <-->|Token verify| Clerk
+    API --> DB[(PostgreSQL)]
+    API --> Supabase[Supabase DNS + Storage]
+    API --> Queue[Redis Queue/Scheduler]
+```
 
 ## Core API Domains (Current)
 
