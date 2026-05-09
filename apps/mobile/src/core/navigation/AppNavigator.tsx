@@ -1,11 +1,14 @@
+import { Fragment } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { DarkTheme, NavigationContainer, type NavigatorScreenParams } from '@react-navigation/native';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Snackbar } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useClariFiController } from '../state/clariFi-controller';
+import { QuickCaptureButton } from '../../components/ui/quick-capture-button';
 import { AlertsScreen } from '../../features/alerts/screens/AlertsScreen';
 import { AccountScreen } from '../../features/auth/screens/AccountScreen';
 import { CaptureScreen } from '../../features/capture/screens/CaptureScreen';
@@ -70,55 +73,63 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const controller = useClariFiController();
 
   return (
-    <View style={[styles.tabBarWrapper, { paddingBottom: Math.max(insets.bottom, 12) }]} pointerEvents="box-none">
-      <View style={styles.tabBarPill}>
-        {state.routes.map((route, index) => {
-          const isFocused = state.index === index;
-          const isAlerts = route.name === 'Alerts';
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <View style={[styles.tabBarWrapper, { paddingBottom: Math.max(insets.bottom, 12) }]} pointerEvents="box-none">
+        <View style={styles.tabBarPill} pointerEvents="box-none">
+          {state.routes.map((route, index) => {
+            const isFocused = state.index === index;
+            const isAlerts = route.name === 'Alerts';
 
-          const onPress = () => {
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-            if (!isFocused && !event.defaultPrevented) {
-              navigation.navigate(route.name as keyof MainTabParamList);
-            }
-          };
+            const onPress = () => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
+              if (!isFocused && !event.defaultPrevented) {
+                navigation.navigate(route.name as keyof MainTabParamList);
+              }
+            };
 
-          return (
-            <TouchableOpacity
-              key={route.key}
-              onPress={onPress}
-              style={[styles.tabItem, isFocused && styles.tabItemActive]}
-              accessibilityRole="button"
-              accessibilityLabel={`${route.name} tab${isAlerts && controller.alertUnreadCount > 0 ? `, ${controller.alertUnreadCount} unread alerts` : ''}`}
-              accessibilityState={{ selected: isFocused }}
-              hitSlop={{ top: 8, right: 4, bottom: 8, left: 4 }}
-            >
-              <View style={styles.tabIconWrapper}>
-                <MaterialCommunityIcons
-                  name={tabIcon(route.name as keyof MainTabParamList)}
-                  size={22}
-                  color={isFocused ? Colors.green : Colors.textSecondary}
-                />
-                {isAlerts && controller.alertUnreadCount > 0 && (
-                  <View style={styles.badgeDot}>
-                    <Text style={styles.badgeText}>
-                      {controller.alertUnreadCount > 9 ? '9+' : String(controller.alertUnreadCount)}
-                    </Text>
+            return (
+              <Fragment key={route.key}>
+                {index === 2 && (
+                  <View style={styles.captureSlot} pointerEvents="box-none">
+                    <QuickCaptureButton />
                   </View>
                 )}
-              </View>
-              <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
-                {route.name}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+                <TouchableOpacity
+                  onPress={onPress}
+                  style={styles.tabItem}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${route.name} tab${isAlerts && controller.alertUnreadCount > 0 ? `, ${controller.alertUnreadCount} unread alerts` : ''}`}
+                  accessibilityState={{ selected: isFocused }}
+                  hitSlop={{ top: 8, right: 4, bottom: 8, left: 4 }}
+                >
+                  <View style={styles.tabIconWrapper}>
+                    <MaterialCommunityIcons
+                      name={tabIcon(route.name as keyof MainTabParamList)}
+                      size={22}
+                      color={isFocused ? Colors.green : Colors.textSecondary}
+                    />
+                    {isAlerts && controller.alertUnreadCount > 0 && (
+                      <View style={styles.badgeDot}>
+                        <Text style={styles.badgeText}>
+                          {controller.alertUnreadCount > 9 ? '9+' : String(controller.alertUnreadCount)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
+                    {route.name}
+                  </Text>
+                </TouchableOpacity>
+              </Fragment>
+            );
+          })}
+        </View>
       </View>
-    </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -197,6 +208,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bg,
   },
+  gestureRoot: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
   tabBarWrapper: {
     position: 'absolute',
     bottom: 0,
@@ -212,10 +229,18 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surfaceHigh,
     borderRadius: 31,
     height: 62,
-    paddingHorizontal: 8,
+    paddingHorizontal: 4,
     alignItems: 'center',
     width: '100%',
+    overflow: 'visible',
     ...Shadows.tabBar,
+  },
+  captureSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 62,
+    overflow: 'visible',
   },
   tabItem: {
     flex: 1,
@@ -225,9 +250,6 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     paddingVertical: 6,
     gap: 2,
-  },
-  tabItemActive: {
-    backgroundColor: '#32D58318',
   },
   tabIconWrapper: {
     position: 'relative',

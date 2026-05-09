@@ -281,7 +281,7 @@ async function seedUsers(): Promise<SeedUserMap> {
           email: user.email,
           displayName: user.displayName,
           locale: "en-MY",
-          timezone: "Asia/Kuala_Lumpur",
+          timezone: "Asia/Kuching",
         },
         select: {
           id: true,
@@ -630,6 +630,8 @@ async function createManualExpense(args: {
   familyId?: string;
   merchantText: string;
   areaText: string;
+  lat?: number;
+  lng?: number;
   transactionAt: Date;
   paymentMethod: PaymentMethodType;
   note?: string;
@@ -656,6 +658,10 @@ async function createManualExpense(args: {
       merchantText: args.merchantText,
       paymentMethod: args.paymentMethod,
       transactionAt: args.transactionAt,
+      locationLat:
+        typeof args.lat === "number" ? decimalQty(args.lat) : undefined,
+      locationLng:
+        typeof args.lng === "number" ? decimalQty(args.lng) : undefined,
       areaText: args.areaText,
       note: args.note,
       confidence: new Prisma.Decimal("0.8800"),
@@ -1662,23 +1668,66 @@ async function seedHouseholdData(args: {
     });
   }
 
-  await createManualExpense({
-    userId: ownerId,
-    merchantText: "Petronas Pending",
-    areaText: "Pending",
-    transactionAt: dayAt("2026-04-14", 8, 20),
-    paymentMethod: PaymentMethodType.CARD,
-    note: "School run and office commute fuel.",
-    items: [
-      {
-        descriptionRaw: "Petrol RON95",
-        quantity: 32,
-        unitRaw: "litre",
-        unitPrice: 2.05,
-        totalPrice: 65.6,
-      },
-    ],
-  });
+  const petrolRefillPlan = [
+    {
+      userId: ownerId,
+      merchantText: "Petronas Pending",
+      areaText: "Pending",
+      lat: 1.5539,
+      lng: 110.3888,
+      transactionAt: dayAt("2026-04-14", 8, 20),
+      paymentMethod: PaymentMethodType.CARD,
+      note: "School run and office commute fuel.",
+      litres: 32,
+      totalPrice: 65.6,
+    },
+    {
+      userId: ownerId,
+      merchantText: "Shell Jalan Song",
+      areaText: "Jalan Song",
+      lat: 1.5291,
+      lng: 110.3609,
+      transactionAt: dayAt("2026-04-29", 18, 10),
+      paymentMethod: PaymentMethodType.TNG,
+      note: "Midweek refill after Tabuan and school errands.",
+      litres: 35,
+      totalPrice: 71.75,
+    },
+    {
+      userId: ownerId,
+      merchantText: "Petronas Satok",
+      areaText: "Satok",
+      lat: 1.5577,
+      lng: 110.3374,
+      transactionAt: dayAt("2026-05-04", 7, 40),
+      paymentMethod: PaymentMethodType.CARD,
+      note: "Full tank before the Kuching-Samarahan office run.",
+      litres: 38,
+      totalPrice: 77.9,
+    },
+  ];
+
+  for (const refill of petrolRefillPlan) {
+    await createManualExpense({
+      userId: refill.userId,
+      merchantText: refill.merchantText,
+      areaText: refill.areaText,
+      lat: refill.lat,
+      lng: refill.lng,
+      transactionAt: refill.transactionAt,
+      paymentMethod: refill.paymentMethod,
+      note: refill.note,
+      items: [
+        {
+          descriptionRaw: "Petrol RON95 refill",
+          quantity: refill.litres,
+          unitRaw: "litre",
+          unitPrice: 2.05,
+          totalPrice: refill.totalPrice,
+        },
+      ],
+    });
+  }
 
   await createManualExpense({
     userId: ownerId,
@@ -2121,10 +2170,10 @@ async function seedWeeklyReport(userId: string) {
     {
       type: "summary",
       emoji: "📊",
-      metric: "RM 594.56",
-      subtitle: "7 transactions · 4–9 May",
+      metric: "RM 672.46",
+      subtitle: "8 transactions · 4–9 May",
       title: "Your busiest grocery week",
-      body: "You made 7 transactions this week totalling RM594.56 — 3.1× more than last week's RM189.49. Pre-Gawai restocking and a utility bill drove most of the spend.",
+      body: "You made 8 transactions this week totalling RM672.46 — 2.6× more than last week's RM261.24. Pre-Gawai restocking, a utility bill, and a Kuching petrol refill drove most of the spend.",
     },
     {
       type: "anomaly",
@@ -2139,6 +2188,14 @@ async function seedWeeklyReport(userId: string) {
       emoji: "📖",
       title: "Why chicken prices vary across Kuching",
       body: "Fresh chicken breast can differ by RM2–3/kg across stores in the same district. Hypermarkets and daily marts source from different suppliers and use protein as a foot-traffic driver. A quick comparison before you shop can save RM3–5 per trip — no extra travel needed when stores are under 2 km apart.",
+    },
+    {
+      type: "education",
+      emoji: "⛽",
+      metric: "RM 77.90",
+      subtitle: "Petronas Satok · 4 May",
+      title: "Petrol is now in transport spend",
+      body: "The demo includes RON95 refills at Petronas Pending, Shell Jalan Song, and Petronas Satok, so Kuching transport spend can be tested alongside groceries, dining, shopping, and utilities.",
     },
     {
       type: "tip",
@@ -2386,7 +2443,7 @@ async function main() {
     "Suggested demo watchlist items: rice 5kg, cooking oil 5kg, eggs grade c 30, fresh milk 1l",
   );
   console.log(
-    "Suggested demo areas: Kuching, Batu Kawa, BDC, Jalan Song, Gala City",
+    "Suggested demo areas: Kuching, Batu Kawa, BDC, Jalan Song, Gala City, Pending, Satok",
   );
   console.log(`Main demo family: ${FAMILY_NAME}`);
   console.log("Active invite code: KCHDEMO1");
@@ -2397,8 +2454,9 @@ async function main() {
   console.log("  Expenses with cheaperOption: May 2 Everrise BDC, May 6 Farley, May 9 Everrise BDC");
   console.log("  Choice Daily Gala City has chicken breast at RM15.90/kg (price obs seeded)");
   console.log("Feature 2 — Weekly Story Report:");
-  console.log("  Pre-seeded WeeklyReport for 2026-W19 (4 slides)");
-  console.log("  Current week total: RM594.56 across 7 transactions");
+  console.log("  Pre-seeded WeeklyReport for 2026-W19 (5 slides)");
+  console.log("  Current week total: RM672.46 across 8 transactions");
+  console.log("  Petrol refills: Petronas Pending, Shell Jalan Song, Petronas Satok");
 }
 
 main()

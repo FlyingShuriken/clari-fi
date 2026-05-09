@@ -7,6 +7,7 @@ export { IconButton } from './icon-button';
 export { InlineSpinner, LoadingRows } from './loading-state';
 export { MetaRow } from './meta-row';
 export { PillBadge } from './pill-badge';
+export { QuickCaptureButton } from './quick-capture-button';
 export { RefreshScroll } from './refresh-scroll';
 export { ScreenContainer } from './screen-container';
 export { SectionLabel } from './section-label';
