@@ -13,6 +13,7 @@ import {
   STT_PROVIDER,
   SttProvider,
 } from '../../infrastructure/providers/provider.interfaces';
+import { QueueService } from '../../infrastructure/queue/queue.service';
 import { SupabaseStorageService } from '../../infrastructure/storage/storage.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { ParseDocumentDto } from './dto/parse-document.dto';
@@ -27,6 +28,7 @@ export class ParseService {
     @Inject(EXPENSE_PARSER_PROVIDER)
     private readonly parserProvider: ExpenseParserProvider,
     private readonly storage: SupabaseStorageService,
+    private readonly queueService: QueueService,
     private readonly metrics: MetricsService,
   ) {}
 
@@ -144,6 +146,15 @@ export class ParseService {
     const parseLatencyMs = Date.now() - startedAt;
     this.metrics.trackTiming('parse.receipt.latency_ms', parseLatencyMs, {
       userId: user.id,
+    });
+
+    await this.queueService.enqueue('receipt-parse-audit', {
+      type: 'receipt_parse',
+      payload: {
+        userId: user.id,
+        parseLatencyMs,
+        fileRef: dto.fileRef ?? null,
+      },
     });
 
     return {
