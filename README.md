@@ -25,7 +25,7 @@ flowchart LR
     API <-->|Token verify| Clerk
     API --> DB[(PostgreSQL)]
     API --> Supabase[Supabase DNS + Storage]
-    API --> Queue[Redis Queue/Scheduler]
+    API --> Queue[Redis Queue]
 ```
 
 ## Core API Domains (Current)
