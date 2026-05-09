@@ -44,7 +44,16 @@ export function ExpenseCard({ merchant, meta, amount, category = 'other', hasChe
   );
 
   if (onPress) {
-    return <TouchableOpacity onPress={onPress} activeOpacity={0.7}>{inner}</TouchableOpacity>;
+    return (
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`${merchant}, ${meta}, ${amount}${hasCheaperOption ? ', cheaper option available' : ''}`}
+      >
+        {inner}
+      </TouchableOpacity>
+    );
   }
 
   return inner;

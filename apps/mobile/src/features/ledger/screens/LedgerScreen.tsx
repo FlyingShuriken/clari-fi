@@ -125,6 +125,10 @@ export function LedgerScreen() {
             onPress={segment === 'entries' ? controller.loadLedger : controller.loadReport}
             disabled={controller.loading}
             testID={TEST_IDS.ledger.refreshButton}
+            accessibilityRole="button"
+            accessibilityLabel={segment === 'entries' ? 'Refresh expenses' : 'Refresh reports'}
+            accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
           >
             {controller.loading || controller.initialDataLoading ? (
               <ActivityIndicator size="small" color={Colors.green} />
@@ -132,10 +136,22 @@ export function LedgerScreen() {
               <MaterialCommunityIcons name="refresh" size={20} color={Colors.textSecondary} />
             )}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Families')}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => navigation.navigate('Families')}
+            accessibilityRole="button"
+            accessibilityLabel="Open family sharing"
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
             <MaterialCommunityIcons name="account-group-outline" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={() => navigation.navigate('Splits')}>
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => navigation.navigate('Splits')}
+            accessibilityRole="button"
+            accessibilityLabel="Open bill splits"
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
             <MaterialCommunityIcons name="call-split" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -145,6 +161,9 @@ export function LedgerScreen() {
         <TouchableOpacity
           style={[styles.segmentBtn, segment === 'entries' && styles.segmentBtnActive]}
           onPress={() => setSegment('entries')}
+          accessibilityRole="button"
+          accessibilityLabel="Show expenses"
+          accessibilityState={{ selected: segment === 'entries' }}
         >
           <MaterialCommunityIcons
             name="format-list-bulleted"
@@ -156,6 +175,9 @@ export function LedgerScreen() {
         <TouchableOpacity
           style={[styles.segmentBtn, segment === 'reports' && styles.segmentBtnActive]}
           onPress={() => { void openReports(); }}
+          accessibilityRole="button"
+          accessibilityLabel="Show monthly reports"
+          accessibilityState={{ selected: segment === 'reports' }}
         >
           <MaterialCommunityIcons
             name="trending-up"
@@ -170,7 +192,12 @@ export function LedgerScreen() {
         <Animated.View style={[styles.nudgeBanner, { opacity: nudgeOpacity }]}>
           <MaterialCommunityIcons name="tag-arrow-down-outline" size={14} color={Colors.green} />
           <Text style={styles.nudgeText}>Some transactions have cheaper nearby options. Tap to explore.</Text>
-          <TouchableOpacity onPress={() => setShowNudgeBanner(false)}>
+          <TouchableOpacity
+            onPress={() => setShowNudgeBanner(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss cheaper options tip"
+            hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+          >
             <MaterialCommunityIcons name="close" size={14} color={Colors.textMuted} />
           </TouchableOpacity>
         </Animated.View>
@@ -198,6 +225,9 @@ export function LedgerScreen() {
                     key={filter}
                     style={[styles.chip, active && styles.chipActive]}
                     onPress={() => setSelectedFilter(filter)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Filter expenses by ${filter}`}
+                    accessibilityState={{ selected: active }}
                   >
                     <Text style={[styles.chipText, active && styles.chipTextActive]}>{filter}</Text>
                   </TouchableOpacity>
@@ -210,11 +240,14 @@ export function LedgerScreen() {
             ) : filteredItems.length === 0 ? (
               <EmptyState
                 icon="receipt-text-outline"
+                title={selectedFilter === 'All' ? 'No expenses yet' : `No ${selectedFilter.toLowerCase()} expenses`}
                 message={
                   selectedFilter === 'All'
-                    ? 'No expenses yet. Capture one first.'
-                    : `No ${selectedFilter.toLowerCase()} expenses found.`
+                    ? 'Capture a voice entry, receipt, or flyer to start building your ledger.'
+                    : 'Try a different filter or capture a new expense.'
                 }
+                actionLabel={selectedFilter === 'All' ? 'Go capture' : 'Show all'}
+                onAction={selectedFilter === 'All' ? () => navigation.navigate('MainTabs', { screen: 'Home' }) : () => setSelectedFilter('All')}
               />
             ) : (
               filteredItems.map((item) => {
@@ -288,8 +321,12 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   iconBtn: {
-    padding: 6,
-    borderRadius: 8,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: Colors.surface,
   },
   segmentRow: {
     flexDirection: 'row',
@@ -334,10 +371,12 @@ const styles = StyleSheet.create({
     height: 44,
   },
   chip: {
+    minHeight: 44,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 100,
     backgroundColor: Colors.surfaceHigh,
+    justifyContent: 'center',
   },
   chipActive: {
     backgroundColor: Colors.green,

@@ -22,6 +22,8 @@ export function StoreListItem({ store, isCheapest, onPress, formatCurrency }: St
       style={[styles.card, isCheapest && styles.cardCheapest]}
       onPress={onPress}
       activeOpacity={0.75}
+      accessibilityRole="button"
+      accessibilityLabel={`${store.storeName}, ${formatCurrency(store.totalLatestPrice)} total, ${distanceShort} away${isCheapest ? ', best price' : ''}`}
     >
       <View style={styles.cardTop}>
         <View style={styles.storeIcon}>

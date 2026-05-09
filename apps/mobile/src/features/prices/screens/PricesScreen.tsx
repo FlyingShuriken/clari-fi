@@ -149,7 +149,12 @@ export function PricesScreen() {
           <Text style={styles.headerTitle}>Prices</Text>
           <Text style={styles.headerSub}>Find the best deal nearby</Text>
         </View>
-        <TouchableOpacity style={styles.historyBtn} onPress={() => navigation.navigate('Subscription')}>
+        <TouchableOpacity
+          style={styles.historyBtn}
+          onPress={() => navigation.navigate('Subscription')}
+          accessibilityRole="button"
+          accessibilityLabel="Open plan limits and upgrade options"
+        >
           <MaterialCommunityIcons name="crown-outline" size={18} color={Colors.textSecondary} />
         </TouchableOpacity>
       </View>
@@ -165,7 +170,10 @@ export function PricesScreen() {
           style={styles.locationCard}
           onPress={() => setLocationExpanded((v) => !v)}
           activeOpacity={0.8}
-          testID={TEST_IDS.prices.locationAreaInput}
+            testID={TEST_IDS.prices.locationAreaInput}
+            accessibilityRole="button"
+            accessibilityLabel={`Location: ${locationLabel}. ${locationSub}`}
+            accessibilityState={{ expanded: locationExpanded, busy: locLoading }}
         >
           {locLoading ? (
             <ActivityIndicator size="small" color={Colors.green} />
@@ -221,6 +229,9 @@ export function PricesScreen() {
             style={[styles.addBtn, compareItems.length >= compareLimit && styles.addBtnDisabled]}
             onPress={addItem}
             disabled={compareItems.length >= compareLimit || !itemInput.trim()}
+            accessibilityRole="button"
+            accessibilityLabel={compareItems.length >= compareLimit ? 'Item limit reached' : 'Add item to price search'}
+            accessibilityState={{ disabled: compareItems.length >= compareLimit || !itemInput.trim() }}
           >
             <MaterialCommunityIcons name="plus" size={20} color={Colors.bg} />
           </TouchableOpacity>
@@ -235,7 +246,12 @@ export function PricesScreen() {
             {compareItems.map((item, idx) => (
               <View key={item} style={styles.chip}>
                 <Text style={styles.chipText}>{item}</Text>
-                <TouchableOpacity onPress={() => removeItem(idx)} hitSlop={8}>
+                <TouchableOpacity
+                  onPress={() => removeItem(idx)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${item} from search`}
+                >
                   <MaterialCommunityIcons name="close" size={14} color={Colors.green} />
                 </TouchableOpacity>
               </View>
@@ -262,6 +278,9 @@ export function PricesScreen() {
                 key={km}
                 style={[styles.radiusPill, active && styles.radiusPillActive]}
                 onPress={() => controller.updatePriceQueryLocation({ radiusKmText: String(km) })}
+                accessibilityRole="button"
+                accessibilityLabel={`Search within ${km} kilometers`}
+                accessibilityState={{ selected: active }}
               >
                 <Text style={[styles.radiusPillText, active && styles.radiusPillTextActive]}>
                   {km} km
@@ -276,6 +295,9 @@ export function PricesScreen() {
           style={[styles.searchBtn, compareItems.length === 0 && styles.searchBtnDisabled]}
           onPress={handleFindStores}
           disabled={compareItems.length === 0 || locLoading}
+          accessibilityRole="button"
+          accessibilityLabel={compareItems.length === 0 ? 'Add items before searching stores' : `Search nearby stores within ${selectedRadius} kilometers`}
+          accessibilityState={{ disabled: compareItems.length === 0 || locLoading, busy: locLoading }}
         >
           <MaterialCommunityIcons
             name="magnify"
@@ -294,7 +316,7 @@ export function PricesScreen() {
           <DarkCard radius={16}>
             <Text style={styles.cardTitle}>Price comparison</Text>
             {controller.priceCompareResult.rows.length === 0 ? (
-              <Text style={styles.emptyText}>No rows for selected filters.</Text>
+              <Text style={styles.emptyText}>No price rows match these filters. Try a wider radius or another item.</Text>
             ) : (
               controller.priceCompareResult.rows.map((row, i) => (
                 <View key={`${row.storeName ?? row.areaText ?? 'row'}-${i}`} style={styles.resultRow}>
@@ -371,9 +393,9 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   historyBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
@@ -464,6 +486,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   chip: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

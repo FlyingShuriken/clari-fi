@@ -61,10 +61,19 @@ export function StoreBottomSheet({ store, visible, onDismiss, formatCurrency }: 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
       <Animated.View style={[styles.backdrop, { opacity }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onDismiss}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss store details"
+        />
       </Animated.View>
 
-      <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+      <Animated.View
+        style={[styles.sheet, { transform: [{ translateY }] }]}
+        accessibilityViewIsModal
+        accessibilityLabel={`Store details for ${store.storeName}`}
+      >
         <View style={styles.handle} />
 
         {/* Store header */}
@@ -147,15 +156,22 @@ export function StoreBottomSheet({ store, visible, onDismiss, formatCurrency }: 
 
         {/* Action row */}
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.directionsBtn} onPress={handleDirections}>
+          <TouchableOpacity
+            style={styles.directionsBtn}
+            onPress={handleDirections}
+            accessibilityRole="button"
+            accessibilityLabel={`Get directions to ${store.storeName}`}
+          >
             <MaterialCommunityIcons name="directions" size={18} color={Colors.bg} />
             <Text style={styles.directionsBtnText}>Get Directions</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={onDismiss}>
-            <MaterialCommunityIcons name="share-variant-outline" size={20} color={Colors.textSecondary} />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn}>
-            <MaterialCommunityIcons name="bookmark-outline" size={20} color={Colors.textSecondary} />
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Close store details"
+          >
+            <MaterialCommunityIcons name="close" size={20} color={Colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </Animated.View>

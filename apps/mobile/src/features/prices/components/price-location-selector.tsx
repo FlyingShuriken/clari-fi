@@ -94,6 +94,9 @@ export function PriceLocationSelector({
           onPress={onUseCurrentLocation}
           disabled={gpsLoading}
           testID={TEST_IDS.prices.locationRefreshButton}
+          accessibilityRole="button"
+          accessibilityLabel="Use current location"
+          accessibilityState={{ disabled: gpsLoading, busy: gpsLoading }}
         >
           {gpsLoading ? (
             <ActivityIndicator size="small" color={Colors.bg} />
@@ -115,6 +118,9 @@ export function PriceLocationSelector({
                 key={radiusKm}
                 style={[styles.radiusChip, active && styles.radiusChipActive]}
                 onPress={() => onRadiusChange(radiusKm)}
+                accessibilityRole="button"
+                accessibilityLabel={`Set radius to ${radiusKm} kilometers`}
+                accessibilityState={{ selected: active }}
               >
                 <Text style={[styles.radiusChipText, active && styles.radiusChipTextActive]}>{radiusKm} km</Text>
               </TouchableOpacity>
@@ -153,6 +159,8 @@ export function PriceLocationSelector({
                 key={`${suggestion.providerPlaceId ?? suggestion.address}-${suggestion.lat}-${suggestion.lng}`}
                 style={styles.suggestionRow}
                 onPress={() => onSelectSuggestion(suggestion)}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${suggestion.label}`}
               >
                 <View style={styles.suggestionIconWrap}>
                   <MaterialCommunityIcons name="map-marker-outline" size={16} color={Colors.textSecondary} />
@@ -222,9 +230,9 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   gpsButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.green,
@@ -259,9 +267,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   radiusChip: {
+    minHeight: 44,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: Colors.surfaceHigh,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -289,6 +300,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   suggestionRow: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,

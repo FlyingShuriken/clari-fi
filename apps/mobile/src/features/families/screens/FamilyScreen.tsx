@@ -36,7 +36,12 @@ export function FamilyScreen() {
                 Owner + {controller.subscription.family.additionalMembersAllowed} additional member{controller.subscription.family.additionalMembersAllowed === 1 ? '' : 's'}
               </Text>
             </View>
-            <TouchableOpacity style={styles.managePlanBtn} onPress={() => navigation.navigate('Subscription')}>
+            <TouchableOpacity
+              style={styles.managePlanBtn}
+              onPress={() => navigation.navigate('Subscription')}
+              accessibilityRole="button"
+              accessibilityLabel={controller.subscription.plan === 'PREMIUM' ? 'Manage family plan' : 'Upgrade family sharing'}
+            >
               <Text style={styles.managePlanText}>
                 {controller.subscription.plan === 'PREMIUM' ? 'Manage' : 'Upgrade'}
               </Text>
@@ -66,6 +71,9 @@ export function FamilyScreen() {
           onPress={controller.createFamilyProfile}
           disabled={controller.loading}
           testID={TEST_IDS.families.createButton}
+          accessibilityRole="button"
+          accessibilityLabel="Create family"
+          accessibilityState={{ disabled: controller.loading }}
         >
           <Text style={styles.primaryBtnText}>Create family</Text>
         </TouchableOpacity>
@@ -89,6 +97,9 @@ export function FamilyScreen() {
           onPress={controller.joinFamilyByInviteCode}
           disabled={controller.loading}
           testID={TEST_IDS.families.joinButton}
+          accessibilityRole="button"
+          accessibilityLabel="Join family with invite code"
+          accessibilityState={{ disabled: controller.loading }}
         >
           <Text style={styles.secondaryBtnText}>Join via code</Text>
         </TouchableOpacity>
@@ -107,6 +118,9 @@ export function FamilyScreen() {
           onPress={controller.loadFamiliesList}
           disabled={controller.loading}
           testID={TEST_IDS.families.loadButton}
+          accessibilityRole="button"
+          accessibilityLabel="Sync families"
+          accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
         >
           {controller.loading || controller.initialDataLoading ? (
             <ActivityIndicator size="small" color={Colors.green} />
@@ -119,7 +133,11 @@ export function FamilyScreen() {
       {controller.initialDataLoading && controller.families.length === 0 ? (
         <LoadingRows label="Syncing families" count={3} />
       ) : controller.families.length === 0 ? (
-        <EmptyState icon="account-group-outline" message="No families yet. Create or join one above." />
+        <EmptyState
+          icon="account-group-outline"
+          title="No family workspace yet"
+          message="Create a family to share expenses, invite members, and split receipts together."
+        />
       ) : (
         controller.families.map((family) => {
           const isActive = family.id === controller.activeFamilyId;
@@ -135,6 +153,9 @@ export function FamilyScreen() {
                 <TouchableOpacity
                   style={[styles.setActiveBtn, isActive && styles.setActiveBtnActive]}
                   onPress={() => controller.setActiveFamilyId(family.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={isActive ? `${family.name} is the active family` : `Set ${family.name} as active family`}
+                  accessibilityState={{ selected: isActive }}
                 >
                   <Text style={[styles.setActiveBtnText, isActive && styles.setActiveBtnTextActive]}>
                     {isActive ? 'Active' : 'Set active'}
@@ -156,6 +177,9 @@ export function FamilyScreen() {
               onPress={controller.createActiveFamilyInvite}
               disabled={controller.loading}
               testID={TEST_IDS.families.createInviteButton}
+              accessibilityRole="button"
+              accessibilityLabel={`Create invite for ${activeFamily.name}`}
+              accessibilityState={{ disabled: controller.loading }}
             >
               <Text style={styles.refreshText}>+ Invite</Text>
             </TouchableOpacity>
@@ -180,6 +204,8 @@ export function FamilyScreen() {
                     <TouchableOpacity
                       style={styles.roleChip}
                       onPress={() => controller.updateFamilyMemberRoleById(member.id, 'OWNER')}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Make ${member.displayName || member.email} an owner`}
                     >
                       <Text style={styles.roleChipText}>Owner</Text>
                     </TouchableOpacity>
@@ -188,6 +214,8 @@ export function FamilyScreen() {
                     <TouchableOpacity
                       style={styles.roleChip}
                       onPress={() => controller.updateFamilyMemberRoleById(member.id, 'EDITOR')}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Make ${member.displayName || member.email} an editor`}
                     >
                       <Text style={styles.roleChipText}>Editor</Text>
                     </TouchableOpacity>
@@ -196,6 +224,8 @@ export function FamilyScreen() {
                     <TouchableOpacity
                       style={styles.roleChip}
                       onPress={() => controller.updateFamilyMemberRoleById(member.id, 'VIEWER')}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Make ${member.displayName || member.email} a viewer`}
                     >
                       <Text style={styles.roleChipText}>Viewer</Text>
                     </TouchableOpacity>
@@ -203,6 +233,8 @@ export function FamilyScreen() {
                   <TouchableOpacity
                     style={[styles.roleChip, styles.roleChipDanger]}
                     onPress={() => controller.removeFamilyMemberById(member.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${member.displayName || member.email} from family`}
                   >
                     <Text style={[styles.roleChipText, styles.roleChipDangerText]}>Remove</Text>
                   </TouchableOpacity>
@@ -295,10 +327,13 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   refreshBtn: {
+    minHeight: 44,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
     backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   refreshText: {
     fontSize: 12,
@@ -324,11 +359,13 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   setActiveBtn: {
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.border,
+    justifyContent: 'center',
   },
   setActiveBtnActive: {
     borderColor: Colors.green,
@@ -367,11 +404,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   roleChip: {
+    minHeight: 44,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.border,
+    justifyContent: 'center',
   },
   roleChipText: {
     fontSize: 12,

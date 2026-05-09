@@ -119,6 +119,21 @@ export function SplitsScreen() {
     setStep(5);
   };
 
+  const hasParticipants = selectedFamilyMemberIds.length + guestParticipants.length > 0;
+  const allLineItemsAssigned =
+    splitLineItems.length > 0 &&
+    splitLineItems.every((lineItem) => (assignmentsByLineItemId[lineItem.id] ?? []).length > 0);
+  const canFinalizeSplit = Boolean(controller.activeSplitId && splitDetail && allLineItemsAssigned);
+  const highestReachableStep: WizardStep = canFinalizeSplit
+    ? 5
+    : controller.activeSplitId
+    ? 4
+    : hasParticipants && controller.activeFamilyId
+    ? 3
+    : controller.activeFamilyId
+    ? 2
+    : 1;
+
   return (
     <ScrollView
       style={styles.scroll}
@@ -128,7 +143,15 @@ export function SplitsScreen() {
       {/* Progress bar */}
       <View style={styles.progressContainer}>
         {([1, 2, 3, 4, 5] as WizardStep[]).map((s) => (
-          <TouchableOpacity key={s} style={styles.stepWrapper} onPress={() => setStep(s)}>
+          <TouchableOpacity
+            key={s}
+            style={[styles.stepWrapper, s > highestReachableStep && styles.stepWrapperDisabled]}
+            onPress={() => setStep(s)}
+            disabled={s > highestReachableStep}
+            accessibilityRole="button"
+            accessibilityLabel={`Step ${s}: ${STEP_LABELS[s]}`}
+            accessibilityState={{ selected: step === s, disabled: s > highestReachableStep }}
+          >
             <View style={[styles.stepBar, step >= s && styles.stepBarFilled]} />
             <Text style={[styles.stepNum, step === s && styles.stepNumActive]}>{s}</Text>
           </TouchableOpacity>
@@ -156,7 +179,7 @@ export function SplitsScreen() {
           {controller.initialDataLoading && controller.families.length === 0 ? (
             <LoadingRows label="Syncing families" count={2} />
           ) : controller.families.length === 0 ? (
-            <Text style={styles.emptyText}>No families found. Go to Families tab to create one.</Text>
+            <Text style={styles.emptyText}>No families found. Create or join one in Families, then return here.</Text>
           ) : (
             controller.families.map((family) => {
               const isActive = family.id === controller.activeFamilyId;
@@ -181,6 +204,9 @@ export function SplitsScreen() {
             style={[styles.continueBtn, !controller.activeFamilyId && styles.continueBtnDisabled]}
             onPress={() => setStep(2)}
             disabled={!controller.activeFamilyId}
+            accessibilityRole="button"
+            accessibilityLabel="Continue to expense selection"
+            accessibilityState={{ disabled: !controller.activeFamilyId }}
           >
             <Text style={styles.continueBtnText}>Continue →</Text>
           </TouchableOpacity>
@@ -197,6 +223,9 @@ export function SplitsScreen() {
               onPress={controller.loadLedger}
               disabled={controller.loading}
               testID={TEST_IDS.ledger.refreshButton}
+              accessibilityRole="button"
+              accessibilityLabel="Sync expenses for splitting"
+              accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
             >
               {controller.loading || controller.initialDataLoading ? (
                 <ActivityIndicator size="small" color={Colors.green} />
@@ -218,6 +247,9 @@ export function SplitsScreen() {
                 key={expense.id}
                 style={[styles.listItem, isSelected && styles.listItemActive]}
                 onPress={() => setSelectedExpenseId(expense.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Select expense from ${expense.merchant}`}
+                accessibilityState={{ selected: isSelected }}
               >
                 <Text style={styles.listItemTitle}>{expense.merchant}</Text>
                 <Text style={styles.listItemMeta}>
@@ -236,7 +268,12 @@ export function SplitsScreen() {
             style={styles.input}
             theme={inputTheme}
           />
-          <TouchableOpacity style={styles.continueBtn} onPress={() => setStep(3)}>
+          <TouchableOpacity
+            style={styles.continueBtn}
+            onPress={() => setStep(3)}
+            accessibilityRole="button"
+            accessibilityLabel="Continue to participants"
+          >
             <Text style={styles.continueBtnText}>Continue →</Text>
           </TouchableOpacity>
         </DarkCard>
@@ -255,6 +292,9 @@ export function SplitsScreen() {
                   key={member.id}
                   style={[styles.participantChip, selected && styles.participantChipActive]}
                   onPress={() => toggleFamilyMember(member.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Toggle participant ${member.displayName || member.email}`}
+                  accessibilityState={{ selected }}
                 >
                   <Text style={[styles.participantChipText, selected && styles.participantChipTextActive]}>
                     {member.displayName || member.email}
@@ -273,7 +313,12 @@ export function SplitsScreen() {
               style={[styles.input, { flex: 1 }]}
               theme={inputTheme}
             />
-            <TouchableOpacity style={styles.addGuestBtn} onPress={addGuest}>
+            <TouchableOpacity
+              style={styles.addGuestBtn}
+              onPress={addGuest}
+              accessibilityRole="button"
+              accessibilityLabel="Add guest participant"
+            >
               <Text style={styles.addGuestText}>Add</Text>
             </TouchableOpacity>
           </View>
@@ -283,16 +328,21 @@ export function SplitsScreen() {
                 key={guest}
                 style={[styles.participantChip, styles.participantChipActive]}
                 onPress={() => setGuestParticipants((prev) => prev.filter((g) => g !== guest))}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove guest ${guest}`}
               >
                 <Text style={styles.participantChipTextActive}>{guest} ×</Text>
               </TouchableOpacity>
             ))}
           </View>
           <TouchableOpacity
-            style={[styles.continueBtn, (!controller.activeFamilyId || controller.loading) && styles.continueBtnDisabled]}
+            style={[styles.continueBtn, (!controller.activeFamilyId || controller.loading || !hasParticipants) && styles.continueBtnDisabled]}
             onPress={createDraft}
-            disabled={controller.loading || !controller.activeFamilyId}
+            disabled={controller.loading || !controller.activeFamilyId || !hasParticipants}
             testID={TEST_IDS.splits.createButton}
+            accessibilityRole="button"
+            accessibilityLabel="Create split draft"
+            accessibilityState={{ disabled: controller.loading || !controller.activeFamilyId || !hasParticipants }}
           >
             <Text style={styles.continueBtnText}>Create draft →</Text>
           </TouchableOpacity>
@@ -308,6 +358,9 @@ export function SplitsScreen() {
               style={styles.smallBtn}
               onPress={controller.loadSplitSessions}
               disabled={controller.loading || !controller.activeFamilyId}
+              accessibilityRole="button"
+              accessibilityLabel="Sync split sessions"
+              accessibilityState={{ disabled: controller.loading || !controller.activeFamilyId }}
             >
               <Text style={styles.smallBtnText}>Sync sessions</Text>
             </TouchableOpacity>
@@ -318,6 +371,8 @@ export function SplitsScreen() {
               key={split.id}
               style={styles.listItem}
               onPress={() => controller.loadSplitDetailById(split.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Load split session ${split.title || 'Split session'}`}
             >
               <Text style={styles.listItemTitle}>{split.title || 'Split session'}</Text>
               <Text style={styles.listItemMeta}>
@@ -340,6 +395,9 @@ export function SplitsScreen() {
                           key={`${lineItem.id}-${participant.id}`}
                           style={[styles.participantChip, assigned && styles.participantChipActive]}
                           onPress={() => toggleAssignment(lineItem.id, participant.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Assign ${lineItem.descriptionRaw} to ${participant.displayName}`}
+                          accessibilityState={{ selected: assigned }}
                         >
                           <Text style={[styles.participantChipText, assigned && styles.participantChipTextActive]}>
                             {participant.displayName}
@@ -351,16 +409,19 @@ export function SplitsScreen() {
                 </View>
               ))}
               <TouchableOpacity
-                style={[styles.continueBtn, (!controller.activeSplitId || controller.loading) && styles.continueBtnDisabled]}
+                style={[styles.continueBtn, (!controller.activeSplitId || controller.loading || !allLineItemsAssigned) && styles.continueBtnDisabled]}
                 onPress={saveAllocations}
-                disabled={controller.loading || !controller.activeSplitId}
+                disabled={controller.loading || !controller.activeSplitId || !allLineItemsAssigned}
                 testID={TEST_IDS.splits.saveAllocationsButton}
+                accessibilityRole="button"
+                accessibilityLabel="Save split allocations"
+                accessibilityState={{ disabled: controller.loading || !controller.activeSplitId || !allLineItemsAssigned }}
               >
                 <Text style={styles.continueBtnText}>Save allocations →</Text>
               </TouchableOpacity>
             </>
           ) : (
-            <Text style={styles.emptyText}>Load a split with line items to continue.</Text>
+            <Text style={styles.emptyText}>Create or sync a split draft, then select a session with line items to continue.</Text>
           )}
         </DarkCard>
       ) : null}
@@ -385,21 +446,27 @@ export function SplitsScreen() {
                   await controller.loadSplitBalancesById(controller.activeSplitId);
                 }
               }}
-              disabled={controller.loading || !controller.activeSplitId}
+              disabled={controller.loading || !canFinalizeSplit}
               testID={TEST_IDS.splits.loadBalancesButton}
+              accessibilityRole="button"
+              accessibilityLabel="Load split balances"
+              accessibilityState={{ disabled: controller.loading || !canFinalizeSplit }}
             >
               <Text style={styles.smallBtnOutlineText}>Load balances</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.continueBtn, { flex: 1 }, (!controller.activeSplitId || controller.loading) && styles.continueBtnDisabled]}
+              style={[styles.continueBtn, { flex: 1 }, (!canFinalizeSplit || controller.loading) && styles.continueBtnDisabled]}
               onPress={async () => {
-                if (controller.activeSplitId) {
+                if (canFinalizeSplit && controller.activeSplitId) {
                   await controller.finalizeSplitById(controller.activeSplitId);
                   await controller.loadSplitBalancesById(controller.activeSplitId);
                 }
               }}
-              disabled={controller.loading || !controller.activeSplitId}
+              disabled={controller.loading || !canFinalizeSplit}
               testID={TEST_IDS.splits.finalizeButton}
+              accessibilityRole="button"
+              accessibilityLabel="Finalize split"
+              accessibilityState={{ disabled: controller.loading || !canFinalizeSplit }}
             >
               <Text style={styles.continueBtnText}>Finalize split</Text>
             </TouchableOpacity>
@@ -437,7 +504,12 @@ export function SplitsScreen() {
 
       {/* Back button */}
       {step > 1 ? (
-        <TouchableOpacity style={styles.backBtn} onPress={() => setStep((s) => (s - 1) as WizardStep)}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => setStep((s) => (s - 1) as WizardStep)}
+          accessibilityRole="button"
+          accessibilityLabel="Go back one split step"
+        >
           <Text style={styles.backBtnText}>← Back</Text>
         </TouchableOpacity>
       ) : null}
@@ -462,8 +534,13 @@ const styles = StyleSheet.create({
   },
   stepWrapper: {
     flex: 1,
+    minHeight: 44,
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 4,
+  },
+  stepWrapperDisabled: {
+    opacity: 0.38,
   },
   stepBar: {
     height: 4,
@@ -558,12 +635,14 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   participantChip: {
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     backgroundColor: Colors.surfaceHigh,
     borderWidth: 1,
     borderColor: Colors.border,
+    justifyContent: 'center',
   },
   participantChipActive: {
     backgroundColor: Colors.greenDim,
@@ -588,12 +667,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   addGuestBtn: {
+    minHeight: 44,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.border,
     marginTop: 2,
+    justifyContent: 'center',
   },
   addGuestText: {
     fontSize: 14,
@@ -617,10 +698,12 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   smallBtn: {
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 8,
     backgroundColor: Colors.surface,
+    justifyContent: 'center',
   },
   smallBtnText: {
     fontSize: 12,

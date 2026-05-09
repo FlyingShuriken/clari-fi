@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { DarkTheme, NavigationContainer } from '@react-navigation/native';
+import { DarkTheme, NavigationContainer, type NavigatorScreenParams } from '@react-navigation/native';
 import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
@@ -27,7 +27,7 @@ export type MainTabParamList = {
 };
 
 export type RootStackParamList = {
-  MainTabs: undefined;
+  MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   Account: undefined;
   Families: undefined;
   Splits: undefined;
@@ -93,7 +93,9 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
               onPress={onPress}
               style={[styles.tabItem, isFocused && styles.tabItemActive]}
               accessibilityRole="button"
+              accessibilityLabel={`${route.name} tab${isAlerts && controller.alertUnreadCount > 0 ? `, ${controller.alertUnreadCount} unread alerts` : ''}`}
               accessibilityState={{ selected: isFocused }}
+              hitSlop={{ top: 8, right: 4, bottom: 8, left: 4 }}
             >
               <View style={styles.tabIconWrapper}>
                 <MaterialCommunityIcons
@@ -217,6 +219,7 @@ const styles = StyleSheet.create({
   },
   tabItem: {
     flex: 1,
+    minHeight: 50,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 24,

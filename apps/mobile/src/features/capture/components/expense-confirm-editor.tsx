@@ -154,6 +154,9 @@ export function ExpenseConfirmEditor({
             style={[styles.gpsButton, gpsLoading && styles.gpsButtonDisabled]}
             onPress={handleUseCurrentLocation}
             disabled={gpsLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Use current location for this expense"
+            accessibilityState={{ disabled: gpsLoading, busy: gpsLoading }}
           >
             {gpsLoading ? (
               <ActivityIndicator size="small" color={Colors.bg} />
@@ -199,6 +202,8 @@ export function ExpenseConfirmEditor({
                   key={`${suggestion.providerPlaceId ?? suggestion.address}-${suggestion.lat}-${suggestion.lng}`}
                   style={styles.suggestionRow}
                   onPress={() => handleSelectSuggestion(suggestion)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select ${suggestion.label}`}
                 >
                   <View style={styles.suggestionIconWrap}>
                     <MaterialCommunityIcons name="map-marker-outline" size={16} color={Colors.textSecondary} />
@@ -277,9 +282,9 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   gpsButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.green,
@@ -325,6 +330,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   suggestionRow: {
+    minHeight: 44,
     flexDirection: 'row',
     gap: 10,
     paddingHorizontal: 12,

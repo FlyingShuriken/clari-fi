@@ -9,6 +9,7 @@ import { TEST_IDS } from '../../../core/testing/test-ids';
 import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
 import { Colors } from '../../../theme';
 import { LoadingRows } from '../../../components/ui/loading-state';
+import { EmptyState } from '../../../components/ui/empty-state';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -108,6 +109,9 @@ export function RewardsScreen() {
               ]);
             }}
             testID={TEST_IDS.rewards.refreshButton}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh rewards"
+            accessibilityState={{ busy: controller.loading || controller.initialDataLoading }}
           >
             {controller.loading || controller.initialDataLoading ? (
               <ActivityIndicator size="small" color={Colors.green} />
@@ -123,7 +127,12 @@ export function RewardsScreen() {
               <Text style={styles.heroBalanceLabel}>Current balance</Text>
               <Text style={styles.heroBalanceValue}>{balance} pts</Text>
             </View>
-            <TouchableOpacity style={styles.upgradeChip} onPress={() => navigation.navigate('Subscription')}>
+            <TouchableOpacity
+              style={styles.upgradeChip}
+              onPress={() => navigation.navigate('Subscription')}
+              accessibilityRole="button"
+              accessibilityLabel="Open premium plan to increase reward capacity"
+            >
               <MaterialCommunityIcons name="crown-outline" size={16} color={Colors.amber} />
               <Text style={styles.upgradeChipText}>Increase capacity</Text>
             </TouchableOpacity>
@@ -208,6 +217,9 @@ export function RewardsScreen() {
                     }}
                     disabled={!affordable || controller.loading}
                     testID={index === 0 ? TEST_IDS.rewards.redeemPrimaryButton : undefined}
+                    accessibilityRole="button"
+                    accessibilityLabel={affordable ? `Redeem ${reward.title}` : `${reward.title} needs ${reward.pointsCost - balance} more points`}
+                    accessibilityState={{ disabled: !affordable || controller.loading }}
                   >
                     <Text style={[styles.redeemButtonText, !affordable && styles.redeemButtonTextDisabled]}>
                       {affordable ? 'Redeem reward' : `Need ${reward.pointsCost - balance} more pts`}
@@ -227,7 +239,11 @@ export function RewardsScreen() {
           {controller.initialDataLoading && controller.rewardLedger.length === 0 ? (
             <LoadingRows label="Syncing activity" count={3} />
           ) : controller.rewardLedger.length === 0 ? (
-            <Text style={styles.emptyText}>No points activity yet. Upload a receipt or flyer to start earning.</Text>
+            <EmptyState
+              icon="receipt-text-plus-outline"
+              title="No points activity yet"
+              message="Upload a receipt or flyer from Capture to earn your first points."
+            />
           ) : (
             controller.rewardLedger.map((entry) => (
               <View key={entry.id} style={styles.activityRow}>
@@ -260,7 +276,11 @@ export function RewardsScreen() {
           {controller.initialDataLoading && controller.rewardRedemptions.length === 0 ? (
             <LoadingRows label="Syncing redemptions" count={2} />
           ) : controller.rewardRedemptions.length === 0 ? (
-            <Text style={styles.emptyText}>No redemptions yet.</Text>
+            <EmptyState
+              icon="gift-outline"
+              title="No redemptions yet"
+              message="Rewards you redeem will appear here with their history."
+            />
           ) : (
             controller.rewardRedemptions.map((item) => (
               <View key={item.id} style={styles.redemptionRow}>
@@ -324,9 +344,9 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   refreshButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',

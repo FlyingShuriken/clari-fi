@@ -69,15 +69,27 @@ export function StoreMapScreen({ route, navigation }: Props) {
 
         {/* Overlay header */}
         <View style={[styles.mapHeader, { paddingTop: insets.top + 8 }]}>
-          <TouchableOpacity style={styles.mapHeaderBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity
+            style={styles.mapHeaderBtn}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Go back to price search"
+          >
             <MaterialCommunityIcons name="arrow-left" size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.mapHeaderTitle}>
             {loading ? 'Searching…' : `${stores.length} stores found`}
           </Text>
-          <View style={styles.mapHeaderBtn}>
-            <MaterialCommunityIcons name="view-grid-outline" size={20} color={Colors.textPrimary} />
-          </View>
+          <TouchableOpacity
+            style={styles.mapHeaderBtn}
+            onPress={() => refetch(items, lat, lng, radiusKm, areaText)}
+            disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh nearby stores"
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            <MaterialCommunityIcons name="refresh" size={20} color={Colors.textPrimary} />
+          </TouchableOpacity>
         </View>
 
         {/* Radius pills overlay */}
@@ -87,6 +99,9 @@ export function StoreMapScreen({ route, navigation }: Props) {
               key={r}
               style={[styles.radiusPill, r === radiusKm && styles.radiusPillActive]}
               onPress={() => setRadiusKm(r)}
+              accessibilityRole="button"
+              accessibilityLabel={`Search map within ${r} kilometers`}
+              accessibilityState={{ selected: r === radiusKm }}
             >
               <Text style={[styles.radiusPillText, r === radiusKm && styles.radiusPillTextActive]}>
                 {r}km
@@ -114,6 +129,9 @@ export function StoreMapScreen({ route, navigation }: Props) {
               key={key}
               style={[styles.sortChip, sort === key && styles.sortChipActive]}
               onPress={() => setSort(key)}
+              accessibilityRole="button"
+              accessibilityLabel={`Sort stores by ${label}`}
+              accessibilityState={{ selected: sort === key }}
             >
               <Text style={[styles.sortChipText, sort === key && styles.sortChipTextActive]}>
                 {label}
@@ -125,9 +143,25 @@ export function StoreMapScreen({ route, navigation }: Props) {
         {loading ? (
           <ActivityIndicator color={Colors.green} style={styles.loader} />
         ) : error ? (
-          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.stateCard}
+            onPress={() => refetch(items, lat, lng, radiusKm, areaText)}
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading nearby stores"
+          >
+            <Text style={styles.errorText}>{error}</Text>
+            <Text style={styles.stateAction}>Tap to retry</Text>
+          </TouchableOpacity>
         ) : sortedStores.length === 0 ? (
-          <Text style={styles.emptyText}>No stores found in this radius.</Text>
+          <TouchableOpacity
+            style={styles.stateCard}
+            onPress={() => setRadiusKm((current) => (current < 10 ? 10 : current))}
+            accessibilityRole="button"
+            accessibilityLabel="Widen search radius"
+          >
+            <Text style={styles.emptyText}>No stores found in this radius.</Text>
+            <Text style={styles.stateAction}>Widen to 10km</Text>
+          </TouchableOpacity>
         ) : (
           <ScrollView
             horizontal
@@ -178,9 +212,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   mapHeaderBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     backgroundColor: 'rgba(11,11,14,0.75)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -201,9 +235,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   radiusPill: {
+    minHeight: 44,
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: 'rgba(22,22,26,0.88)',
     borderWidth: 1,
     borderColor: Colors.border,
@@ -275,6 +312,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   sortChip: {
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 10,
@@ -307,12 +345,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.coral,
     textAlign: 'center',
-    marginTop: 16,
   },
   emptyText: {
     fontSize: 13,
     color: Colors.textSecondary,
     textAlign: 'center',
-    marginTop: 16,
+  },
+  stateCard: {
+    minHeight: 72,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    padding: 14,
+  },
+  stateAction: {
+    color: Colors.green,
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

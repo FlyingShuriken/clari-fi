@@ -138,6 +138,9 @@ export function SubscriptionScreen() {
                 onPress={() => setSelectedPlan(plan)}
                 activeOpacity={0.85}
                 style={[styles.planCard, active && (plan === 'PREMIUM' ? styles.planCardPremiumActive : styles.planCardFreeActive)]}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${plan === 'FREE' ? 'Free' : 'Premium'} plan${isCurrent ? ', current plan' : ''}`}
+                accessibilityState={{ selected: active }}
               >
                 {/* Badge row */}
                 <View style={styles.planBadgeRow}>
@@ -209,6 +212,10 @@ export function SubscriptionScreen() {
                 <TouchableOpacity
                   style={styles.stepperBtn}
                   onPress={() => setAddonCount((n) => Math.max(0, n - 1))}
+                  disabled={addonCount === 0}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove one add-on pack"
+                  accessibilityState={{ disabled: addonCount === 0 }}
                 >
                   <MaterialCommunityIcons name="minus" size={16} color={Colors.textSecondary} />
                 </TouchableOpacity>
@@ -216,6 +223,10 @@ export function SubscriptionScreen() {
                 <TouchableOpacity
                   style={styles.stepperBtnGreen}
                   onPress={() => setAddonCount((n) => Math.min(8, n + 1))}
+                  disabled={addonCount >= 8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add one add-on pack"
+                  accessibilityState={{ disabled: addonCount >= 8 }}
                 >
                   <MaterialCommunityIcons name="plus" size={16} color={Colors.green} />
                 </TouchableOpacity>
@@ -295,6 +306,9 @@ export function SubscriptionScreen() {
           onPress={handleUnlock}
           disabled={controller.loading || isCurrentPlan}
           activeOpacity={0.88}
+          accessibilityRole="button"
+          accessibilityLabel={isCurrentPlan ? 'This is your current plan' : selectedPlan === 'FREE' ? 'Switch to Free plan' : `Unlock Premium for RM ${preview.monthlyPriceRm.toFixed(2)} per month`}
+          accessibilityState={{ disabled: controller.loading || isCurrentPlan }}
         >
           <MaterialCommunityIcons
             name="crown"
@@ -519,14 +533,16 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   stepperBtn: {
-    width: 22,
-    height: 22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperBtnGreen: {
-    width: 22,
-    height: 22,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
   },

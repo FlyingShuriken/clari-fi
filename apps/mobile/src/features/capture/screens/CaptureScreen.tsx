@@ -174,17 +174,31 @@ export function CaptureScreen() {
             style={styles.pointsChip}
             onPress={() => navigation.navigate('Rewards')}
             testID={TEST_IDS.capture.rewardsButton}
+            accessibilityRole="button"
+            accessibilityLabel={`Open rewards, ${controller.rewardSummary?.balance ?? 0} points available`}
           >
             <MaterialCommunityIcons name="star-four-points-outline" size={16} color={Colors.amber} />
             <Text style={styles.pointsChipText}>{controller.rewardSummary?.balance ?? 0} pts</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerChip} onPress={() => navigation.navigate('Subscription')}>
+          <TouchableOpacity
+            style={styles.headerChip}
+            onPress={() => navigation.navigate('Subscription')}
+            accessibilityRole="button"
+            accessibilityLabel={controller.subscription?.plan === 'PREMIUM' ? 'Open premium plan' : 'Upgrade plan'}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
             <MaterialCommunityIcons name="crown-outline" size={16} color={Colors.green} />
             <Text style={styles.headerChipText}>
               {controller.subscription?.plan === 'PREMIUM' ? 'Premium' : 'Upgrade'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.headerIcon} onPress={() => navigation.navigate('Account')}>
+          <TouchableOpacity
+            style={styles.headerIcon}
+            onPress={() => navigation.navigate('Account')}
+            accessibilityRole="button"
+            accessibilityLabel="Open settings"
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
             <MaterialCommunityIcons name="cog-outline" size={20} color={Colors.textPrimary} />
           </TouchableOpacity>
         </View>
@@ -219,14 +233,25 @@ export function CaptureScreen() {
               </Text>
             </View>
             {controller.authSyncStatus === 'error' ? (
-              <TouchableOpacity style={styles.syncRetryBtn} onPress={controller.syncBackendUser}>
+              <TouchableOpacity
+                style={styles.syncRetryBtn}
+                onPress={controller.syncBackendUser}
+                accessibilityRole="button"
+                accessibilityLabel="Retry account sync"
+              >
                 <Text style={styles.syncRetryText}>Retry</Text>
               </TouchableOpacity>
             ) : null}
           </View>
         ) : null}
 
-        <TouchableOpacity style={styles.rewardsCard} onPress={() => navigation.navigate('Rewards')} activeOpacity={0.92}>
+        <TouchableOpacity
+          style={styles.rewardsCard}
+          onPress={() => navigation.navigate('Rewards')}
+          activeOpacity={0.92}
+          accessibilityRole="button"
+          accessibilityLabel={`Open rewards. ${controller.rewardSummary?.balance ?? 0} points available.`}
+        >
           <View style={styles.rewardsCardHeader}>
             <View style={styles.rewardsCardTitleBlock}>
               <Text style={styles.rewardsEyebrow}>Contribute • Earn • Redeem</Text>
@@ -311,6 +336,9 @@ export function CaptureScreen() {
               onPress={isListening ? controller.stopListening : controller.startListening}
               disabled={controller.loading || isProcessing}
               testID={isListening ? TEST_IDS.capture.stopListeningButton : TEST_IDS.capture.startListeningButton}
+              accessibilityRole="button"
+              accessibilityLabel={isListening ? 'Stop voice capture' : isProcessing ? 'Processing voice expense' : 'Start voice capture'}
+              accessibilityState={{ disabled: controller.loading || isProcessing, busy: isProcessing }}
             >
               {isProcessing ? (
                 <ActivityIndicator size={34} color={Colors.bg} />
@@ -348,11 +376,21 @@ export function CaptureScreen() {
                 <View style={styles.orLine} />
               </View>
               <View style={styles.photoRow}>
-                <TouchableOpacity style={styles.takePhotoBtn} onPress={controller.pickDocumentCamera}>
+                <TouchableOpacity
+                  style={styles.takePhotoBtn}
+                  onPress={controller.pickDocumentCamera}
+                  accessibilityRole="button"
+                  accessibilityLabel="Take receipt or flyer photo"
+                >
                   <MaterialCommunityIcons name="camera-outline" size={18} color={Colors.bg} />
                   <Text style={styles.takePhotoBtnText}>Take Photo</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.libraryBtn} onPress={controller.pickDocumentGallery}>
+                <TouchableOpacity
+                  style={styles.libraryBtn}
+                  onPress={controller.pickDocumentGallery}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose receipt or flyer from photo library"
+                >
                   <MaterialCommunityIcons name="image-outline" size={18} color={Colors.textPrimary} />
                   <Text style={styles.libraryBtnText}>From Library</Text>
                 </TouchableOpacity>
@@ -368,6 +406,9 @@ export function CaptureScreen() {
                 onPress={controller.parseVoiceExpense}
                 disabled={controller.loading}
                 testID={TEST_IDS.capture.parseVoiceButton}
+                accessibilityRole="button"
+                accessibilityLabel="Retry parsing voice expense"
+                accessibilityState={{ disabled: controller.loading }}
               >
                 <Text style={styles.primaryBtnText}>Retry parse</Text>
               </TouchableOpacity>
@@ -380,6 +421,8 @@ export function CaptureScreen() {
               style={styles.previewCard}
               onPress={() => setVoiceModalOpen(true)}
               testID={TEST_IDS.capture.confirmVoiceButton}
+              accessibilityRole="button"
+              accessibilityLabel="Review and confirm parsed voice expense"
             >
               <View style={styles.previewLeft}>
                 <View style={[styles.previewIcon, { backgroundColor: Colors.greenDim }]}>
@@ -417,10 +460,20 @@ export function CaptureScreen() {
                   {controller.documentImageCount} image{controller.documentImageCount === 1 ? '' : 's'} ready
                 </Text>
                 <View style={styles.actionRow}>
-                  <TouchableOpacity style={styles.primaryBtn} onPress={controller.parseSelectedDocument}>
+                  <TouchableOpacity
+                    style={styles.primaryBtn}
+                    onPress={controller.parseSelectedDocument}
+                    accessibilityRole="button"
+                    accessibilityLabel="Detect and parse selected document"
+                  >
                     <Text style={styles.primaryBtnText}>Detect & parse</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.secondaryBtn} onPress={controller.clearParsedDocument}>
+                  <TouchableOpacity
+                    style={styles.secondaryBtn}
+                    onPress={controller.clearParsedDocument}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear selected document"
+                  >
                     <Text style={styles.secondaryBtnText}>Clear</Text>
                   </TouchableOpacity>
                 </View>
@@ -429,7 +482,12 @@ export function CaptureScreen() {
 
             {/* Receipt preview — tap to re-open modal */}
             {documentParse?.documentKind === 'receipt' ? (
-              <TouchableOpacity style={styles.previewCard} onPress={() => setDocModalOpen(true)}>
+              <TouchableOpacity
+                style={styles.previewCard}
+                onPress={() => setDocModalOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Review and confirm parsed receipt"
+              >
                 <View style={styles.previewLeft}>
                   <View style={[styles.previewIcon, { backgroundColor: `${Colors.indigo}20` }]}>
                     <MaterialCommunityIcons name="receipt" size={15} color={Colors.indigo} />
@@ -457,7 +515,12 @@ export function CaptureScreen() {
 
             {/* Flyer preview */}
             {documentParse?.documentKind === 'flyer' ? (
-              <TouchableOpacity style={styles.previewCard} onPress={() => setDocModalOpen(true)}>
+              <TouchableOpacity
+                style={styles.previewCard}
+                onPress={() => setDocModalOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Review and save flyer promo prices"
+              >
                 <View style={styles.previewLeft}>
                   <View style={[styles.previewIcon, { backgroundColor: `${Colors.amber}20` }]}>
                     <MaterialCommunityIcons name="tag-multiple-outline" size={15} color={Colors.amber} />
@@ -611,6 +674,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerChip: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -620,6 +684,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   pointsChip: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -639,9 +704,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   headerIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.surface,
     alignItems: 'center',
     justifyContent: 'center',

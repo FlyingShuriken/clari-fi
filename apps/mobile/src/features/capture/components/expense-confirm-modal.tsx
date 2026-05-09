@@ -81,10 +81,19 @@ export function ExpenseConfirmModal({
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
       <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onDismiss}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss confirmation sheet"
+        />
       </Animated.View>
 
-      <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+      <Animated.View
+        style={[styles.sheet, { transform: [{ translateY }] }]}
+        accessibilityViewIsModal
+        accessibilityLabel={`${meta.label} confirmation`}
+      >
         <View style={styles.handle} />
 
         {/* Sheet header row */}
@@ -93,7 +102,13 @@ export function ExpenseConfirmModal({
             <MaterialCommunityIcons name={meta.icon as never} size={12} color={meta.color} />
             <Text style={[styles.kindLabel, { color: meta.color }]}>{meta.label.toUpperCase()}</Text>
           </View>
-          <TouchableOpacity style={styles.closeBtn} onPress={onDismiss}>
+          <TouchableOpacity
+            style={styles.closeBtn}
+            onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Close confirmation sheet"
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
             <MaterialCommunityIcons name="close" size={18} color={Colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -159,6 +174,9 @@ export function ExpenseConfirmModal({
             style={[styles.confirmBtn, { backgroundColor: meta.color }, loading && styles.confirmBtnDisabled]}
             onPress={onConfirm}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel={confirmLabel}
+            accessibilityState={{ disabled: loading, busy: loading }}
           >
             {loading ? (
               <ActivityIndicator size={18} color={Colors.bg} />
@@ -219,9 +237,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   closeBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.surfaceHigh,
     alignItems: 'center',
     justifyContent: 'center',

@@ -69,6 +69,9 @@ export function AlertsScreen() {
         <TouchableOpacity
           style={styles.newAlertBtn}
           onPress={() => setShowCreateForm((v) => !v)}
+          accessibilityRole="button"
+          accessibilityLabel={showCreateForm ? 'Close create alert form' : 'Create a new price alert'}
+          accessibilityState={{ expanded: showCreateForm }}
         >
           <MaterialCommunityIcons name="plus" size={14} color={Colors.bg} />
           <Text style={styles.newAlertText}>New Alert</Text>
@@ -80,7 +83,12 @@ export function AlertsScreen() {
           <Text style={styles.limitText}>
             Active alerts {controller.subscription.alerts.activeCount} / {controller.subscription.alerts.activeLimit}
           </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Subscription')}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Subscription')}
+            accessibilityRole="button"
+            accessibilityLabel={controller.subscription.plan === 'PREMIUM' ? 'Manage premium plan' : 'Upgrade alert limit'}
+            hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          >
             <Text style={styles.limitLink}>
               {controller.subscription.plan === 'PREMIUM' ? 'Manage plan' : 'Upgrade'}
             </Text>
@@ -105,9 +113,12 @@ export function AlertsScreen() {
                   key={k}
                   style={[styles.kindChip, controller.alertKind === k && styles.kindChipActive]}
                   onPress={() => controller.setAlertKind(k)}
+                  accessibilityRole="button"
+                  accessibilityLabel={k === 'THRESHOLD' ? 'Threshold alert' : 'Smart signal alert'}
+                  accessibilityState={{ selected: controller.alertKind === k }}
                 >
                   <Text style={[styles.kindText, controller.alertKind === k && styles.kindTextActive]}>
-                    {k}
+                    {k === 'THRESHOLD' ? 'Threshold' : 'Smart signal'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -140,6 +151,9 @@ export function AlertsScreen() {
                       key={f}
                       style={[styles.kindChip, controller.alertSignalDecisionFilter === f && styles.kindChipActive]}
                       onPress={() => controller.setAlertSignalDecisionFilter(f)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Signal decision filter ${f === 'BOTH' ? 'buy and wait' : f === 'BUY_NOW' ? 'buy now' : 'wait'}`}
+                      accessibilityState={{ selected: controller.alertSignalDecisionFilter === f }}
                     >
                       <Text style={[styles.kindText, controller.alertSignalDecisionFilter === f && styles.kindTextActive]}>
                         {f === 'BOTH' ? 'Buy + Wait' : f === 'BUY_NOW' ? 'Buy' : 'Wait'}
@@ -188,6 +202,9 @@ export function AlertsScreen() {
                 }}
                 disabled={controller.loading}
                 testID={TEST_IDS.alerts.createButton}
+                accessibilityRole="button"
+                accessibilityLabel="Create alert"
+                accessibilityState={{ disabled: controller.loading }}
               >
                 <Text style={styles.createBtnText}>Create</Text>
               </TouchableOpacity>
@@ -196,6 +213,9 @@ export function AlertsScreen() {
                 onPress={controller.loadAlerts}
                 disabled={controller.loading}
                 testID={TEST_IDS.alerts.loadAlertsButton}
+                accessibilityRole="button"
+                accessibilityLabel="Sync alert rules"
+                accessibilityState={{ disabled: controller.loading }}
               >
                 <Text style={styles.loadBtnText}>Sync alerts</Text>
               </TouchableOpacity>
@@ -210,6 +230,9 @@ export function AlertsScreen() {
             disabled={controller.loading}
             style={styles.utilBtn}
             testID={TEST_IDS.alerts.loadEventsButton}
+            accessibilityRole="button"
+            accessibilityLabel="Sync alert events"
+            accessibilityState={{ disabled: controller.loading, busy: controller.loading || controller.initialDataLoading }}
           >
             {controller.loading || controller.initialDataLoading ? (
               <ActivityIndicator size="small" color={Colors.green} />
@@ -224,6 +247,9 @@ export function AlertsScreen() {
               disabled={controller.loading}
               style={styles.utilBtn}
               testID={TEST_IDS.alerts.markAllReadButton}
+              accessibilityRole="button"
+              accessibilityLabel="Mark all alert events as read"
+              accessibilityState={{ disabled: controller.loading }}
             >
               <Text style={styles.utilBtnText}>Mark all read</Text>
             </TouchableOpacity>
@@ -247,6 +273,9 @@ export function AlertsScreen() {
                   onPress={() => controller.markEventRead(event.id)}
                   disabled={controller.loading}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Mark alert for ${event.item} as read`}
+                  accessibilityState={{ disabled: controller.loading }}
                 >
                   <View style={[styles.eventCard, { borderLeftColor: badge.border }]}>
                     {/* Top row: badge + time */}
@@ -339,7 +368,10 @@ export function AlertsScreen() {
         ) : controller.alertEvents.length === 0 && !showCreateForm ? (
           <EmptyState
             icon="bell-outline"
-            message="No alert events yet. Create an alert to start monitoring."
+            title="No alert events yet"
+            message="Create a threshold or smart signal alert and ClariFi will watch nearby prices for you."
+            actionLabel="Create alert"
+            onAction={() => setShowCreateForm(true)}
           />
         ) : null}
       </RefreshScroll>
@@ -434,6 +466,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   kindChip: {
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -494,6 +527,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   utilBtn: {
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,

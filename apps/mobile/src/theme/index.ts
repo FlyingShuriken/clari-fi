@@ -1,4 +1,4 @@
 export { Colors } from './colors';
 export { Typography } from './typography';
-export { Spacing } from './spacing';
+export { Radius, Spacing, TouchTarget } from './spacing';
 export { Shadows } from './shadows';
