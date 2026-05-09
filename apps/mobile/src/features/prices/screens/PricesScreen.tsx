@@ -317,22 +317,48 @@ export function PricesScreen() {
             <Text style={styles.cardTitle}>Price comparison</Text>
             {controller.priceCompareResult.rows.length === 0 ? (
               <Text style={styles.emptyText}>No price rows match these filters. Try a wider radius or another item.</Text>
-            ) : (
-              controller.priceCompareResult.rows.map((row, i) => (
-                <View key={`${row.storeName ?? row.areaText ?? 'row'}-${i}`} style={styles.resultRow}>
-                  <View style={styles.resultInfo}>
-                    <Text style={styles.resultName}>{row.storeName || row.areaText || 'Unknown area'}</Text>
-                    <Text style={styles.resultMeta}>
-                      Trust {(row.averageTrustScore * 100).toFixed(1)}% · {row.sampleSize} samples
-                    </Text>
-                  </View>
-                  <View style={styles.resultPrices}>
-                    <Text style={styles.resultPrice}>{controller.formatCurrency(row.latestUnitPrice)}</Text>
-                    <Text style={styles.resultAvg}>avg {controller.formatCurrency(row.averageUnitPrice)}</Text>
+            ) : (() => {
+              const rows = controller.priceCompareResult!.rows;
+              const firstCommunityIdx = rows.findIndex((r: any) => !r.isPartner);
+              return rows.map((row: any, i: number) => (
+                <View key={`${row.storeName ?? row.areaText ?? 'row'}-${i}`}>
+                  {/* Section divider before first community row */}
+                  {i === firstCommunityIdx && firstCommunityIdx > 0 && (
+                    <View style={styles.sectionDivider}>
+                      <View style={styles.dividerLine} />
+                      <Text style={styles.dividerLabel}>COMMUNITY DATA</Text>
+                      <View style={styles.dividerLine} />
+                    </View>
+                  )}
+                  <View style={[styles.resultRow, row.isPartner && styles.partnerRow]}>
+                    {row.isPartner && <View style={styles.partnerAccent} />}
+                    <View style={styles.resultInfo}>
+                      <View style={styles.resultNameRow}>
+                        <Text style={styles.resultName}>{row.storeName || row.areaText || 'Unknown'}</Text>
+                        {row.isPartner && (
+                          <View style={styles.officialBadge}>
+                            <Text style={styles.officialBadgeText}>Official</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.resultMeta}>
+                        {row.isPartner
+                          ? 'Live price · Partner data'
+                          : `Trust ${(row.averageTrustScore * 100).toFixed(1)}% · ${row.sampleSize} samples`}
+                      </Text>
+                    </View>
+                    <View style={styles.resultPrices}>
+                      <Text style={[styles.resultPrice, row.isPartner && styles.partnerPrice]}>
+                        {controller.formatCurrency(row.latestUnitPrice)}
+                      </Text>
+                      {!row.isPartner && (
+                        <Text style={styles.resultAvg}>avg {controller.formatCurrency(row.averageUnitPrice)}</Text>
+                      )}
+                    </View>
                   </View>
                 </View>
-              ))
-            )}
+              ));
+            })()}
           </DarkCard>
         ) : null}
 
@@ -606,5 +632,61 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 13,
     color: Colors.textSecondary,
+  },
+
+  // Partner rows
+  partnerRow: {
+    paddingLeft: 10,
+  },
+  partnerAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 8,
+    bottom: 8,
+    width: 3,
+    borderRadius: 2,
+    backgroundColor: Colors.indigo,
+  },
+  resultNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  officialBadge: {
+    backgroundColor: `${Colors.indigo}22`,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: `${Colors.indigo}55`,
+  },
+  officialBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.indigo,
+    letterSpacing: 0.3,
+  },
+  partnerPrice: {
+    color: Colors.indigo,
+  },
+
+  // Community divider
+  sectionDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 6,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    letterSpacing: 0.8,
   },
 });

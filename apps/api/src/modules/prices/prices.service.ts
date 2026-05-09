@@ -97,6 +97,8 @@ interface PriceCandidate {
   trustScore: number;
   observedAt: Date;
   distanceKm?: number;
+  isPartner: boolean;
+  partnerKey?: string;
 }
 
 const DEFAULT_SIGNAL_MIN_CONFIDENCE = 0.65;
@@ -435,6 +437,8 @@ export class PricesService {
         trustScoreSum: number;
         sampleSize: number;
         distanceKm?: number;
+        isPartner: boolean;
+        partnerKey?: string;
       }
     >();
 
@@ -455,6 +459,8 @@ export class PricesService {
           trustScoreSum: observation.trustScore,
           sampleSize: 1,
           distanceKm: observation.distanceKm,
+          isPartner: observation.isPartner,
+          partnerKey: observation.partnerKey,
         });
         continue;
       }
@@ -480,12 +486,13 @@ export class PricesService {
         sampleSize: row.sampleSize,
         lastObservedAt: row.latestAt.toISOString(),
         distanceKm: row.distanceKm,
+        isPartner: row.isPartner,
+        partnerKey: row.partnerKey,
       }))
       .sort((a, b) => {
-        if (a.latestUnitPrice !== b.latestUnitPrice) {
-          return a.latestUnitPrice - b.latestUnitPrice;
-        }
-
+        // Partner rows always shown first
+        if (a.isPartner !== b.isPartner) return a.isPartner ? -1 : 1;
+        if (a.latestUnitPrice !== b.latestUnitPrice) return a.latestUnitPrice - b.latestUnitPrice;
         return b.averageTrustScore - a.averageTrustScore;
       })
       .slice(0, query.limit ?? 20);
@@ -522,6 +529,8 @@ export class PricesService {
         distanceKm?: number;
         totalLatestPrice: number;
         itemCoverage: number;
+        isPartner: boolean;
+        partnerKey?: string;
         items: Array<{
           item: string;
           latestUnitPrice: number;
@@ -563,6 +572,8 @@ export class PricesService {
           trustScoreSum: number;
           sampleSize: number;
           distanceKm?: number;
+          isPartner: boolean;
+          partnerKey?: string;
         }
       >();
 
@@ -582,6 +593,8 @@ export class PricesService {
             trustScoreSum: observation.trustScore,
             sampleSize: 1,
             distanceKm: observation.distanceKm,
+            isPartner: observation.isPartner,
+            partnerKey: observation.partnerKey,
           });
           continue;
         }
@@ -609,6 +622,8 @@ export class PricesService {
             totalLatestPrice: 0,
             itemCoverage: 0,
             items: [],
+            isPartner: row.isPartner,
+            partnerKey: row.partnerKey,
           });
         }
         const aggregate = storeMap.get(key)!;
@@ -633,11 +648,11 @@ export class PricesService {
         totalLatestPrice: roundTo(store.totalLatestPrice, 2),
       }))
       .sort((a, b) => {
+        // Partner stores always first
+        if (a.isPartner !== b.isPartner) return a.isPartner ? -1 : 1;
         const aDistance = typeof a.distanceKm === 'number' ? a.distanceKm : Number.POSITIVE_INFINITY;
         const bDistance = typeof b.distanceKm === 'number' ? b.distanceKm : Number.POSITIVE_INFINITY;
-        if (aDistance !== bDistance) {
-          return aDistance - bDistance;
-        }
+        if (aDistance !== bDistance) return aDistance - bDistance;
         return a.totalLatestPrice - b.totalLatestPrice;
       })
       .slice(0, dto.limit ?? 20);
@@ -1968,7 +1983,7 @@ export class PricesService {
       };
     }
 
-    const [expenseRows, promoRows] = await Promise.all([
+    const [expenseRows, promoRows, partnerRows] = await Promise.all([
       this.prisma.priceObservation.findMany({
         where: expenseWhere,
         include: {
@@ -1991,6 +2006,13 @@ export class PricesService {
             take: 1000,
           })
         : Promise.resolve([]),
+      // Partner observations — always included, no location filter (national chains)
+      this.prisma.partnerPriceObservation.findMany({
+        where: { canonicalItemId: input.canonicalItemId },
+        include: { store: true },
+        orderBy: { scrapedAt: 'desc' },
+        take: 100,
+      }),
     ]);
 
     const rawCandidates: PriceCandidate[] = [
@@ -2005,6 +2027,7 @@ export class PricesService {
         unitPrice: decimalToNumber(row.unitPrice),
         trustScore: decimalToNumber(row.trustScore),
         observedAt: row.observedAt,
+        isPartner: false,
       })),
       ...promoRows.map((row) => ({
         source: ObservationSource.PROMO,
@@ -2017,10 +2040,24 @@ export class PricesService {
         unitPrice: decimalToNumber(row.unitPrice),
         trustScore: decimalToNumber(row.trustScore),
         observedAt: row.observedAt,
+        isPartner: false,
       })),
     ];
 
-    const candidates: PriceCandidate[] = [];
+    // Partner rows bypass location filtering — they are national chains
+    const partnerCandidates: PriceCandidate[] = partnerRows.map((row) => ({
+      source: ObservationSource.EXPENSE,
+      canonicalItemId: row.canonicalItemId,
+      storeId: row.storeId,
+      storeName: row.store.displayName,
+      unitPrice: decimalToNumber(row.unitPrice),
+      trustScore: 1.0,
+      observedAt: row.scrapedAt,
+      isPartner: true,
+      partnerKey: row.store.partnerKey ?? undefined,
+    }));
+
+    const candidates: PriceCandidate[] = [...partnerCandidates];
     for (const row of rawCandidates) {
       const locationMatch = evaluatePriceCandidateLocation({
         lat: input.lat,
