@@ -2,7 +2,8 @@
 
 ClariFi is a React Native + NestJS product for fast expense capture (voice/receipt), personal reporting, and community price intelligence.
 
-## Link To Materials 
+## Link To Materials
+
 - Demo Video :https://youtu.be/yeskPQPnGgw
 - Report :https://drive.google.com/file/d/1kbjdI1CLgrHf5ob9_jE0mV77_nhqvv3n/view?usp=sharing
 
@@ -136,48 +137,22 @@ If `Live` and `Ready` show as healthy, the simulator is connected to the backend
 
 ## Architecture Diagram (Direct)
 
-                    +-----------------------------------+
-                    |           Mobile App              |
-                    |      (Expo React Native)          |
-                    +----------------+------------------+
-                                     |
-                                     v
-                    +-----------------------------------+
-                    |            API (NestJS)           |
-                    |      apps/api/src/modules/*       |
-                    +---+-----------+-----------+-------+
-                        |           |           |
-                        |           |           |
-                        |           |           +-------------------------------+
-                        |           |                                           |
-                        |           v                                           v
-                        |   +---------------+                       +----------------------+
-                        |   | Reports Module|                       | Prices Module        |
-                        |   | weekly slides |                       | item normalization   |
-                        |   +-------+-------+                       +----------+-----------+
-                        |           |                                          |
-                        |           | LLM generateSlidesViaLlm                 | LLM canonicalizeWithLlm
-                        |           +--------------------------+---------------+
-                        |                                      |
-                        v                                      v
-               +------------------+                  +-------------------------+
-               | Parse Module     |                  | OpenRouter (LLM APIs)   |
-               | /voice /receipt  |<---------------->| - STT (audio)           |
-               | /document-images |                  | - OCR (vision text)     |
-               +---------+--------+                  | - Parser (structured)   |
-                         |                           | - Normalizer             |
-                         |                           | - Weekly insights        |
-                         |                           +-------------------------+
-                         |
-                         v
-                 +---------------+
-                 | PostgreSQL    |
-                 | Prisma ORM    |
-                 +-------+-------+
-                         ^
-                         |
-                 +-------+-------+
-                 | packages/shared|
-                 | shared contracts|
-                 +---------------+
+![tech stack](assets/architecture.png)
 
+## What's New
+
+| Feature                      | Preliminary Version                                                                                                                              | Refined Version                                                                                                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **AI Fast Expense Capture**  | Voice or receipt photo capture. User reviews the parsed result and confirms it.                                                                  | Unchanged. Core frictionless capture remains the foundation of the product.                                                                                                                                                                                    |
+| **Price Comparison Feature** | Converts captured bills and promotional brochures into price observations. Users can search for one item and compare prices at different stores. | Powered by direct partnerships with local groceries or supermarkets and crowdsourced receipts, building a living, real-time local price database.                                                                                                              |
+| **Bucket Feature**           | Not fully implemented in the preliminary version.                                                                                                | Users can add multiple items into a list and build a price matrix across nearby stores. The system calculates total basket cost at each location, weights results by proximity, and recommends the single most worthwhile store to buy everything in one trip. |
+| **Expense Breakdown**        | View and filter recorded expenses.                                                                                                               | Unchanged. Surfaces spending patterns and category-level leaks on a monthly basis.                                                                                                                                                                             |
+| **Alerts & Notifications**   | Create threshold alerts and receive event notifications when conditions are met.                                                                 | Unchanged. Proactively notifies users of price changes and budget thresholds.                                                                                                                                                                                  |
+| **AI Purchase Insights**     | Not included in the preliminary version.                                                                                                         | AI analyses each purchase, flags overspending, directs users to cheaper alternatives using Community Price Intelligence, and explains price increases through real economy trends.                                                                             |
+| **Family Profile**           | Share a family profile to track each other's spending and share promotions or deals.                                                             | Retained as a supporting feature. Enables shared household visibility and expense splitting.                                                                                                                                                                   |
+
+The refined version of ClariFi improves the project in three major ways:
+
+1. **Clearer consumer-facing problem framing** The problem is now centred around “Data Darkness”, making it easier for users and judges to understand the real pain point.
+2. **Stronger feature logic** The price comparison feature has evolved from single-item lookup into a basket-based recommendation system that considers both total cost and proximity.
+3. **More convincing AI validation** The AI logic is now better defined through capture intelligence, purchase intelligence, and basket intelligence, each with specific technologies, reasoning methods, and outputs.

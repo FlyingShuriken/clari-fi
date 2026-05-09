@@ -21,6 +21,7 @@ import {
   createFamily,
   createFamilyInvite,
   createPriceAlert,
+  deleteExpense,
   createSplit,
   finalizeSplit,
   getRewardRedemptions,
@@ -642,6 +643,7 @@ export interface ClariFiController {
   clearParsedDocument: () => void;
 
   loadLedger: () => Promise<void>;
+  deleteExpenseById: (expenseId: string) => Promise<boolean>;
   loadReport: () => Promise<void>;
   loadWeeklyReport: () => Promise<void>;
   loadSubscription: () => Promise<void>;
@@ -1911,6 +1913,18 @@ function useClariFiControllerValue(): ClariFiController {
     });
   }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
 
+  const deleteExpenseById = useCallback(async (expenseId: string) => {
+    let deleted = false;
+    await runTask(async () => {
+      const token = await getBearerTokenOrThrow();
+      await deleteExpense(normalizeBaseUrl(apiBaseUrl), token, expenseId);
+      setLedgerItems((items) => items.filter((item) => item.id !== expenseId));
+      setMessage('Expense deleted.');
+      deleted = true;
+    });
+    return deleted;
+  }, [apiBaseUrl, getBearerTokenOrThrow, runTask]);
+
   const loadReport = useCallback(async () => {
     await runTask(async () => {
       const token = await getBearerTokenOrThrow();
@@ -2804,6 +2818,7 @@ function useClariFiControllerValue(): ClariFiController {
       clearParsedDocument,
 
       loadLedger,
+      deleteExpenseById,
       loadReport,
       loadWeeklyReport: loadWeeklyReportCallback,
       loadRewardSummary,
@@ -2907,6 +2922,7 @@ function useClariFiControllerValue(): ClariFiController {
       loadAlertEvents,
       loadAlerts,
       loadFamiliesList,
+      deleteExpenseById,
       loadLedger,
       loadPriceCompareResult,
       loadPriceHistoryResult,

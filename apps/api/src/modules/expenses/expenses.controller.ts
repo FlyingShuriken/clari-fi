@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser, type AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { AppAuthGuard } from '../auth/guards/app-auth.guard';
 import { ConfirmExpenseDto } from './dto/confirm-expense.dto';
@@ -24,5 +24,13 @@ export class ExpensesController {
     @Query() query: ListExpensesDto,
   ) {
     return this.expensesService.listExpenses(user, query);
+  }
+
+  @Delete(':expenseId')
+  async deleteExpense(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('expenseId') expenseId: string,
+  ) {
+    return this.expensesService.deleteExpense(user, expenseId);
   }
 }

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { EmptyState } from '../../../components/ui/empty-state';
@@ -31,6 +31,10 @@ function formatQuantity(quantity?: number, unit?: string): string | null {
   }
 
   return [quantity === undefined ? null : String(quantity), unit].filter(Boolean).join(' ');
+}
+
+function normalizeItemLabel(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
 }
 
 export function ExpenseDetailScreen({ route, navigation }: Props) {
@@ -65,6 +69,28 @@ export function ExpenseDetailScreen({ route, navigation }: Props) {
       }
     : undefined;
 
+  const handleDeleteExpense = () => {
+    Alert.alert(
+      'Delete expense?',
+      'This removes the expense from your ledger.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              const deleted = await controller.deleteExpenseById(expense.id);
+              if (deleted) {
+                navigation.goBack();
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <View style={styles.heroCard}>
@@ -91,11 +117,33 @@ export function ExpenseDetailScreen({ route, navigation }: Props) {
         <View style={styles.itemStack}>
           {expense.lineItems.map((lineItem, index) => {
             const quantityText = formatQuantity(lineItem.quantity, lineItem.unit);
+            const cheaperItem = cheaperOption?.items.find((item) => {
+              const optionLabel = normalizeItemLabel(item.description);
+              const lineLabel = normalizeItemLabel(lineItem.description);
+              return optionLabel === lineLabel || optionLabel.includes(lineLabel) || lineLabel.includes(optionLabel);
+            });
             return (
-              <View key={`${lineItem.description}-${index}`} style={styles.lineItem}>
+              <View
+                key={`${lineItem.description}-${index}`}
+                style={[styles.lineItem, cheaperItem && styles.lineItemWithSavings]}
+              >
                 <View style={styles.lineItemText}>
-                  <Text style={styles.lineItemTitle}>{lineItem.description}</Text>
+                  <View style={styles.lineItemTitleRow}>
+                    <Text style={styles.lineItemTitle}>{lineItem.description}</Text>
+                    {cheaperItem && (
+                      <View style={styles.itemSavingsBadge}>
+                        <MaterialCommunityIcons name="tag-arrow-down-outline" size={11} color={Colors.green} />
+                        <Text style={styles.itemSavingsBadgeText}>Cheaper</Text>
+                      </View>
+                    )}
+                  </View>
                   {quantityText && <Text style={styles.lineItemMeta}>{quantityText}</Text>}
+                  {cheaperItem && (
+                    <Text style={styles.cheaperItemMeta}>
+                      Save {controller.formatCurrency(cheaperItem.savingsPerUnit, expense.currency)} each at{' '}
+                      {cheaperItem.cheapestStore}
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.lineItemAmountBlock}>
                   <Text style={styles.lineItemAmount}>
@@ -127,6 +175,21 @@ export function ExpenseDetailScreen({ route, navigation }: Props) {
           <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.textSecondary} />
         </TouchableOpacity>
       )}
+
+      <TouchableOpacity
+        style={[styles.deleteButton, controller.loading && styles.deleteButtonDisabled]}
+        onPress={handleDeleteExpense}
+        disabled={controller.loading}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel="Delete expense"
+        accessibilityState={{ disabled: controller.loading, busy: controller.loading }}
+      >
+        <MaterialCommunityIcons name="trash-can-outline" size={18} color={Colors.coral} />
+        <Text style={styles.deleteButtonText}>
+          {controller.loading ? 'Deleting...' : 'Delete expense'}
+        </Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -197,22 +260,56 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
+    padding: 10,
+    borderRadius: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
+  },
+  lineItemWithSavings: {
+    backgroundColor: Colors.greenDim,
+    borderBottomColor: Colors.green + '45',
   },
   lineItemText: {
     flex: 1,
     gap: 3,
   },
+  lineItemTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   lineItemTitle: {
     color: Colors.textPrimary,
     fontSize: 14,
     fontWeight: '600',
+    flexShrink: 1,
   },
   lineItemMeta: {
     color: Colors.textSecondary,
     fontSize: 12,
+  },
+  cheaperItemMeta: {
+    color: Colors.green,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  itemSavingsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: Colors.bg,
+    borderWidth: 1,
+    borderColor: Colors.green + '45',
+  },
+  itemSavingsBadgeText: {
+    color: Colors.green,
+    fontSize: 10,
+    fontWeight: '800',
   },
   lineItemAmountBlock: {
     alignItems: 'flex-end',
@@ -253,5 +350,25 @@ const styles = StyleSheet.create({
   savingsBody: {
     color: Colors.textSecondary,
     fontSize: 12,
+  },
+  deleteButton: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: Colors.coralDim,
+    borderWidth: 1,
+    borderColor: Colors.coral + '55',
+  },
+  deleteButtonDisabled: {
+    opacity: 0.55,
+  },
+  deleteButtonText: {
+    color: Colors.coral,
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

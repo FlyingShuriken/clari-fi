@@ -313,6 +313,21 @@ export async function listExpenses(
   });
 }
 
+export async function deleteExpense(
+  baseUrl: string,
+  bearerToken: string,
+  expenseId: string,
+): Promise<{ expenseId: string; deleted: boolean }> {
+  return apiRequest<{ expenseId: string; deleted: boolean }>(
+    baseUrl,
+    `/expenses/${encodeURIComponent(expenseId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    },
+  );
+}
+
 export async function loadWeeklyReport(
   baseUrl: string,
   bearerToken: string,

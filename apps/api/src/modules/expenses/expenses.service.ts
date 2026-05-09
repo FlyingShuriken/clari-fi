@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   ExpenseProvenance,
   ExpenseSource,
@@ -380,6 +380,44 @@ export class ExpensesService {
       limit,
       total,
       items,
+    };
+  }
+
+  async deleteExpense(user: AuthenticatedUser, expenseId: string) {
+    const expense = await this.prisma.expense.findFirst({
+      where: {
+        id: expenseId,
+        userId: user.id,
+      },
+      select: {
+        id: true,
+        receipt: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!expense) {
+      throw new NotFoundException('Expense not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (expense.receipt) {
+        await tx.receipt.delete({
+          where: { id: expense.receipt.id },
+        });
+      }
+
+      await tx.expense.delete({
+        where: { id: expense.id },
+      });
+    });
+
+    return {
+      expenseId: expense.id,
+      deleted: true,
     };
   }
 }
