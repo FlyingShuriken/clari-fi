@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { CategoryProgress } from '../../../components/ui/category-progress';
 import { EmptyState } from '../../../components/ui/empty-state';
 import { Colors } from '../../../theme';
+import type { RootStackParamList } from '../../../core/navigation/AppNavigator';
 import { WeeklyStoryModal } from './WeeklyStoryModal';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -24,6 +27,7 @@ const RANK_COLORS = [Colors.green, Colors.indigo, Colors.coral];
 
 export function LedgerOverviewPanel() {
   const controller = useClariFiController();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const summary = controller.reportSummary;
   const [storyVisible, setStoryVisible] = useState(false);
 
@@ -32,6 +36,11 @@ export function LedgerOverviewPanel() {
       await controller.loadWeeklyReport();
     }
     setStoryVisible(true);
+  };
+
+  const handleComparePrices = () => {
+    setStoryVisible(false);
+    navigation.navigate('MainTabs', { screen: 'Prices' });
   };
 
   const trendColor =
@@ -86,6 +95,7 @@ export function LedgerOverviewPanel() {
         slides={controller.weeklySlides}
         loading={controller.weeklyReportLoading}
         onClose={() => setStoryVisible(false)}
+        onComparePrices={handleComparePrices}
       />
 
       <View style={styles.heroCard}>

@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useClariFiController } from '../../../core/state/clariFi-controller';
 import { Colors } from '../../../theme';
-import { LeafletMap } from '../components/leaflet-map';
+import { LeafletMap, type StoreMarker } from '../components/leaflet-map';
 import { StoreBottomSheet } from '../components/store-bottom-sheet';
 import { useMultiItemCompare } from '../hooks/use-multi-item-compare';
 import type { StoreAggregate } from '../types/store-aggregate';
@@ -60,11 +60,20 @@ export function StoreMapScreen({ route, navigation }: Props) {
     return a.totalLatestPrice - b.totalLatestPrice;
   });
 
+  const storeMarkers: StoreMarker[] = stores
+    .filter((s) => typeof s.storeLat === 'number' && typeof s.storeLng === 'number')
+    .map((s) => ({
+      lat: s.storeLat!,
+      lng: s.storeLng!,
+      label: s.storeName || s.areaText || 'Store',
+      isCheapest: s.storeId === cheapestId,
+    }));
+
   return (
     <View style={styles.container}>
       {/* Map */}
       <View style={styles.mapContainer}>
-        <LeafletMap lat={lat} lng={lng} radiusKm={radiusKm} />
+        <LeafletMap lat={lat} lng={lng} radiusKm={radiusKm} markers={storeMarkers} />
 
         {/* Overlay header */}
         <View style={[styles.mapHeader, { paddingTop: insets.top + 8 }]}>

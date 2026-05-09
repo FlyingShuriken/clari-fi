@@ -213,7 +213,14 @@ export class ParseService {
           note: parsed.receipt.note,
           totalAmount: parsed.receipt.totalAmount,
           currency: parsed.receipt.currency,
-          lineItems: parsed.receipt.lineItems,
+          lineItems: parsed.receipt.lineItems.map((lineItem) => ({
+            descriptionRaw: lineItem.descriptionRaw,
+            quantity: lineItem.quantity,
+            unitRaw: lineItem.unitRaw,
+            unitPrice: lineItem.unitPrice,
+            totalPrice: lineItem.totalPrice,
+            confidence: lineItem.confidence,
+          })),
         },
         fileRefs: dto.fileRefs ?? [],
         parseMeta: {

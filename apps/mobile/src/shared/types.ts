@@ -1,10 +1,21 @@
+export interface WeeklySlideBar {
+  label: string;
+  pct: number;
+  amtLabel: string;
+  color: string;
+}
+
 export interface WeeklySlide {
-  type: 'summary' | 'anomaly' | 'education' | 'tip';
+  type: 'summary' | 'anomaly' | 'education' | 'tip' | 'trend' | 'rank' | 'merchants' | 'highlight' | 'forecast';
   title: string;
   body: string;
   metric?: string;
   subtitle?: string;
   emoji?: string;
+  newsContext?: string;
+  cta?: 'compare_prices';
+  bars?: WeeklySlideBar[];
+  delta?: { pct: number; direction: 'up' | 'down' | 'flat' };
 }
 
 export interface WeeklyReportResponse {

@@ -526,6 +526,8 @@ export class PricesService {
         storeId?: string;
         storeName?: string;
         areaText?: string;
+        storeLat?: number;
+        storeLng?: number;
         distanceKm?: number;
         totalLatestPrice: number;
         itemCoverage: number;
@@ -566,6 +568,8 @@ export class PricesService {
           storeId?: string;
           storeName?: string;
           areaText?: string;
+          storeLat?: number;
+          storeLng?: number;
           latestUnitPrice: number;
           latestAt: Date;
           unitPriceSum: number;
@@ -587,6 +591,8 @@ export class PricesService {
             storeId: observation.storeId,
             storeName: observation.storeName,
             areaText: observation.areaText,
+            storeLat: observation.storeLat,
+            storeLng: observation.storeLng,
             latestUnitPrice: observation.unitPrice,
             latestAt: observation.observedAt,
             unitPriceSum: observation.unitPrice,
@@ -618,6 +624,8 @@ export class PricesService {
             storeId: row.storeId,
             storeName: row.storeName,
             areaText: row.areaText,
+            storeLat: row.storeLat,
+            storeLng: row.storeLng,
             distanceKm: row.distanceKm,
             totalLatestPrice: 0,
             itemCoverage: 0,

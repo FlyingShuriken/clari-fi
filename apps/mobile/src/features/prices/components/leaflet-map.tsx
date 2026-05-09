@@ -2,13 +2,36 @@ import { StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Colors } from '../../../theme';
 
+export interface StoreMarker {
+  lat: number;
+  lng: number;
+  label: string;
+  isCheapest?: boolean;
+}
+
 interface LeafletMapProps {
   lat: number;
   lng: number;
   radiusKm: number;
+  markers?: StoreMarker[];
 }
 
-function buildHtml(lat: number, lng: number, radiusKm: number): string {
+function escapeJs(str: string): string {
+  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+function buildHtml(lat: number, lng: number, radiusKm: number, markers: StoreMarker[]): string {
+  const markerJs = markers
+    .map((m) => {
+      const color = m.isCheapest ? '#32D583' : '#6366F1';
+      const size = m.isCheapest ? 10 : 7;
+      return `L.circleMarker([${m.lat}, ${m.lng}], {
+        radius: ${size}, fillColor: '${color}', fillOpacity: 0.9, color: '#fff', weight: 2,
+      }).bindTooltip('${escapeJs(m.label)}', { direction: 'top', offset: [0, -${size}], className: 'store-label' })
+      .addTo(map);`;
+    })
+    .join('\n    ');
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -18,6 +41,17 @@ function buildHtml(lat: number, lng: number, radiusKm: number): string {
   <style>
     * { margin: 0; padding: 0; }
     html, body, #map { width: 100%; height: 100%; background: #0B0B0E; }
+    .store-label {
+      background: #1A1A1E !important;
+      color: #FAFAF9 !important;
+      border: 1px solid #2A2A2E !important;
+      border-radius: 6px !important;
+      padding: 4px 8px !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4) !important;
+    }
+    .store-label::before { border-top-color: #2A2A2E !important; }
   </style>
 </head>
 <body>
@@ -33,17 +67,18 @@ function buildHtml(lat: number, lng: number, radiusKm: number): string {
     L.circle([${lat}, ${lng}], {
       radius: ${radiusKm * 1000}, color: '#32D58350', fillColor: '#32D58315', fillOpacity: 0.3, weight: 1,
     }).addTo(map);
+    ${markerJs}
     map.fitBounds(L.circle([${lat}, ${lng}], ${radiusKm * 1000}).getBounds().pad(0.1));
   <\/script>
 </body>
 </html>`;
 }
 
-export function LeafletMap({ lat, lng, radiusKm }: LeafletMapProps) {
+export function LeafletMap({ lat, lng, radiusKm, markers = [] }: LeafletMapProps) {
   return (
     <View style={styles.container}>
       <WebView
-        source={{ html: buildHtml(lat, lng, radiusKm) }}
+        source={{ html: buildHtml(lat, lng, radiusKm, markers) }}
         style={styles.webview}
         scrollEnabled={false}
         originWhitelist={['*']}

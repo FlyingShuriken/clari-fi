@@ -6,13 +6,24 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AuthenticatedUser } from '../auth/decorators/current-user.decorator';
 import { MonthlyReportQueryDto } from './dto/monthly-report-query.dto';
 
+interface WeeklySlideBar {
+  label: string;
+  pct: number;
+  amtLabel: string;
+  color: string;
+}
+
 export interface WeeklySlide {
-  type: 'summary' | 'anomaly' | 'education' | 'tip';
+  type: 'summary' | 'anomaly' | 'education' | 'tip' | 'trend' | 'rank' | 'merchants' | 'highlight' | 'forecast';
   title: string;
   body: string;
   metric?: string;
   subtitle?: string;
   emoji?: string;
+  newsContext?: string;
+  cta?: 'compare_prices';
+  bars?: WeeklySlideBar[];
+  delta?: { pct: number; direction: 'up' | 'down' | 'flat' };
 }
 
 function getIsoWeekKey(date: Date): string {
@@ -94,6 +105,158 @@ function categorize(item: ExpenseLineItem): string {
 
 function round2(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+// Matches frontend theme/colors.ts category palette
+const CATEGORY_COLOR: Record<string, string> = {
+  groceries: '#32D583',
+  food:      '#32D583',
+  transport: '#3B82F6',
+  dining:    '#F59E0B',
+  shopping:  '#EC4899',
+  utilities: '#8B5CF6',
+  other:     '#6B6B70',
+};
+
+function computeWeeklyCategoryBreakdown(
+  expenses: Array<Expense & { lineItems: ExpenseLineItem[] }>,
+): Array<{ category: string; amount: number }> {
+  const buckets = new Map<string, number>();
+  for (const expense of expenses) {
+    if (expense.lineItems.length === 0) {
+      buckets.set('other', (buckets.get('other') ?? 0) + toFloat(expense.totalAmount));
+    } else {
+      for (const lineItem of expense.lineItems) {
+        const cat = categorize(lineItem);
+        buckets.set(cat, (buckets.get(cat) ?? 0) + toFloat(lineItem.totalPrice));
+      }
+    }
+  }
+  return [...buckets.entries()]
+    .map(([category, amount]) => ({ category, amount: round2(amount) }))
+    .filter((row) => row.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+}
+
+function buildComputedSlides(
+  expenses: Array<Expense & { lineItems: ExpenseLineItem[] }>,
+  cashOut: number,
+  prevCashOut: number,
+  _currency: string,
+  symbol: string,
+): WeeklySlide[] {
+  const computed: WeeklySlide[] = [];
+
+  // ── Trend slide ────────────────────────────────────────────────
+  {
+    let deltaPct = 0;
+    let direction: 'up' | 'down' | 'flat' = 'flat';
+    if (prevCashOut > 0) {
+      deltaPct = Math.round(((cashOut - prevCashOut) / prevCashOut) * 100);
+      direction = deltaPct > 2 ? 'up' : deltaPct < -2 ? 'down' : 'flat';
+    }
+    const sign   = direction === 'up' ? '+' : direction === 'down' ? '-' : '';
+    const absAmt = round2(Math.abs(cashOut - prevCashOut));
+    const prevFmt = `${symbol} ${round2(prevCashOut).toFixed(2)}`;
+    computed.push({
+      type: 'trend',
+      emoji: direction === 'down' ? '📉' : direction === 'up' ? '📈' : '➡️',
+      title: 'Week-over-Week',
+      metric: prevCashOut > 0 ? `${sign}${Math.abs(deltaPct)}%` : undefined,
+      subtitle: prevCashOut > 0 ? `vs last week · ${prevFmt}` : undefined,
+      body: prevCashOut === 0
+        ? `First week recorded — ${symbol} ${round2(cashOut).toFixed(2)} across ${expenses.length} transaction${expenses.length === 1 ? '' : 's'}.`
+        : direction === 'flat'
+          ? `Spending was steady. You spent ${symbol} ${round2(cashOut).toFixed(2)}, about the same as last week.`
+          : `You spent ${symbol} ${absAmt.toFixed(2)} ${direction === 'up' ? 'more' : 'less'} than last week.`,
+      delta: { pct: Math.abs(deltaPct), direction },
+    });
+  }
+
+  // ── Rank (category breakdown) slide ────────────────────────────
+  const breakdown = computeWeeklyCategoryBreakdown(expenses);
+  if (breakdown.length > 0) {
+    const maxAmt = breakdown[0].amount;
+    computed.push({
+      type: 'rank',
+      emoji: '🏆',
+      title: 'Where It Went',
+      body: `Your top ${Math.min(breakdown.length, 5)} spending categories this week.`,
+      bars: breakdown.slice(0, 5).map(({ category, amount }) => ({
+        label: toDisplayLabel(category),
+        pct: Math.round((amount / maxAmt) * 100),
+        amtLabel: `${symbol} ${amount.toFixed(2)}`,
+        color: CATEGORY_COLOR[category] ?? '#6B6B70',
+      })),
+    });
+  }
+
+  // ── Merchants slide ────────────────────────────────────────────
+  const topMerchants = computeTopMerchants(expenses);
+  if (topMerchants.length >= 2) {
+    const maxMerchAmt = topMerchants[0].amount;
+    computed.push({
+      type: 'merchants',
+      emoji: '🏪',
+      title: 'Top Merchants',
+      body: `You visited ${topMerchants.length} merchant${topMerchants.length === 1 ? '' : 's'} this week.`,
+      bars: topMerchants.slice(0, 4).map(({ merchant, amount }) => ({
+        label: merchant,
+        pct: Math.round((amount / maxMerchAmt) * 100),
+        amtLabel: `${symbol} ${amount.toFixed(2)}`,
+        color: '#6366F1',
+      })),
+    });
+  }
+
+  // ── Highlight: biggest single transaction ──────────────────────
+  if (expenses.length > 0) {
+    const biggest = [...expenses].sort(
+      (a, b) => toFloat(b.totalAmount) - toFloat(a.totalAmount),
+    )[0];
+    const bigAmt  = round2(toFloat(biggest.totalAmount));
+    const merchant = toDisplayLabel(normalizeTextKey(biggest.merchantText) || 'unknown');
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName  = dayNames[new Date(biggest.transactionAt).getDay()] ?? '';
+    const pctOfTotal = cashOut > 0 ? Math.round((bigAmt / cashOut) * 100) : 0;
+    computed.push({
+      type: 'highlight',
+      emoji: '💸',
+      title: 'Biggest Transaction',
+      metric: `${symbol} ${bigAmt.toFixed(2)}`,
+      subtitle: `${dayName} · ${merchant}`,
+      body: `This single purchase made up ${pctOfTotal}% of your total week's spend.`,
+      ...(pctOfTotal >= 25 ? { cta: 'compare_prices' as const } : {}),
+    });
+  }
+
+  // ── Forecast: projected monthly spend ─────────────────────────
+  if (cashOut > 0) {
+    const weeksPerMonth = 365 / 12 / 7;          // ≈ 4.35
+    const projected = round2(cashOut * weeksPerMonth);
+    const dailyAvg  = round2(cashOut / 7);
+    const now = new Date();
+    const monthLabel = now.toLocaleDateString('en-MY', { month: 'long', year: 'numeric' });
+    const prevMonthProjected = prevCashOut > 0
+      ? round2(prevCashOut * weeksPerMonth)
+      : null;
+    const projDelta = prevMonthProjected
+      ? Math.round(((projected - prevMonthProjected) / prevMonthProjected) * 100)
+      : null;
+    const deltaStr = projDelta !== null
+      ? ` (${projDelta > 0 ? '+' : ''}${projDelta}% vs last month)`
+      : '';
+    computed.push({
+      type: 'forecast',
+      emoji: '🔮',
+      title: 'Monthly Projection',
+      metric: `${symbol} ${projected.toFixed(0)}`,
+      subtitle: `estimated for ${monthLabel}`,
+      body: `At ${symbol} ${dailyAvg.toFixed(2)}/day this week, you're on track to spend ${symbol} ${projected.toFixed(0)} this month${deltaStr}.`,
+    });
+  }
+
+  return computed;
 }
 
 function normalizeTextKey(value: string | null | undefined): string {
@@ -464,7 +627,14 @@ export class ReportsService {
     if (expenses.length === 0) {
       slides = buildFallbackSlides(cashOut, 0, currency);
     } else {
-      slides = await this.generateSlidesViaLlm(expenses, cashOut, prevCashOut, currency, symbol);
+      const llmSlides = await this.generateSlidesViaLlm(expenses, cashOut, prevCashOut, currency, symbol);
+      const computedSlides = buildComputedSlides(expenses, cashOut, prevCashOut, currency, symbol);
+
+      // Structure: [summary] → [trend, rank] → [anomaly / education / tip…]
+      const [firstSlide, ...restSlides] = llmSlides;
+      slides = firstSlide
+        ? [firstSlide, ...computedSlides, ...restSlides]
+        : [...computedSlides, ...restSlides];
     }
 
     await this.prisma.weeklyReport.upsert({
@@ -509,13 +679,22 @@ export class ReportsService {
       'You are a smart personal finance advisor for a Malaysian household spending app.',
       'Analyze the weekly transactions and return a JSON array of story slides.',
       'Return ONLY a valid JSON array — no markdown, no commentary, no code fences.',
-      'Each slide object has these keys: type, title, body, metric (optional), subtitle (optional), emoji (optional).',
+      'Each slide object has exactly these keys (include only the ones that apply):',
+      '  type (required), title (required), body (required),',
+      '  metric (optional — a big hero number/stat for this slide),',
+      '  subtitle (optional — small label below the metric),',
+      '  emoji (optional — single relevant emoji),',
+      '  newsContext (optional — educational context with a real news hook),',
+      '  cta (optional — explained below).',
       'type must be one of: summary, anomaly, education, tip.',
-      'Generate 4 to 6 slides total. Always start with a summary slide and end with a tip slide.',
-      'The anomaly slide should highlight unusually high amounts or overpriced items compared to typical market prices.',
-      'The education slide explains WHY prices changed (supply chain, inflation, seasonal factors).',
-      'The tip slide must give specific, actionable savings advice based on the actual spending data.',
-      'Keep body text concise — under 120 characters per slide.',
+      'Generate 5 to 6 slides. Always start with a summary slide and end with a tip slide.',
+      'The summary slide must have metric (total spend), subtitle (transaction count), and a punchy title.',
+      'Include at most 1 anomaly slide. It should name the specific merchant/item and compare to typical Malaysian market price.',
+      'Include 1 education slide that explains WHY a notable price or category changed — cite supply-chain issues, seasonality, Malaysian policy changes (fuel subsidies, import duties, RON95 pricing), weather events, or commodity trends.',
+      'On the education slide, set newsContext to 1–2 sentences with a specific real-world news hook relevant to Malaysia (e.g. "Global egg prices jumped 22% in early 2025 due to avian flu outbreaks sweeping Southeast Asia.").',
+      'The tip slide must be hyper-specific: name the category, merchant, or item you are advising on.',
+      'CTA RULE — set cta: "compare_prices" on ANY slide whose body or title mentions or implies: saving money, finding a better price, shopping smarter, switching stores, price comparison, or avoiding overpaying. This can appear on ANY slide type (anomaly, tip, education, even summary). Apply it liberally whenever the content gives the user a reason to compare prices.',
+      'Keep body under 130 characters. newsContext under 170 characters.',
       `Currency is ${currency} (symbol: ${symbol}).`,
     ].join(' ');
 
@@ -580,6 +759,8 @@ export class ReportsService {
         metric: slide.metric ? String(slide.metric) : undefined,
         subtitle: slide.subtitle ? String(slide.subtitle) : undefined,
         emoji: slide.emoji ? String(slide.emoji) : undefined,
+        newsContext: slide.newsContext ? String(slide.newsContext) : undefined,
+        cta: slide.cta === 'compare_prices' ? 'compare_prices' as const : undefined,
       }));
     } catch (err) {
       this.logger.error(`Weekly report LLM call failed: ${String(err)}`);
